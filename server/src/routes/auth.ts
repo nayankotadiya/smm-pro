@@ -166,9 +166,14 @@ r.post('/reset-password', loginLimiter, ah(async (req, res) => {
 r.get('/me', requireAuth, ah(async (req, res) => { res.json({ user: await me(await User.findById(req.user!._id)) }); }));
 
 r.patch('/me', requireAuth, ah(async (req, res) => {
-  const b = z.object({ name: z.string().min(1).max(80).optional(), phone: z.string().max(20).optional(), notificationPrefs: z.any().optional(), currentPassword: z.string().optional(), newPassword: z.string().min(8).max(100).optional() }).parse(req.body);
+  const b = z.object({ name: z.string().min(1).max(80).optional(), email: z.string().email().optional(), phone: z.string().max(20).optional(), notificationPrefs: z.any().optional(), currentPassword: z.string().optional(), newPassword: z.string().min(8).max(100).optional() }).parse(req.body);
   const u = (await User.findById(req.user!._id).select('+passwordHash'))!;
   if (b.name) u.name = b.name;
+  if (b.email && b.email.toLowerCase() !== u.email) {
+    const exists = await User.findOne({ email: b.email.toLowerCase(), _id: { $ne: u._id } });
+    if (exists) throw new AppError(400, 'Email is already in use by another user', 'EMAIL_IN_USE');
+    u.email = b.email.toLowerCase();
+  }
   if (b.phone !== undefined) u.phone = b.phone;
   if (b.notificationPrefs) u.set('notificationPrefs', { ...(u.toObject().notificationPrefs as any), ...b.notificationPrefs, categories: { ...((u.toObject().notificationPrefs as any)?.categories || {}), ...(b.notificationPrefs.categories || {}) } });
   if (b.newPassword) {
