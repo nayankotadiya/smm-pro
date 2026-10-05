@@ -1,0 +1,40 @@
+# Render Blueprint: 100% Free ($0) Backend Web Service
+# Docs: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: smm-pro-api
+    runtime: node
+    plan: free
+    region: oregon # or frankfurt, singapore
+    rootDir: .
+    buildCommand: npm ci --workspace server --include-workspace-root && npm run build --workspace server
+    startCommand: npm run start --workspace server
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+      - key: COOKIE_SAMESITE
+        value: none
+      - key: DB_MAX_POOL_SIZE
+        value: 10
+      - key: DB_MIN_POOL_SIZE
+        value: 2
+      - key: MONGODB_URI
+        sync: false # Paste your free MongoDB Atlas connection string here
+      - key: APP_URL
+        sync: false # e.g. https://your-frontend.vercel.app
+      - key: PUBLIC_APPROVAL_URL
+        sync: false # e.g. https://your-frontend.vercel.app/approval
+      - key: JWT_SECRET
+        generateValue: true # Render automatically generates a secure 256-bit random string
+      - key: JWT_REFRESH_SECRET
+        generateValue: true # Render automatically generates a secure 256-bit random string
+      - key: REDIS_URL
+        value: "" # Leave empty for $0 built-in in-process scheduler
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false

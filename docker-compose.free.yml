@@ -1,0 +1,48 @@
+# Docker Compose for 100% Zero-Cost Self-Hosting (e.g., VPS, Oracle Cloud Free Tier, or Local Server)
+# Usage:
+#   docker compose -f docker-compose.free.yml up -d --build
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: smm-pro-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: smmpro
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  api:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    container_name: smm-pro-api
+    restart: unless-stopped
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    ports:
+      - "4000:4000"
+    env_file:
+      - .env.free-tier
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      MONGODB_URI: mongodb://mongodb:27017/smmpro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  mongo_data:

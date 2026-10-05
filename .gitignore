@@ -1,0 +1,12 @@
+node_modules
+dist
+.env
+.env.production
+.env.local
+server/uploads
+uploads/
+backups/
+*.log
+*.gz
+.DS_Store
+Thumbs.db
