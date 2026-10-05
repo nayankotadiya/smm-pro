@@ -1,6 +1,6 @@
 import { Server as HttpServer } from 'http';
 import { Server } from 'socket.io';
-import { env } from '../config/env';
+import { env, isAllowedOrigin } from '../config/env';
 import { userFromToken } from '../middleware/auth';
 import { setIO } from '../services/realtime';
 import { Presence, ChatRoom, Message, Content } from '../models';
@@ -23,7 +23,14 @@ async function setPresence(userId: string, patch: any, io: Server) {
 }
 
 export function initSockets(server: HttpServer) {
-  const io = new Server(server, { cors: { origin: env.appOrigins, credentials: true }, pingInterval: 20000, pingTimeout: 20000 });
+  const io = new Server(server, {
+    cors: {
+      origin: (origin, cb) => cb(null, isAllowedOrigin(origin)),
+      credentials: true,
+    },
+    pingInterval: 20000,
+    pingTimeout: 20000,
+  });
   setIO(io);
   io.use(async (socket, next) => {
     try { (socket.data as any).user = await userFromToken(String(socket.handshake.auth?.token || '')); next(); }

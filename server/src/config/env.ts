@@ -54,3 +54,12 @@ export const env = {
     from: process.env.EMAIL_FROM || 'SMM PRO <no-reply@example.com>',
   },
 };
+
+export const isAllowedOrigin = (origin?: string): boolean => {
+  if (!origin) return true;
+  const clean = origin.replace(/\/$/, '').toLowerCase();
+  if (env.appOrigins.some((o) => o.toLowerCase() === clean)) return true;
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(clean)) return true;
+  if (/^https:\/\/[a-z0-9.-]+\.vercel\.app$/.test(clean)) return true;
+  return false;
+};

@@ -4,7 +4,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import compression from 'compression';
 import rateLimit from 'express-rate-limit';
-import { env } from './config/env';
+import { env, isAllowedOrigin } from './config/env';
 import { requireAuth } from './middleware/auth';
 import { errorHandler } from './middleware/error';
 import { ah } from './utils/async';
@@ -41,7 +41,15 @@ export function createApp() {
     crossOriginResourcePolicy: { policy: 'cross-origin' },
     referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
   }));
-  app.use(cors({ origin: env.appOrigins, credentials: true, allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'], exposedHeaders: ['Content-Range', 'Accept-Ranges', 'Content-Length'] }));
+  app.use(cors({
+    origin: (origin, callback) => {
+      if (isAllowedOrigin(origin)) callback(null, true);
+      else callback(null, false);
+    },
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    exposedHeaders: ['Content-Range', 'Accept-Ranges', 'Content-Length'],
+  }));
   app.use(compression({ filter: (req, res) => (/\/(stream|download|video|thumbnail)$/.test(req.path) ? false : compression.filter(req, res)) }));
   app.use(cookieParser());
   app.use(express.json({ limit: '1mb' }));
