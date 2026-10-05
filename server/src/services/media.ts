@@ -13,6 +13,10 @@ import { visibilityFilter, moveToStage, setLastAction, broadcastContent } from '
 import { logActivity } from './activity';
 import { postSystemEvent } from './chat';
 import { emitDomain } from './events';
+
+/** Subset of multer's File shape — avoids depending on the global Express.Multer namespace */
+interface MulterFile { fieldname: string; originalname: string; encoding: string; mimetype: string; size: number; destination: string; filename: string; path: string; buffer: Buffer; }
+
 import { closeTasks } from './tasks';
 import { emitOrg } from './realtime';
 
@@ -225,7 +229,7 @@ export async function pipeMedia(media: any, res: Response, range?: string) {
   r.stream.pipe(res);
 }
 
-export async function saveLocalUpload(u: AuthUser, id: string, file: Express.Multer.File) {
+export async function saveLocalUpload(u: AuthUser, id: string, file: MulterFile) {
   const media = await Media.findById(id);
   if (!media || String(media.uploadedBy) !== u._id || media.storage !== 'LOCAL' || media.status !== 'UPLOADING') throw forbidden();
   // Magic-byte sniffing: don't trust the browser MIME
