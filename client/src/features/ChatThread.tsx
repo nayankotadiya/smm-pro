@@ -865,12 +865,12 @@ function ActionButtons({ act, onExecute, onDismiss }: { act: any; onExecute: (de
         </button>
       )}
       {act.actionType === 'ASSIGN_SHOOTER' && (
-        <button
-          onClick={() => onExecute()}
-          className="rounded-lg bg-primary hover:bg-primary-hover px-2.5 py-1 text-[11.5px] font-bold text-white shadow-xs active:scale-95 transition-all"
+        <a
+          href={`/content/${act.contentId}?tab=shooting`}
+          className="rounded-lg bg-primary hover:bg-primary-hover px-2.5 py-1 text-[11.5px] font-bold text-white shadow-xs active:scale-95 transition-all inline-flex items-center gap-1"
         >
-          Assign Shooter
-        </button>
+          Schedule Shoot
+        </a>
       )}
       {(act.actionType === 'CREATE_TASK' || act.actionType === 'UPLOAD_EDIT') && (
         <button

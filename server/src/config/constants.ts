@@ -57,7 +57,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   SCRIPT_WRITER: ['clients.read', 'scripts.write', 'content.write', 'media.upload'],
   SHOOTER: ['clients.read', 'media.upload'],
   EDITOR: ['clients.read', 'media.upload'],
-  SMM: ['clients.read', 'content.write', 'approvals.review', 'approvals.send', 'media.upload', 'communication.write'],
+  SMM: ['clients.read', 'content.read.all', 'content.write', 'approvals.review', 'approvals.send', 'media.upload', 'communication.write'],
   DESIGNER: ['clients.read', 'media.upload'],
   SUPPORT: ['clients.read', 'clients.write', 'communication.write', 'tasks.manage', 'approvals.send', 'media.upload'],
 };

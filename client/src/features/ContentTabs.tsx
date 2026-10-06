@@ -2,13 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import clsx from 'clsx';
-import { Plus, Trash2, Send, Check, RotateCcw, Copy, Film, Camera as CameraIcon, CalendarClock, ExternalLink, Play, GitCompare } from 'lucide-react';
+import { Plus, Trash2, Send, Check, RotateCcw, Copy, Film, Camera as CameraIcon, CalendarClock, ExternalLink, Play, GitCompare, MapPin, Clock, Lock, UserCheck, Calendar } from 'lucide-react';
 import { get, post, patch, errMsg } from '@/lib/api';
 import { useAuth, useCan } from '@/store/auth';
 import { toast } from '@/store/ui';
 import { Badge, Button, Card, Empty, Field, Input, Modal, Select, Table, Textarea } from '@/components/ui';
 import { FileCard, MediaButtons, MediaThumb, UploadButton, VideoReview, useMediaActions, fileIcon } from '@/components/Media';
-import { ago, fmtDateTime, fmtSize, fmtTs, label, toLocalInput } from '@/lib/format';
+import { ago, fmtDate, fmtDateTime, fmtSize, fmtTs, label, toLocalInput } from '@/lib/format';
+import { useTeam } from '@/hooks/useData';
 import { ScriptDiffModal } from './ScriptDiffModal';
 
 const useInv = () => { const qc = useQueryClient(); return () => { ['content-detail', 'content', 'approvals', 'dashboard', 'tasks', 'scripts'].forEach((k) => qc.invalidateQueries({ queryKey: [k] })); }; };
@@ -183,11 +184,25 @@ export function ReviewBar({ approval, title, mediaId }: { approval: any; title: 
 // ---------------------------------------------------------------- Shooting
 const CHECK: [string, string][] = [['locationConfirmed', 'Location confirmed'], ['talentConfirmed', 'Talent confirmed'], ['productReady', 'Product ready'], ['equipmentReady', 'Equipment ready'], ['shotListReady', 'Shot list ready'], ['rawUploaded', 'Raw footage uploaded']];
 export function ShootingTab({ d }: { d: any }) {
-  const inv = useInv(); const a = useMediaActions(); const c = d.content; const s = d.shoot;
+  const inv = useInv();
+  const a = useMediaActions();
+  const c = d.content;
+  const s = d.shoot;
+  const me = useAuth((s) => s.user);
+  const team = useTeam();
   const reached = d.stages.indexOf(c.stage) >= d.stages.indexOf('SHOOTING');
+
+  const canManageShoot = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'TEAM_LEAD', 'SMM'].includes(me?.role || '');
+  const isShooter = me?.role === 'SHOOTER';
+
+  const teamList = team.data || [];
+  const shootersList = teamList.filter((u: any) => u.role === 'SHOOTER');
+  const shooterChoices = shootersList.length ? shootersList : teamList;
+
   const [v, setV] = useState<any>({});
   useEffect(() => {
     setV({
+      shooterId: s?.shooterId?._id || s?.shooterId || c.assignedShooter?._id || c.assignedShooter || '',
       shootDate: s?.shootDate ? toLocalInput(s.shootDate).slice(0, 10) : '',
       shootTime: s?.shootTime || '',
       location: s?.location || '',
@@ -199,32 +214,254 @@ export function ShootingTab({ d }: { d: any }) {
       beforeShootRemarks: s?.beforeShootRemarks || '',
       afterShootRemarks: s?.afterShootRemarks || '',
     });
-  }, [s?._id, s?.updatedAt]);
-  const save = useMutation({ mutationFn: (b: any) => patch(`/content/${c._id}/shoot`, b), onSuccess: () => { inv(); }, onError: err });
+  }, [s?._id, s?.updatedAt, c.assignedShooter]);
+
+  const save = useMutation({
+    mutationFn: (b: any) => patch(`/content/${c._id}/shoot`, b),
+    onSuccess: () => {
+      inv();
+      toast.success('Shoot plan saved & shooter notified!');
+    },
+    onError: err,
+  });
+
+  const saveChecklist = useMutation({
+    mutationFn: (chk: any) => patch(`/content/${c._id}/shoot`, { checklist: chk }),
+    onSuccess: () => inv(),
+    onError: err,
+  });
+
   const raws = d.media.filter((m: any) => m.category === 'RAW');
-  if (!reached) return <Card><Empty icon={<CameraIcon size={22} />} title="Shooting starts after the script is approved" hint="A shooting task is created automatically when the client approves the script." /></Card>;
+  if (!reached) {
+    return (
+      <Card>
+        <Empty
+          icon={<CameraIcon size={22} />}
+          title="Shooting starts after the script is approved"
+          hint="Manager or SMM will schedule the shoot date, time, location & shooter once the script is approved."
+        />
+      </Card>
+    );
+  }
+
   const set = (k: string) => (e: any) => setV((x: any) => ({ ...x, [k]: e.target.value }));
+  const isScheduled = !!(s?.shootDate || s?.location);
+  const currentShooterName = c.assignedShooter?.name || s?.shooterId?.name || 'Unassigned';
+
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
       <div className="space-y-5">
-        <Card title={<span className="flex items-center gap-2">Shoot plan<Badge status={s?.status || 'PENDING'} /></span>} action={<Button size="sm" variant="primary" loading={save.isPending} onClick={() => save.mutate({ ...v, shootDate: v.shootDate ? new Date(v.shootDate).toISOString() : null }, { onSuccess: () => toast.success('Shoot details saved.') })}>Save</Button>}>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Shoot date"><Input type="date" value={v.shootDate || ''} onChange={set('shootDate')} /></Field><Field label="Shoot time"><Input type="time" value={v.shootTime || ''} onChange={set('shootTime')} /></Field>
-            <div className="sm:col-span-2"><Field label="Location"><Input value={v.location || ''} onChange={set('location')} /></Field></div>
-            <Field label="Talent"><Input value={v.talent || ''} onChange={set('talent')} /></Field><Field label="Product"><Input value={v.product || ''} onChange={set('product')} /></Field>
-            <div className="sm:col-span-2"><Field label="Props"><Input value={v.props || ''} onChange={set('props')} /></Field></div>
-            <div className="sm:col-span-2"><Field label="Shot list"><Textarea rows={4} value={v.shotList || ''} onChange={set('shotList')} /></Field></div>
-            <div className="sm:col-span-2"><Field label="Instructions"><Textarea value={v.instructions || ''} onChange={set('instructions')} /></Field></div>
-            <div className="sm:col-span-2 rounded-xl border border-line/60 bg-surface-2/40 p-3 space-y-3">
-              <Field label="⚡ Before-Shoot Remarks (Pre-Shoot Notes)" hint="Prep requirements, doubts, or notes before heading to shoot">
-                <Textarea rows={2} value={v.beforeShootRemarks || ''} onChange={set('beforeShootRemarks')} placeholder="e.g. Ensure gimbal battery charged, client wants 9:16 vertical only..." />
-              </Field>
-              <Field label="🎬 After-Shoot Remarks (Post-Shoot Summary)" hint="What was covered, lighting/audio notes, retake requirements">
-                <Textarea rows={2} value={v.afterShootRemarks || ''} onChange={set('afterShootRemarks')} placeholder="e.g. Completed 4 scenes, lighting was good, client was happy..." />
-              </Field>
+        {canManageShoot ? (
+          /* Manager / SMM Shoot Scheduler Mode */
+          <Card
+            title={
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="flex items-center gap-2">
+                  <CameraIcon size={18} className="text-primary" />
+                  Shoot Plan & Call Sheet
+                  <Badge status={s?.status || (s?.shootDate ? 'SCHEDULED' : 'PENDING')} />
+                </span>
+                <span className="text-[11.5px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20 flex items-center gap-1">
+                  <UserCheck size={12} /> Manager / SMM Mode
+                </span>
+              </div>
+            }
+            action={
+              <Button
+                size="sm"
+                variant="primary"
+                loading={save.isPending}
+                onClick={() =>
+                  save.mutate({
+                    ...v,
+                    shootDate: v.shootDate ? new Date(v.shootDate).toISOString() : null,
+                  })
+                }
+              >
+                Save & Schedule Shoot
+              </Button>
+            }
+          >
+            <div className="mb-4 rounded-xl border border-primary/20 bg-primary/5 p-3 text-[12.5px] text-primary-ink flex items-center gap-2">
+              <span>👑 <b>Manager / SMM:</b> Assign the shooter, shoot date, time, location & instructions below. Shooters cannot alter or set these details themselves.</span>
             </div>
-          </div>
-        </Card>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <Field label="Assigned Shooter" hint="Manager/SMM selects who shoots this piece">
+                  <select
+                    value={v.shooterId || ''}
+                    onChange={set('shooterId')}
+                    className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-[13px] font-semibold text-ink focus:border-primary focus:outline-hidden"
+                  >
+                    <option value="">-- Choose Shooter --</option>
+                    {shooterChoices.map((u: any) => (
+                      <option key={u._id} value={u._id}>
+                        {u.name} ({u.role}{u.title ? ` · ${u.title}` : ''})
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+              <Field label="Shoot date"><Input type="date" value={v.shootDate || ''} onChange={set('shootDate')} /></Field>
+              <Field label="Shoot time"><Input type="time" value={v.shootTime || ''} onChange={set('shootTime')} /></Field>
+              <div className="sm:col-span-2">
+                <Field label="Shoot Location" hint="Specific studio, address, or client premises">
+                  <Input value={v.location || ''} onChange={set('location')} placeholder="e.g. Studio A, Bodakdev / Client Showroom" />
+                </Field>
+              </div>
+              <Field label="Talent / Models"><Input value={v.talent || ''} onChange={set('talent')} placeholder="e.g. 2 Female models, Voiceover artist" /></Field>
+              <Field label="Product"><Input value={v.product || ''} onChange={set('product')} placeholder="e.g. Diamond ring sample, 3 necklace variants" /></Field>
+              <div className="sm:col-span-2">
+                <Field label="Props"><Input value={v.props || ''} onChange={set('props')} placeholder="e.g. Velvet display stands, LED ring light" /></Field>
+              </div>
+              <div className="sm:col-span-2">
+                <Field label="Shot list"><Textarea rows={4} value={v.shotList || ''} onChange={set('shotList')} placeholder="e.g. 1. Macro close-up of ring (10s)&#10;2. Model wearing necklace (15s)..." /></Field>
+              </div>
+              <div className="sm:col-span-2">
+                <Field label="Creative Instructions"><Textarea rows={3} value={v.instructions || ''} onChange={set('instructions')} placeholder="e.g. Shoot in 4K 60fps, 9:16 vertical only, warm lighting..." /></Field>
+              </div>
+              <div className="sm:col-span-2 rounded-xl border border-line/60 bg-surface-2/40 p-3 space-y-3">
+                <Field label="⚡ Pre-Shoot Notes" hint="Prep requirements, doubts, or notes before heading to shoot">
+                  <Textarea rows={2} value={v.beforeShootRemarks || ''} onChange={set('beforeShootRemarks')} placeholder="e.g. Ensure gimbal battery charged, client wants 9:16 vertical only..." />
+                </Field>
+                <Field label="🎬 Post-Shoot Notes" hint="What was covered, lighting/audio notes, retake requirements">
+                  <Textarea rows={2} value={v.afterShootRemarks || ''} onChange={set('afterShootRemarks')} placeholder="e.g. Completed 4 scenes, lighting was good, client was happy..." />
+                </Field>
+              </div>
+            </div>
+          </Card>
+        ) : (
+          /* Shooter View-Only Call Sheet */
+          <Card
+            title={
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="flex items-center gap-2">
+                  <CameraIcon size={18} className="text-primary" />
+                  Official Shoot Call Sheet
+                  <Badge status={s?.status || (isScheduled ? 'SCHEDULED' : 'PENDING')} />
+                </span>
+                <span className="text-[11.5px] font-semibold text-slate-500 dark:text-slate-400 bg-surface-2 px-2.5 py-0.5 rounded-full border border-line/60 flex items-center gap-1">
+                  <Lock size={12} /> Shooter (View Only)
+                </span>
+              </div>
+            }
+          >
+            {!isScheduled ? (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-900 dark:text-amber-200 space-y-1.5">
+                <div className="flex items-center gap-2 font-bold text-[14px]">
+                  <Clock size={16} className="text-amber-600 dark:text-amber-400" />
+                  Shoot Schedule Pending
+                </div>
+                <p className="text-[12.5px] leading-relaxed opacity-95">
+                  Script has been approved! Your <b>Manager or SMM</b> will assign the shoot date, time, location, and instructions for you. You will be notified automatically once confirmed.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {/* Date & Time */}
+                  <div className="rounded-xl border border-line/70 bg-surface-2/40 p-3.5 space-y-1">
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                      <CalendarClock size={14} className="text-primary" />
+                      Shoot Date & Time
+                    </div>
+                    <div className="text-[15px] font-bold text-ink">
+                      {s?.shootDate ? fmtDate(s.shootDate) : 'Date TBD'}
+                      {s?.shootTime ? ` @ ${s.shootTime}` : ''}
+                    </div>
+                  </div>
+
+                  {/* Location with Google Maps shortcut */}
+                  <div className="rounded-xl border border-line/70 bg-surface-2/40 p-3.5 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                        <MapPin size={14} className="text-rose-500" />
+                        Shoot Location
+                      </div>
+                      {s?.location && (
+                        <a
+                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(s.location)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] font-bold text-primary hover:underline flex items-center gap-1"
+                        >
+                          Open Maps <ExternalLink size={10} />
+                        </a>
+                      )}
+                    </div>
+                    <div className="text-[14px] font-semibold text-ink">
+                      {s?.location || 'Location not specified'}
+                    </div>
+                  </div>
+
+                  {/* Talent */}
+                  <div className="rounded-xl border border-line/70 bg-surface-2/40 p-3.5 space-y-1">
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Talent / Models
+                    </div>
+                    <div className="text-[13.5px] font-medium text-ink">
+                      {s?.talent || 'None specified'}
+                    </div>
+                  </div>
+
+                  {/* Product */}
+                  <div className="rounded-xl border border-line/70 bg-surface-2/40 p-3.5 space-y-1">
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Product
+                    </div>
+                    <div className="text-[13.5px] font-medium text-ink">
+                      {s?.product || 'None specified'}
+                    </div>
+                  </div>
+
+                  {/* Props */}
+                  {s?.props && (
+                    <div className="sm:col-span-2 rounded-xl border border-line/70 bg-surface-2/40 p-3.5 space-y-1">
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        Props
+                      </div>
+                      <div className="text-[13.5px] font-medium text-ink">
+                        {s.props}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Shot List */}
+                  {s?.shotList && (
+                    <div className="sm:col-span-2 rounded-xl border border-line/70 bg-surface-2/40 p-3.5 space-y-1.5">
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        Shot List
+                      </div>
+                      <pre className="whitespace-pre-wrap font-sans text-[13px] text-ink leading-relaxed">
+                        {s.shotList}
+                      </pre>
+                    </div>
+                  )}
+
+                  {/* Creative Instructions */}
+                  {s?.instructions && (
+                    <div className="sm:col-span-2 rounded-xl border border-line/70 bg-surface-2/40 p-3.5 space-y-1.5">
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        Creative Instructions
+                      </div>
+                      <pre className="whitespace-pre-wrap font-sans text-[13px] text-ink leading-relaxed">
+                        {s.instructions}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+
+                {/* Security / Role Notice */}
+                <div className="rounded-xl border border-line/60 bg-surface-2/30 p-3 text-[12px] text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                  <Lock size={14} className="shrink-0 text-slate-400" />
+                  <span>Shoot date, time, and location are assigned exclusively by Manager & SMM. Shooters cannot alter these. To request changes, coordinate with your manager in Chat.</span>
+                </div>
+              </div>
+            )}
+          </Card>
+        )}
+
         <Card title="Raw footage" action={<UploadButton label="Upload raw video" category="RAW" contentId={c._id} accept="video/*" camera icon={<Film size={15} />} />}>
           {!raws.length ? <Empty title="No raw footage yet" hint="Uploading notifies the editor, creates the editing task and moves the content forward." /> : <VersionList items={raws} a={a} />}
         </Card>
@@ -234,8 +471,31 @@ export function ShootingTab({ d }: { d: any }) {
       </div>
       <div className="space-y-5">
         <Card title="Checklist">
-          <ul className="space-y-2.5">{CHECK.map(([k, l]) => <li key={k}><label className="flex min-h-[28px] items-center gap-2.5"><input type="checkbox" className="h-4 w-4" checked={!!s?.checklist?.[k]} disabled={k === 'rawUploaded' || save.isPending} onChange={(e) => save.mutate({ checklist: { [k]: e.target.checked } })} /><span className={s?.checklist?.[k] ? 'text-ink-2 line-through' : ''}>{l}</span></label></li>)}</ul>
-          <div className="mt-4 border-t border-line pt-3 text-[13px]"><div className="text-ink-2">Shooter</div><div className="font-medium">{c.assignedShooter?.name || 'Unassigned'}</div></div>
+          <ul className="space-y-2.5">
+            {CHECK.map(([k, l]) => (
+              <li key={k}>
+                <label className="flex min-h-[28px] items-center gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded accent-primary"
+                    checked={!!s?.checklist?.[k]}
+                    disabled={k === 'rawUploaded' || saveChecklist.isPending}
+                    onChange={(e) => saveChecklist.mutate({ [k]: e.target.checked })}
+                  />
+                  <span className={s?.checklist?.[k] ? 'text-ink-2 line-through' : 'text-ink font-medium text-[13px]'}>
+                    {l}
+                  </span>
+                </label>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-4 border-t border-line pt-3 text-[13px]">
+            <div className="text-ink-2">Assigned Shooter</div>
+            <div className="font-semibold text-ink flex items-center gap-1.5 mt-0.5">
+              <CameraIcon size={14} className="text-primary" />
+              {currentShooterName}
+            </div>
+          </div>
         </Card>
         <ShooterRemarkBox contentId={c._id} shoot={s} onSaved={inv} />
       </div>

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { Content, Script, ScriptVersion, Shoot, Media, Approval, Task, Feedback, ActivityLog, ScheduledPost, Reminder } from '../models';
+import { Content, Script, ScriptVersion, Shoot, Media, Approval, Task, Feedback, ActivityLog, ScheduledPost, Reminder, User } from '../models';
 import { ah } from '../utils/async';
 import { badRequest, forbidden } from '../utils/errors';
 import { requirePerm, can } from '../middleware/auth';
@@ -9,7 +9,7 @@ import { logActivity } from '../services/activity';
 import { ensureContentRoom, postSystemEvent } from '../services/chat';
 import { notify, managerIds } from '../services/notify';
 import { emitDomain } from '../services/events';
-import { closeTasks } from '../services/tasks';
+import { closeTasks, createTask } from '../services/tasks';
 import { STAGES } from '../config/constants';
 import { escapeRx } from './clients';
 
@@ -144,18 +144,110 @@ r.post('/:id/stage', requirePerm('content.assign'), ah(async (req, res) => {
 // ----- Shooting -----
 r.patch('/:id/shoot', ah(async (req, res) => {
   const c: any = await getVisibleContent(req.user!, req.params.id);
-  const b = z.object({ shootDate: z.coerce.date().optional().nullable(), shootTime: z.string().max(20).optional().nullable(), location: z.string().max(300).optional().nullable(), talent: z.string().max(500).optional().nullable(), product: z.string().max(500).optional().nullable(), props: z.string().max(1000).optional().nullable(), shotList: z.string().max(5000).optional().nullable(), instructions: z.string().max(5000).optional().nullable(), beforeShootRemarks: z.string().max(5000).optional().nullable(), afterShootRemarks: z.string().max(5000).optional().nullable(), status: z.enum(['PENDING', 'SCHEDULED', 'IN_PROGRESS', 'RAW_UPLOADED', 'COMPLETED']).optional(), checklist: z.record(z.boolean()).optional(), shooterId: oid }).parse(req.body);
+  const b = z.object({
+    shootDate: z.coerce.date().optional().nullable(),
+    shootTime: z.string().max(20).optional().nullable(),
+    location: z.string().max(300).optional().nullable(),
+    talent: z.string().max(500).optional().nullable(),
+    product: z.string().max(500).optional().nullable(),
+    props: z.string().max(1000).optional().nullable(),
+    shotList: z.string().max(5000).optional().nullable(),
+    instructions: z.string().max(5000).optional().nullable(),
+    beforeShootRemarks: z.string().max(5000).optional().nullable(),
+    afterShootRemarks: z.string().max(5000).optional().nullable(),
+    status: z.enum(['PENDING', 'SCHEDULED', 'IN_PROGRESS', 'RAW_UPLOADED', 'COMPLETED']).optional(),
+    checklist: z.record(z.boolean()).optional(),
+    shooterId: oid,
+  }).parse(req.body);
+
+  const canManageShoot = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'TEAM_LEAD', 'SMM'].includes(req.user!.role) || can(req.user, 'content.write');
+
+  // Fields that only Manager / SMM / Admin can set or alter
+  const schedulingKeys = ['shootDate', 'shootTime', 'location', 'talent', 'product', 'props', 'shotList', 'instructions', 'shooterId'];
+  const isSchedulingAttempt = schedulingKeys.some((k) => (req.body as any)[k] !== undefined);
+
+  if (isSchedulingAttempt && !canManageShoot) {
+    throw forbidden('Only Managers, SMM, or Admins can schedule shoots and set shoot date, time, location, or instructions. Shooters cannot set or modify shoot details.');
+  }
+
   let s: any = await Shoot.findOne({ contentId: c._id });
   if (!s) s = new Shoot({ contentId: c._id, clientId: c.clientId, shooterId: c.assignedShooter });
   const { checklist, ...rest } = b;
   Object.assign(s, rest);
   if (checklist) for (const [k, v] of Object.entries(checklist)) if (k in s.checklist.toObject()) s.checklist[k] = v;
   if (b.shootDate && s.status === 'PENDING') s.status = 'SCHEDULED';
+  if (b.shooterId) s.shooterId = b.shooterId;
   await s.save();
-  if (b.shooterId && String(c.assignedShooter) !== b.shooterId) { c.assignedShooter = b.shooterId; applyStage(c, c.stage); }
-  await setLastAction(c, `${req.user!.name} updated shoot details`, req.user!._id); await c.save();
-  await logActivity({ actorId: req.user!._id, action: 'shoot.updated', message: `${req.user!.name} updated shoot for ${c.contentId}`, entityType: 'shoot', entityId: s._id, contentId: c._id, clientId: c.clientId });
-  await broadcastContent(c); res.json(s);
+
+  if (b.shooterId && String(c.assignedShooter) !== String(b.shooterId)) {
+    c.assignedShooter = b.shooterId;
+    applyStage(c, c.stage);
+  }
+  await setLastAction(c, `${req.user!.name} updated shoot details`, req.user!._id);
+  await c.save();
+
+  // If Manager or SMM scheduled/updated shoot details, update or create shooter task and notify them
+  if (canManageShoot && (b.shootDate || b.shootTime || b.location || b.shooterId)) {
+    const targetShooter = b.shooterId || c.assignedShooter;
+    if (targetShooter) {
+      const shootDateStr = b.shootDate
+        ? new Date(b.shootDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+        : s.shootDate
+        ? new Date(s.shootDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+        : 'Date TBD';
+      const shootTimeStr = b.shootTime || s.shootTime || '';
+      const locStr = b.location || s.location || 'Location TBD';
+
+      const taskDesc = `📍 Location: ${locStr}\n📅 Date: ${shootDateStr} ${shootTimeStr}\n📝 Instructions: ${b.instructions || s.instructions || 'N/A'}`;
+      const existingTask = await Task.findOne({ contentId: c._id, kind: 'SHOOT', status: { $ne: 'COMPLETED' } });
+      if (existingTask) {
+        existingTask.assignedTo = targetShooter as any;
+        existingTask.description = taskDesc;
+        if (b.shootDate) existingTask.dueAt = b.shootDate;
+        await existingTask.save();
+      } else {
+        await createTask({
+          title: `Shoot: ${c.title || c.contentId}`,
+          description: taskDesc,
+          contentId: c._id,
+          clientId: c.clientId,
+          assignedTo: targetShooter,
+          dueAt: b.shootDate || new Date(Date.now() + 72 * 3600 * 1000),
+          priority: 'HIGH',
+          kind: 'SHOOT',
+        }, { actorId: req.user!._id, source: 'AUTOMATIC' });
+      }
+
+      await notify([targetShooter], {
+        type: 'shoot.scheduled',
+        category: 'WORKFLOW',
+        title: `🎬 Shoot Scheduled by ${req.user!.name}`,
+        message: `${c.contentId} · ${c.title}\n📅 ${shootDateStr} ${shootTimeStr}\n📍 ${locStr}`,
+        link: `/content/${c.contentId}?tab=shooting`,
+        contentId: c._id,
+      }, { excludeUserId: req.user!._id });
+
+      const shooterUser = await User.findById(targetShooter).select('name').lean();
+      await postSystemEvent(c._id, 'shoot.scheduled', 'SHOOT SCHEDULED BY ' + req.user!.role, [
+        `Shooter: ${shooterUser?.name || 'Assigned'}`,
+        `Date: ${shootDateStr} ${shootTimeStr}`,
+        `Location: ${locStr}`,
+        `Scheduled by: ${req.user!.name} (${req.user!.role})`,
+      ]);
+    }
+  }
+
+  await logActivity({
+    actorId: req.user!._id,
+    action: 'shoot.updated',
+    message: `${req.user!.name} updated shoot for ${c.contentId}`,
+    entityType: 'shoot',
+    entityId: s._id,
+    contentId: c._id,
+    clientId: c.clientId,
+  });
+  await broadcastContent(c);
+  res.json(s);
 }));
 
 /** Shooter adds a remark/complaint about this shoot (Before / After shoot) */

@@ -295,9 +295,9 @@ export async function clientDecision(tokenOrApproval: string | any, decision: 'A
       await postSystemEvent(content._id, 'client.approved', 'CLIENT APPROVAL RECEIVED', [`Content: ${content.title}`, `Version: ${a.version}`, `Approved: ${fmtTime(new Date())}`], {
         action: {
           actionType: 'ASSIGN_SHOOTER',
-          title: `Assign Shooter for ${content.contentId}`,
-          description: `Client approved script. Confirm shooter & shoot date.`,
-          allowedRoles: ['MANAGER', 'SUPER_ADMIN', 'ADMIN', 'TEAM_LEAD'],
+          title: `Schedule Shoot for ${content.contentId}`,
+          description: `Client approved script. Manager or SMM: set shoot date, time, location & shooter.`,
+          allowedRoles: ['MANAGER', 'SUPER_ADMIN', 'ADMIN', 'TEAM_LEAD', 'SMM'],
           payload: { contentId: content._id },
         },
       });
