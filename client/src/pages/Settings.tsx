@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Bell, BellOff, Download, Smartphone, RefreshCw, Send, Shield, Laptop, Trash2, Copy, LogOut } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Plus, Bell, BellOff, Download, Smartphone, RefreshCw, Send, Shield, Laptop, Trash2, Copy, LogOut, ExternalLink } from 'lucide-react';
 import { get, post, patch, errMsg } from '@/lib/api';
 import { useAuth, useCan } from '@/store/auth';
 import { toast } from '@/store/ui';
@@ -371,9 +371,29 @@ function Integrations() {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-ink-2">Target folder:</span>
-                <span className="font-semibold text-emerald-400">
-                  {d.drive.rootFolder?.name || d.drive.rootFolderName || 'SMM PRO'}
-                </span>
+                {d.drive.rootFolder?.id ? (
+                  <a
+                    href={`https://drive.google.com/drive/folders/${d.drive.rootFolder.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 font-semibold text-emerald-400 hover:underline"
+                    title="Open root folder in Google Drive"
+                  >
+                    {d.drive.rootFolder?.name || d.drive.rootFolderName || 'SMM PRO'}
+                    <ExternalLink size={13} />
+                  </a>
+                ) : (
+                  <a
+                    href="https://drive.google.com/drive/search?q=SMM%20PRO"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 font-semibold text-emerald-400 hover:underline"
+                    title="Search for SMM PRO in Google Drive"
+                  >
+                    {d.drive.rootFolder?.name || d.drive.rootFolderName || 'SMM PRO'}
+                    <ExternalLink size={13} />
+                  </a>
+                )}
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-ink-2">Storage quota:</span>
@@ -384,10 +404,18 @@ function Integrations() {
                 </span>
               </div>
               {d.drive.error && <p className="rounded bg-danger-soft px-3 py-2 text-danger-ink">{d.drive.error}</p>}
-              <div className="pt-1.5">
+              <div className="flex flex-wrap items-center gap-2 pt-1.5">
                 <Button size="sm" loading={busy === 'sync'} onClick={sync} icon={<RefreshCw size={14} />}>
                   Run Drive sync
                 </Button>
+                <a
+                  href={d.drive.rootFolder?.id ? `https://drive.google.com/drive/folders/${d.drive.rootFolder.id}` : 'https://drive.google.com/drive/search?q=SMM%20PRO'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface-2 transition-colors"
+                >
+                  <ExternalLink size={13} /> Open Drive Folder
+                </a>
               </div>
             </div>
           ) : (
