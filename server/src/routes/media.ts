@@ -33,12 +33,19 @@ const UPLOAD_TMP = path.join(LOCAL_DIR, 'tmp');
 try { fs.mkdirSync(UPLOAD_TMP, { recursive: true }); } catch {}
 const upload = multer({ dest: UPLOAD_TMP, limits: { fileSize: env.maxUploadMb * 1024 * 1024, files: 1 } });
 
-/** <video>/<img>/<a download> cannot send Authorization headers, so we issue a 5-minute, single-file URL token. */
+/** <video>/<img>/<a download> can use a signed URL token (valid 24h), or fallback to session/cookie auth */
 const streamAuth = ah(async (req, _res, next) => {
   const t = String(req.query.t || '');
   if (t) {
-    try { const p = jwt.verify(t, env.jwtSecret) as any; if (p.typ !== 'media' || p.mid !== req.params.id) throw new Error(); req.user = await userFromToken(jwt.sign({ sub: p.sub }, env.jwtSecret, { expiresIn: '1m' })); return next(); }
-    catch { throw new AppError(401, 'Link expired', 'UNAUTHORIZED'); }
+    try {
+      const p = jwt.verify(t, env.jwtSecret) as any;
+      if (p.typ === 'media' && p.mid === req.params.id) {
+        req.user = await userFromToken(jwt.sign({ sub: p.sub }, env.jwtSecret, { expiresIn: '15m' }));
+        return next();
+      }
+    } catch {
+      // If signed token has expired, fall through to cookie/session auth below
+    }
   }
   return requireAuth(req, _res, next);
 });
@@ -104,7 +111,7 @@ r.post('/:id/link', ah(async (req, res) => {
   const m = await Media.findById(req.params.id);
   if (!m) throw notFound('File');
   if (!(await canAccessMedia(req.user!, m))) throw forbidden();
-  const t = jwt.sign({ typ: 'media', mid: String(m._id), sub: req.user!._id }, env.jwtSecret, { expiresIn: '5m' });
+  const t = jwt.sign({ typ: 'media', mid: String(m._id), sub: req.user!._id }, env.jwtSecret, { expiresIn: '24h' });
   res.json({ stream: `/api/media/${m._id}/stream?t=${t}`, download: `/api/media/${m._id}/download?t=${t}`, drive: m.webViewLink || null });
 }));
 /** Timestamped comment on a video (internal reviewers) */

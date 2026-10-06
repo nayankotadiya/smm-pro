@@ -7,7 +7,7 @@ import {
   CheckSquare, AlarmClock, Pin, X, Search, Clock, Trash2, MoreHorizontal,
   Image as ImageIcon, Film, FileText, Music, Mic, MicOff, Paperclip,
   Camera, Play, Pause, Download, ChevronLeft, ChevronRight, ChevronDown, ZoomIn,
-  File, AtSign, Bell,
+  File, AtSign, Bell, Maximize2, ExternalLink,
 } from 'lucide-react';
 import { get, post, del, errMsg, DIRECT_URL } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
@@ -87,113 +87,283 @@ function fmtDur(sec: number) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-// ─── Lightbox ────────────────────────────────────────────────────────────────
-function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
+// ─── Full Media Lightbox (Image & Video Full View) ──────────────────────────
+interface MediaLightboxProps {
+  type: 'image' | 'video';
+  src: string;
+  fileName: string;
+  downloadUrl?: string;
+  driveUrl?: string | null;
+  onClose: () => void;
+}
+function MediaLightbox({ type, src, fileName, downloadUrl, driveUrl, onClose }: MediaLightboxProps) {
   useEffect(() => {
     const h = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, [onClose]);
+
   return (
     <div
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 backdrop-blur-sm"
+      className="fixed inset-0 z-[200] flex flex-col bg-black/95 backdrop-blur-md animate-fade-in"
       onClick={onClose}
     >
-      <button
-        className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white hover:bg-white/20"
-        onClick={onClose}
-        aria-label="Close"
-      >
-        <X size={20} />
-      </button>
-      <img
-        src={src}
-        alt="Preview"
-        className="max-h-[90dvh] max-w-[90vw] rounded-xl object-contain shadow-2xl"
+      {/* Top Header Bar */}
+      <header
+        className="flex h-14 shrink-0 items-center justify-between border-b border-white/10 bg-black/40 px-3 sm:px-5 text-white"
         onClick={(e) => e.stopPropagation()}
-      />
+      >
+        <div className="flex items-center gap-2.5 min-w-0 pr-3">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/10 text-white">
+            {type === 'video' ? <Film size={16} /> : <ImageIcon size={16} />}
+          </div>
+          <span className="truncate font-medium text-[13.5px] sm:text-[14px]" title={fileName}>
+            {fileName}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {driveUrl && (
+            <a
+              href={driveUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-8 sm:h-9 items-center gap-1.5 rounded-xl bg-white/10 px-2.5 sm:px-3 text-[12px] font-semibold text-white hover:bg-white/20 transition-colors"
+              title="Open in Google Drive"
+            >
+              <ExternalLink size={14} />
+              <span className="hidden sm:inline">Drive</span>
+            </a>
+          )}
+          {downloadUrl && (
+            <a
+              href={downloadUrl}
+              download={fileName}
+              className="inline-flex h-8 sm:h-9 items-center gap-1.5 rounded-xl bg-primary px-2.5 sm:px-3 text-[12px] font-semibold text-white hover:brightness-110 transition-colors"
+              title="Download original file"
+            >
+              <Download size={14} />
+              <span className="hidden sm:inline">Download</span>
+            </a>
+          )}
+          <button
+            onClick={onClose}
+            className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-white/10 text-white hover:bg-white/20 transition-colors"
+            aria-label="Close full preview"
+          >
+            <X size={19} />
+          </button>
+        </div>
+      </header>
+
+      {/* Main Preview Area */}
+      <div
+        className="flex flex-1 items-center justify-center p-2 sm:p-6 overflow-hidden"
+        onClick={onClose}
+      >
+        {type === 'video' ? (
+          <div
+            className="relative flex max-h-[85dvh] max-w-[96vw] items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <video
+              src={src}
+              controls
+              autoPlay
+              playsInline
+              className="max-h-[82dvh] max-w-[96vw] rounded-2xl bg-black shadow-2xl object-contain ring-1 ring-white/15"
+            />
+          </div>
+        ) : (
+          <img
+            src={src}
+            alt={fileName}
+            className="max-h-[85dvh] max-w-[96vw] rounded-2xl object-contain shadow-2xl ring-1 ring-white/15"
+            onClick={(e) => e.stopPropagation()}
+          />
+        )}
+      </div>
     </div>
   );
 }
 
 // ─── Inline Image ────────────────────────────────────────────────────────────
 function InlineImage({ mediaId, fileName }: { mediaId: string; fileName: string }) {
-  const [src, setSrc] = useState<string | null>(null);
-  const [lightbox, setLightbox] = useState(false);
-  useEffect(() => {
-    mediaLinks(mediaId).then((l) => setSrc(l.stream)).catch(() => undefined);
+  const [links, setLinks] = useState<{ stream: string; download: string; drive: string | null } | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  const fetchLinks = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(false);
+      const l = await mediaLinks(mediaId);
+      setLinks(l);
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
   }, [mediaId]);
-  if (!src) return (
-    <div className="flex h-40 w-64 items-center justify-center rounded-2xl bg-surface-3">
-      <Spinner />
-    </div>
-  );
+
+  useEffect(() => {
+    fetchLinks();
+  }, [fetchLinks]);
+
+  if (loading) {
+    return (
+      <div className="flex h-40 w-64 items-center justify-center rounded-2xl bg-surface-3">
+        <Spinner />
+      </div>
+    );
+  }
+
+  if (error || !links) {
+    return (
+      <div className="flex h-32 w-64 flex-col items-center justify-center rounded-2xl bg-surface-3 p-3 text-center">
+        <p className="text-[12px] text-ink-3">Image preview unavailable</p>
+        <button onClick={fetchLinks} className="mt-1 text-[11px] text-primary font-semibold hover:underline">
+          Tap to retry
+        </button>
+      </div>
+    );
+  }
+
   return (
     <>
-      <button
-        className="group relative block overflow-hidden rounded-2xl"
-        onClick={() => setLightbox(true)}
-        aria-label={`View ${fileName}`}
+      <div
+        className="group relative block overflow-hidden rounded-2xl cursor-pointer shadow-md"
+        onClick={() => setFullscreen(true)}
       >
         <img
-          src={src}
+          src={links.stream}
           alt={fileName}
           className="max-h-64 max-w-xs w-full rounded-2xl object-cover transition-transform duration-300 group-hover:scale-105"
+          onError={() => fetchLinks()}
         />
-        <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/0 transition-colors duration-200 group-hover:bg-black/20">
-          <ZoomIn size={28} className="text-white opacity-0 drop-shadow-xl transition-opacity duration-200 group-hover:opacity-100" />
+        {/* Fullscreen icon overlay */}
+        <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/0 transition-colors duration-200 group-hover:bg-black/25">
+          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100 shadow-xl">
+            <Maximize2 size={18} />
+          </span>
         </div>
-      </button>
-      {lightbox && <Lightbox src={src} onClose={() => setLightbox(false)} />}
+        <div className="absolute top-2 right-2 rounded-lg bg-black/60 px-2 py-0.5 text-[10.5px] font-bold text-white shadow-xs">
+          Tap for full view
+        </div>
+      </div>
+
+      {fullscreen && (
+        <MediaLightbox
+          type="image"
+          src={links.stream}
+          fileName={fileName}
+          downloadUrl={links.download}
+          driveUrl={links.drive}
+          onClose={() => setFullscreen(false)}
+        />
+      )}
     </>
   );
 }
 
 // ─── Inline Video ────────────────────────────────────────────────────────────
 function InlineVideo({ mediaId, fileName }: { mediaId: string; fileName: string }) {
-  const [src, setSrc] = useState<string | null>(null);
-  const [playing, setPlaying] = useState(false);
-  const ref = useRef<HTMLVideoElement>(null);
-  useEffect(() => {
-    mediaLinks(mediaId).then((l) => setSrc(l.stream)).catch(() => undefined);
+  const [links, setLinks] = useState<{ stream: string; download: string; drive: string | null } | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  const fetchLinks = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(false);
+      const l = await mediaLinks(mediaId);
+      setLinks(l);
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
   }, [mediaId]);
-  const toggle = () => {
-    if (!ref.current) return;
-    if (playing) { ref.current.pause(); setPlaying(false); }
-    else { ref.current.play(); setPlaying(true); }
-  };
-  if (!src) return (
-    <div className="flex h-40 w-64 items-center justify-center rounded-2xl bg-black/80">
-      <Spinner className="text-white" />
-    </div>
-  );
-  return (
-    <div className="relative overflow-hidden rounded-2xl bg-black" style={{ maxWidth: 288 }}>
-      <video
-        ref={ref}
-        src={src}
-        className="max-h-64 w-full rounded-2xl object-cover"
-        playsInline
-        preload="metadata"
-        onEnded={() => setPlaying(false)}
-        onClick={toggle}
-      />
-      <button
-        onClick={toggle}
-        aria-label={playing ? 'Pause' : 'Play'}
-        className={clsx(
-          'absolute inset-0 flex items-center justify-center transition-opacity duration-200',
-          playing ? 'opacity-0 hover:opacity-100' : 'opacity-100'
-        )}
-      >
-        <span className="flex h-14 w-14 items-center justify-center rounded-full bg-black/60 backdrop-blur-sm shadow-xl">
-          {playing ? <Pause size={24} className="text-white" /> : <Play size={24} className="text-white ml-1" />}
-        </span>
-      </button>
-      <div className="absolute bottom-2 left-2 rounded-lg bg-black/60 px-2 py-0.5 text-[11px] text-white">
-        {fileName.length > 20 ? fileName.slice(0, 18) + '…' : fileName}
+
+  useEffect(() => {
+    fetchLinks();
+  }, [fetchLinks]);
+
+  if (loading) {
+    return (
+      <div className="flex h-44 w-64 items-center justify-center rounded-2xl bg-black/80">
+        <Spinner className="text-white" />
       </div>
-    </div>
+    );
+  }
+
+  if (error || !links) {
+    return (
+      <div className="flex h-36 w-64 flex-col items-center justify-center rounded-2xl bg-surface-3 p-3 text-center">
+        <p className="text-[12px] text-ink-3">Video unavailable</p>
+        <button onClick={fetchLinks} className="mt-1 text-[11px] text-primary font-semibold hover:underline">
+          Tap to retry
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div
+        className="group relative block overflow-hidden rounded-2xl bg-black cursor-pointer shadow-md"
+        style={{ maxWidth: 300 }}
+        onClick={() => setFullscreen(true)}
+      >
+        <video
+          src={links.stream}
+          playsInline
+          preload="metadata"
+          className="max-h-56 w-full rounded-2xl object-cover bg-black"
+          onError={() => fetchLinks()}
+        />
+
+        {/* Center Play Button Overlay */}
+        <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/45 transition-colors">
+          <span className="flex h-13 w-13 items-center justify-center rounded-full bg-white/25 backdrop-blur-md ring-1 ring-white/30 text-white shadow-2xl transition-transform duration-200 group-hover:scale-110 active:scale-95">
+            <Play size={24} className="ml-0.5 fill-white" />
+          </span>
+        </div>
+
+        {/* Top-Right Fullscreen / Expand Badge */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setFullscreen(true);
+          }}
+          className="absolute top-2 right-2 flex items-center gap-1 rounded-lg bg-black/70 px-2 py-1 text-[11px] font-bold text-white backdrop-blur-sm hover:bg-black/90 transition-colors shadow-xs"
+          title="Open Fullscreen Player"
+        >
+          <Maximize2 size={13} />
+          <span>Full view</span>
+        </button>
+
+        {/* Bottom file title & tap hint */}
+        <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent p-2.5 pt-6 text-[11px] text-white flex items-center justify-between">
+          <span className="truncate max-w-[70%] font-medium drop-shadow">{fileName}</span>
+          <span className="text-[10px] text-white/90 font-semibold">Tap to play</span>
+        </div>
+      </div>
+
+      {fullscreen && (
+        <MediaLightbox
+          type="video"
+          src={links.stream}
+          fileName={fileName}
+          downloadUrl={links.download}
+          driveUrl={links.drive}
+          onClose={() => setFullscreen(false)}
+        />
+      )}
+    </>
   );
 }
 

@@ -312,33 +312,40 @@ export async function streamMedia(u: AuthUser, id: string, res: Response, range:
 export async function pipeMedia(media: any, res: Response, range?: string) {
   if (!res.getHeader('Content-Type')) res.setHeader('Content-Type', media.mimeType || 'application/octet-stream');
   res.setHeader('Accept-Ranges', 'bytes');
-  if (media.storage === 'LOCAL') {
-    const p = media.localPath;
-    if (!p || !fs.existsSync(p)) {
-      if (media.driveFileId && gd.driveConfigured()) {
-        const r = await gd.streamFile(media.driveFileId, range);
-        if (r.status === 206) { res.status(206); if (r.headers['content-range']) res.setHeader('Content-Range', r.headers['content-range']); }
-        if (r.headers['content-length']) res.setHeader('Content-Length', r.headers['content-length']);
-        r.stream.on('error', () => res.destroy());
-        return r.stream.pipe(res);
-      }
-      throw notFound('File on disk');
-    }
+
+  // 1. If local disk file exists, stream directly for instantaneous playback & fast seeking
+  const p = media.localPath;
+  if (p && fs.existsSync(p)) {
     const size = fs.statSync(p).size;
     const m = range && /bytes=(\d*)-(\d*)/.exec(range);
     if (m) {
-      const start = m[1] ? Number(m[1]) : 0; const end = m[2] ? Math.min(Number(m[2]), size - 1) : size - 1;
-      res.status(206).setHeader('Content-Range', `bytes ${start}-${end}/${size}`); res.setHeader('Content-Length', end - start + 1);
+      const start = m[1] ? Number(m[1]) : 0;
+      const end = m[2] ? Math.min(Number(m[2]), size - 1) : size - 1;
+      res.status(206).setHeader('Content-Range', `bytes ${start}-${end}/${size}`);
+      res.setHeader('Content-Length', end - start + 1);
       return fs.createReadStream(p, { start, end }).pipe(res);
     }
     res.setHeader('Content-Length', size);
     return fs.createReadStream(p).pipe(res);
   }
-  const r = await gd.streamFile(media.driveFileId!, range);
-  if (r.status === 206) { res.status(206); if (r.headers['content-range']) res.setHeader('Content-Range', r.headers['content-range']); }
-  if (r.headers['content-length']) res.setHeader('Content-Length', r.headers['content-length']);
-  r.stream.on('error', () => res.destroy());
-  r.stream.pipe(res);
+
+  // 2. Fall back to streaming directly from Google Drive
+  if (media.driveFileId && gd.driveConfigured()) {
+    try {
+      const r = await gd.streamFile(media.driveFileId, range);
+      if (r.status === 206) {
+        res.status(206);
+        if (r.headers['content-range']) res.setHeader('Content-Range', r.headers['content-range']);
+      }
+      if (r.headers['content-length']) res.setHeader('Content-Length', r.headers['content-length']);
+      r.stream.on('error', () => res.destroy());
+      return r.stream.pipe(res);
+    } catch (driveErr: any) {
+      console.warn('[pipeMedia] Google Drive stream error:', driveErr?.message || driveErr);
+    }
+  }
+
+  throw notFound('File on disk or Drive');
 }
 
 export async function saveLocalUpload(u: AuthUser, id: string, file: MulterFile) {
@@ -362,8 +369,14 @@ export async function saveLocalUpload(u: AuthUser, id: string, file: MulterFile)
 
   const finalMime = ft?.mime || inferMimeType(media.fileName, media.mimeType);
 
-  // If Google Drive is configured on the server, forward the file directly to Google Drive
-  // so it persists permanently and is never wiped by Render's ephemeral disk!
+  // Always persist file to permanent local disk storage first so media NEVER gets deleted!
+  const dest = localPathFor(media.fileName);
+  safeMoveFile(file.path, dest);
+  media.localPath = dest;
+  media.size = file.size;
+  media.mimeType = finalMime;
+
+  // If Google Drive is configured on the server, also back up to Google Drive
   if (gd.driveConfigured()) {
     try {
       let parent = media.driveFolderId;
@@ -386,7 +399,7 @@ export async function saveLocalUpload(u: AuthUser, id: string, file: MulterFile)
         }
       }
 
-      const fileStream = fs.createReadStream(file.path);
+      const fileStream = fs.createReadStream(dest);
       const driveFile = await gd.uploadStream({
         name: media.fileName,
         mimeType: finalMime,
@@ -394,14 +407,10 @@ export async function saveLocalUpload(u: AuthUser, id: string, file: MulterFile)
         body: fileStream,
       });
 
-      try { fs.unlinkSync(file.path); } catch {}
-
       media.storage = 'DRIVE';
       media.driveFolderId = parent;
       media.driveFileId = driveFile.id;
       media.webViewLink = driveFile.webViewLink || undefined;
-      media.size = file.size;
-      media.mimeType = finalMime;
       media.status = ['EDIT', 'FINAL'].includes(media.category) ? 'REVIEW_REQUIRED' : 'READY';
       media.uploadedAt = new Date();
       await media.save();
@@ -415,17 +424,12 @@ export async function saveLocalUpload(u: AuthUser, id: string, file: MulterFile)
       await onMediaReady(media, u);
       return media;
     } catch (driveErr: any) {
-      console.warn('[saveLocalUpload] Forwarding file to Google Drive failed, storing to local disk:', driveErr?.message || driveErr);
+      console.warn('[saveLocalUpload] Forwarding file to Google Drive failed, retaining local disk storage:', driveErr?.message || driveErr);
     }
   }
 
-  // Fallback to local storage
-  const dest = localPathFor(media.fileName);
-  safeMoveFile(file.path, dest);
+  // Fallback to local-only storage
   media.storage = 'LOCAL';
-  media.localPath = dest;
-  media.size = file.size;
-  media.mimeType = finalMime;
   await media.save();
   return completeUpload(u, id);
 }

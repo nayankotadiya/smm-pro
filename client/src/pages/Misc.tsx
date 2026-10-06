@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
-import { Plus, CheckCircle2, Circle, Trash2, ArrowRight, MessageSquare, Repeat } from 'lucide-react';
+import { Plus, CheckCircle2, Circle, Trash2, ArrowRight, MessageSquare, Repeat, Sparkles } from 'lucide-react';
 import { get, post, patch, del, errMsg } from '@/lib/api';
 import { useAuth, useCan } from '@/store/auth';
 import { useUI, toast } from '@/store/ui';
@@ -14,6 +14,7 @@ import { ago, fmtDateTime, fmtSize, label, roleLabel } from '@/lib/format';
 import { useTeam } from '@/hooks/useData';
 import { PresenceLabel } from './Dashboard';
 import { TestNotificationButton } from '@/components/NotificationBanner';
+import { ClientReportModal } from '@/components/ClientReportModal';
 
 // ------------------------------------------------------------ Reminders
 export function Reminders() {
@@ -125,11 +126,29 @@ export function TeamMember() {
 // ------------------------------------------------------------ Reports
 const hrs = (h: number | null) => (h == null ? '—' : h < 1 ? '<1 h' : h >= 48 ? `${Math.round(h / 24)} d` : `${h} h`);
 export function Reports() {
-  const [days, setDays] = useState(30); const nav = useNavigate();
+  const [days, setDays] = useState(30);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const nav = useNavigate();
   const q = useQuery({ queryKey: ['reports', days], queryFn: () => get('/reports', { days }) });
   return (
     <>
-      <PageHeader title="Reports" actions={<Select aria-label="Period" value={days} onChange={(e) => setDays(Number(e.target.value))} className="!w-auto">{[7, 30, 90, 365].map((d) => <option key={d} value={d}>Last {d} days</option>)}</Select>} />
+      <PageHeader
+        title="Reports"
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="primary"
+              icon={<Sparkles size={15} className="text-emerald-300" />}
+              onClick={() => setShowStatusModal(true)}
+            >
+              Status Report &amp; PDF
+            </Button>
+            <Select aria-label="Period" value={days} onChange={(e) => setDays(Number(e.target.value))} className="!w-auto">
+              {[7, 30, 90, 365].map((d) => <option key={d} value={d}>Last {d} days</option>)}
+            </Select>
+          </div>
+        }
+      />
       <Async q={q} rows={8}>{(r: any) => (
         <div className="space-y-5">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6"><Stat label="Content created" value={r.created} /><Stat label="Content completed" value={r.completed} /><Stat label="Published" value={r.published} /><Stat label="In production" value={r.pending} /><Stat label="Overdue tasks" value={r.overdue} tone="red" onClick={() => nav('/tasks?filter=overdue')} /><Stat label="Blocked" value={r.blocked} tone="red" onClick={() => nav('/blocked')} /></div>
@@ -147,6 +166,7 @@ export function Reports() {
           </div>
         </div>
       )}</Async>
+      <ClientReportModal open={showStatusModal} onClose={() => setShowStatusModal(false)} />
     </>
   );
 }

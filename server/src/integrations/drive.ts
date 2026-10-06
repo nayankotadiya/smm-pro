@@ -153,7 +153,17 @@ export async function createResumableSession(opts: { name: string; mimeType: str
 }
 
 export async function uploadStream(opts: { name: string; mimeType: string; parentId: string; body: Readable }) {
-  const r = await drive().files.create({ requestBody: { name: opts.name, parents: [opts.parentId] }, media: { mimeType: opts.mimeType, body: opts.body }, fields: 'id,name,size,mimeType,webViewLink', ...common() });
+  const d = drive();
+  const r = await d.files.create({ requestBody: { name: opts.name, parents: [opts.parentId] }, media: { mimeType: opts.mimeType, body: opts.body }, fields: 'id,name,size,mimeType,webViewLink', ...common() });
+  if (r.data.id) {
+    try {
+      await d.permissions.create({
+        fileId: r.data.id,
+        requestBody: { role: 'reader', type: 'anyone' },
+        supportsAllDrives: true,
+      });
+    } catch {}
+  }
   return r.data;
 }
 export async function getFile(id: string) {

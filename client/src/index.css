@@ -636,3 +636,53 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ─── Print & PDF Export Optimizations ─── */
+@media print {
+  @page {
+    size: auto;
+    margin: 10mm;
+  }
+
+  /* Reset body and html overflow so multi-page documents paginate without clipping */
+  html,
+  body,
+  #root {
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+
+  /* Hide app navigation chrome, auroras, and overlays */
+  aside,
+  header,
+  nav,
+  .aurora-orb-1,
+  .aurora-orb-2,
+  .aurora-orb-3,
+  .connection-bar,
+  .mobile-bottom-nav,
+  .no-print {
+    display: none !important;
+  }
+
+  /* Printable report container */
+  #printable-client-report {
+    display: block !important;
+    width: 100% !important;
+    overflow: visible !important;
+  }
+
+  /* Table rules for print */
+  table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+  }
+
+  tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+}
