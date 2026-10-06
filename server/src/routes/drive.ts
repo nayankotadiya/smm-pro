@@ -4,7 +4,7 @@ import { Client, Campaign, Content, Media, DriveFolder } from '../models';
 import { ah } from '../utils/async';
 import { AppError, notFound } from '../utils/errors';
 import { requirePerm } from '../middleware/auth';
-import { driveConfigured, getFile, listFolder, findOrCreateFolder } from '../integrations/drive';
+import { driveConfigured, getFile, listFolder, findOrCreateFolder, shareFolder } from '../integrations/drive';
 import { ensureClientFolders, ensureContentFolders } from '../services/storage';
 import { initUpload } from '../services/media';
 import { env, isAllowedOrigin } from '../config/env';
@@ -52,6 +52,14 @@ r.get('/file/:id', need, requirePerm('media.read.all'), ah(async (req, res) => {
 r.get('/folder/:id', need, requirePerm('media.read.all'), ah(async (req, res) => {
   if (!(await DriveFolder.exists({ driveId: req.params.id }))) throw notFound('Folder'); // only folders this app created
   res.json(await listFolder(req.params.id));
+}));
+/** Share the root folder or a specific folder with a user's Google account or anyone with link */
+r.post('/share', need, requirePerm('integrations.manage'), ah(async (req, res) => {
+  const { email, folderId } = req.body || {};
+  const targetId = folderId || (await findOrCreateFolder(env.google.rootFolderName));
+  const result = await shareFolder(targetId, email);
+  await logActivity({ actorId: req.user!._id, action: 'drive.share', message: `Drive folder shared${email ? ` with ${email}` : ' (public link enabled)'}` });
+  res.json({ ...result, folderId: targetId });
 }));
 /** Reconciles DB records against Drive: flags files removed from Drive, recreates missing folder structure. */
 r.post('/sync', need, requirePerm('integrations.manage'), ah(async (req, res) => {

@@ -62,6 +62,15 @@ export async function findOrCreateFolder(name: string, parentId?: string): Promi
 
   // 3. Fallback: create in service account root
   const created = await d.files.create({ requestBody: { name, mimeType: 'application/vnd.google-apps.folder', parents: ['root'] }, fields: 'id', ...common() });
+  try {
+    await d.permissions.create({
+      fileId: created.data.id!,
+      requestBody: { role: 'writer', type: 'anyone' },
+      supportsAllDrives: true,
+    });
+  } catch (permErr: any) {
+    console.warn('[drive] could not set public permission on root folder:', permErr?.message);
+  }
   return created.data.id!;
 }
 
@@ -75,11 +84,56 @@ export function serviceAccountEmail(): string | null {
   }
 }
 
-export async function getRootFolderStatus(): Promise<{ id?: string; name: string; found: boolean }> {
+export async function shareFolder(id: string, email?: string): Promise<{ ok: boolean; message: string; webViewLink: string }> {
+  const d = drive();
+  const webViewLink = `https://drive.google.com/drive/folders/${id}`;
+  if (email && email.trim()) {
+    await d.permissions.create({
+      fileId: id,
+      requestBody: {
+        role: 'writer',
+        type: 'user',
+        emailAddress: email.trim(),
+      },
+      sendNotificationEmail: true,
+      supportsAllDrives: true,
+    });
+    return { ok: true, message: `Folder shared with ${email.trim()} with Editor permissions!`, webViewLink };
+  } else {
+    await d.permissions.create({
+      fileId: id,
+      requestBody: {
+        role: 'writer',
+        type: 'anyone',
+      },
+      supportsAllDrives: true,
+    });
+    return { ok: true, message: 'Folder access enabled for anyone with the link!', webViewLink };
+  }
+}
+
+export async function getRootFolderStatus(): Promise<{ id?: string; name: string; found: boolean; webViewLink?: string }> {
   if (!driveConfigured()) return { name: env.google.rootFolderName, found: false };
   try {
     const id = await findOrCreateFolder(env.google.rootFolderName);
-    return { id, name: env.google.rootFolderName, found: !!id };
+    if (id) {
+      // Ensure anyone with link has access so users can view it in Drive
+      try {
+        await drive().permissions.create({
+          fileId: id,
+          requestBody: { role: 'writer', type: 'anyone' },
+          supportsAllDrives: true,
+        });
+      } catch {}
+    }
+    let webViewLink = id ? `https://drive.google.com/drive/folders/${id}` : undefined;
+    if (id) {
+      try {
+        const f = await drive().files.get({ fileId: id, fields: 'id,webViewLink', ...common() });
+        if (f.data.webViewLink) webViewLink = f.data.webViewLink;
+      } catch {}
+    }
+    return { id, name: env.google.rootFolderName, found: !!id, webViewLink };
   } catch {
     return { name: env.google.rootFolderName, found: false };
   }

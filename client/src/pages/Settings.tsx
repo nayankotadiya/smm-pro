@@ -341,7 +341,10 @@ function Roles() {
 }
 
 function Integrations() {
-  const q = useQuery({ queryKey: ['integrations'], queryFn: () => get('/integrations') }); const [phone, setPhone] = useState(''); const [busy, setBusy] = useState('');
+  const q = useQuery({ queryKey: ['integrations'], queryFn: () => get('/integrations') });
+  const [phone, setPhone] = useState('');
+  const [shareEmail, setShareEmail] = useState('');
+  const [busy, setBusy] = useState('');
   const sync = async () => { setBusy('sync'); try { const r = await post('/drive/sync'); toast.success(`Drive sync complete: ${r.checked} files checked, ${r.missing} missing, ${r.foldersCreated} folders created.`); } catch (e) { toast.error(errMsg(e)); } setBusy(''); };
   const test = async () => { setBusy('wa'); try { await post('/integrations/aisensy/send', { phone }); toast.success('Test message accepted by AiSensy.'); } catch (e) { toast.error(errMsg(e)); } setBusy(''); };
   const S = ({ ok, text }: { ok: boolean; text?: string }) => <Badge t={ok ? 'green' : 'neutral'}>{text || (ok ? 'Connected' : 'Not configured')}</Badge>;
@@ -416,6 +419,93 @@ function Integrations() {
                 >
                   <ExternalLink size={13} /> Open Drive Folder
                 </a>
+              </div>
+
+              {/* Folder ID and One-Click Sharing for Personal Google Drive */}
+              <div className="mt-3 rounded-lg border border-border bg-surface-2/60 p-3 space-y-2.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-ink-2 font-medium">Drive Folder ID:</span>
+                  <div className="flex items-center gap-1.5 font-mono text-[11px] text-ink">
+                    <span className="truncate max-w-[170px] select-all bg-surface-3 px-1.5 py-0.5 rounded">
+                      {d.drive.rootFolder?.id || 'Auto-created by Service Account'}
+                    </span>
+                    {d.drive.rootFolder?.id && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(d.drive.rootFolder.id);
+                          toast.success('Folder ID copied to clipboard!');
+                        }}
+                        className="rounded p-1 hover:bg-surface-3 hover:text-ink transition-colors"
+                        title="Copy Folder ID"
+                      >
+                        <Copy size={13} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-1.5 pt-1 border-t border-border/60 text-xs">
+                  <span className="font-semibold text-ink">તમારા Google Drive માં જોવા માટે:</span>
+                  <p className="text-[11px] text-ink-2 leading-relaxed">
+                    તમારો Gmail લખીને <b>Share</b> ક્લિક કરો જેથી આ ફોલ્ડર તમારા Google Drive ના <b>"Shared with me"</b> માં તરત જ આવી જાય.
+                  </p>
+                  <div className="flex gap-1.5">
+                    <Input
+                      placeholder="તમારો Gmail (e.g. name@gmail.com)"
+                      value={shareEmail}
+                      onChange={(e) => setShareEmail(e.target.value)}
+                      className="text-xs h-8"
+                    />
+                    <Button
+                      size="sm"
+                      loading={busy === 'share'}
+                      disabled={!shareEmail.includes('@')}
+                      onClick={async () => {
+                        setBusy('share');
+                        try {
+                          const r = await post('/drive/share', { email: shareEmail });
+                          toast.success(r.message || 'Folder successfully shared with your Gmail!');
+                          setShareEmail('');
+                        } catch (e) {
+                          toast.error(errMsg(e));
+                        }
+                        setBusy('');
+                      }}
+                    >
+                      Share
+                    </Button>
+                  </div>
+                  <div className="flex items-center justify-between pt-1">
+                    <button
+                      type="button"
+                      disabled={busy === 'share-public'}
+                      onClick={async () => {
+                        setBusy('share-public');
+                        try {
+                          const r = await post('/drive/share', {});
+                          toast.success(r.message || 'Public link access enabled!');
+                        } catch (e) {
+                          toast.error(errMsg(e));
+                        }
+                        setBusy('');
+                      }}
+                      className="text-[11px] text-emerald-400 hover:underline flex items-center gap-1"
+                    >
+                      {busy === 'share-public' ? 'Enabling...' : '🔓 Enable Link Access (Anyone with link)'}
+                    </button>
+                    {d.drive.rootFolder?.id && (
+                      <a
+                        href={`https://drive.google.com/drive/folders/${d.drive.rootFolder.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[11px] text-brand-primary hover:underline flex items-center gap-1"
+                      >
+                        Open in Drive <ExternalLink size={11} />
+                      </a>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           ) : (
