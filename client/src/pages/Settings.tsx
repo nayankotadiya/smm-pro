@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Bell, BellOff, Download, Smartphone, RefreshCw, Send, Shield, Laptop, Trash2, Copy, LogOut, ExternalLink } from 'lucide-react';
+import { Plus, Bell, BellOff, Download, Smartphone, RefreshCw, Send, Shield, Laptop, Trash2, Copy, LogOut, ExternalLink, Sparkles } from 'lucide-react';
 import { get, post, patch, errMsg } from '@/lib/api';
 import { useAuth, useCan } from '@/store/auth';
 import { toast } from '@/store/ui';
@@ -634,11 +634,133 @@ function Integrations() {
         <Card title={<span className="flex items-center gap-2">Web Push<S ok={d.push.configured} /></span>}><p className="text-[13px] text-ink-2">{d.push.configured ? 'VAPID keys are set. Each person enables push per device under Notifications.' : 'Generate keys with "npx web-push generate-vapid-keys" and set VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY.'}</p></Card>
         <Card title={<span className="flex items-center gap-2">Email<S ok={d.email.configured} /></span>}><p className="text-[13px] text-ink-2">{d.email.configured ? 'SMTP is configured for password resets and email notifications.' : 'Set EMAIL_HOST, EMAIL_USER and EMAIL_PASSWORD. Without email, admins reset passwords from the Users tab.'}</p></Card>
         <Card title={<span className="flex items-center gap-2">Background jobs<S ok text={d.redis.scheduler} /></span>}><p className="text-[13px] text-ink-2">{d.redis.configured ? 'Reminders, deadline checks and approval follow-ups run on BullMQ with Redis.' : 'Running on the in-process scheduler. This is reliable for a single API instance; set REDIS_URL before running more than one.'}</p></Card>
+        <AiContentStudioCard />
         <PurgeDemoDataCard />
         <SystemHealthCard />
         <p className="text-meta text-ink-3 lg:col-span-2">Credentials are stored only as server environment variables and are never shown here.</p>
       </div>
     )}</Async>
+  );
+}
+
+function AiContentStudioCard() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ['ai-status'], queryFn: () => get<any>('/ai/status') });
+  const [apiKey, setApiKey] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!apiKey.trim()) return;
+    setSaving(true);
+    try {
+      await post('/ai/config', { apiKey: apiKey.trim() });
+      toast.success('Google Gemini API key saved successfully!');
+      setEditing(false);
+      setApiKey('');
+      qc.invalidateQueries({ queryKey: ['ai-status'] });
+    } catch (e) {
+      toast.error(errMsg(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const configured = q.data?.configured;
+  const canEdit = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
+
+  return (
+    <Card
+      title={
+        <span className="flex items-center gap-2">
+          <span>AI Content Studio (Google Gemini)</span>
+          <span
+            className={`h-2 w-2 rounded-full ${
+              configured ? 'bg-emerald-500 shadow-[0_0_6px_#10b981]' : 'bg-amber-500'
+            }`}
+          />
+        </span>
+      }
+    >
+      <div className="space-y-3 text-[13px]">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-ink-2">Status:</span>
+          {configured ? (
+            <Badge t="green">Active · {q.data?.model || 'Gemini 1.5 Flash'}</Badge>
+          ) : (
+            <Badge t="amber">Ready to connect (Free Tier)</Badge>
+          )}
+        </div>
+
+        {configured && !editing ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between rounded-lg border border-line bg-surface-2 p-2.5">
+              <div className="text-xs">
+                <span className="text-ink-2">API Key: </span>
+                <code className="text-ink font-semibold">{q.data?.maskedKey || '••••••••'}</code>
+              </div>
+              {canEdit && (
+                <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>
+                  Update Key
+                </Button>
+              )}
+            </div>
+            <p className="text-[12px] text-ink-3">
+              Powers the optional AI Script Generator, 5 Viral Hooks selector, and Auto Captions/Hashtags.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2.5">
+            <p className="text-ink-2 text-xs leading-relaxed">
+              Google Gemini offers a <b>100% free tier (1,500 requests/day)</b> with zero credit card required.
+            </p>
+            {canEdit ? (
+              <div className="space-y-2">
+                <Field label="Gemini API Key" hint="Paste your key from Google AI Studio">
+                  <Input
+                    type="password"
+                    placeholder="AIzaSy..."
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                  />
+                </Field>
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                  <a
+                    href="https://aistudio.google.com/app/apikey"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-primary font-semibold hover:underline flex items-center gap-1"
+                  >
+                    Get Free Key from Google AI Studio <ExternalLink size={12} />
+                  </a>
+                  <div className="flex gap-2">
+                    {editing && (
+                      <Button size="sm" onClick={() => setEditing(false)}>
+                        Cancel
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      disabled={!apiKey.trim()}
+                      loading={saving}
+                      onClick={handleSave}
+                    >
+                      Save Key
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-ink-3 italic">
+                Ask an Admin or Super Admin to set the Gemini API Key to enable live AI features.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    </Card>
   );
 }
 

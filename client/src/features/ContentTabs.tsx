@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import clsx from 'clsx';
-import { Plus, Trash2, Send, Check, RotateCcw, Copy, Film, Camera as CameraIcon, CalendarClock, ExternalLink, Play, GitCompare, MapPin, Clock, Lock, UserCheck, Calendar } from 'lucide-react';
+import { Plus, Trash2, Send, Check, RotateCcw, Copy, Film, Camera as CameraIcon, CalendarClock, ExternalLink, Play, GitCompare, MapPin, Clock, Lock, UserCheck, Calendar, Sparkles } from 'lucide-react';
 import { get, post, patch, del, errMsg } from '@/lib/api';
 import { useAuth, useCan } from '@/store/auth';
 import { toast } from '@/store/ui';
@@ -11,6 +11,7 @@ import { FileCard, MediaButtons, MediaThumb, UploadButton, VideoReview, useMedia
 import { ago, fmtDate, fmtDateTime, fmtSize, fmtTs, label, toLocalInput } from '@/lib/format';
 import { useTeam } from '@/hooks/useData';
 import { ScriptDiffModal } from './ScriptDiffModal';
+import { AiScriptModal } from '@/components/AiScriptModal';
 
 const useInv = () => { const qc = useQueryClient(); return () => { ['content-detail', 'content', 'approvals', 'dashboard', 'tasks', 'scripts'].forEach((k) => qc.invalidateQueries({ queryKey: [k] })); }; };
 const err = (e: unknown) => toast.error(errMsg(e));
@@ -41,6 +42,7 @@ export function ScriptTab({ d }: { d: any }) {
   const versions: any[] = d.versions; const latest = versions[0];
   const [sel, setSel] = useState<number>(latest?.version || 0);
   const [diffOpen, setDiffOpen] = useState(false);
+  const [aiModalOpen, setAiModalOpen] = useState(false);
   useEffect(() => { setSel(latest?.version || 0); }, [latest?.version]);
   const cur = versions.find((v) => v.version === sel) || latest;
   const editable = can('scripts.write') && (!latest || (cur?.version === latest.version && latest.status === 'DRAFT'));
@@ -87,7 +89,18 @@ export function ScriptTab({ d }: { d: any }) {
         {canReview && <ReviewBar approval={pending} title={`${pending.version} is waiting for your review`} />}
         {cur?.status === 'CHANGES_REQUESTED' && cur.reviewNote && <div className="rounded border border-warning/30 bg-warning-soft p-3 text-[13px]"><b>Changes requested by {cur.reviewedBy?.name}:</b> {cur.reviewNote}</div>}
         <Card title={<span className="flex items-center gap-2">{cur ? `Script ${cur.label}` : 'New script'}{cur && <Badge status={cur.status} />}{ro && cur && <span className="text-meta font-normal text-ink-3">Read only</span>}</span>}
-          action={can('scripts.write') && <div className="flex flex-wrap gap-2">
+          action={can('scripts.write') && <div className="flex flex-wrap items-center gap-2">
+            {editable && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="bg-purple-500/10 text-purple-600 dark:text-purple-300 hover:bg-purple-500/20 border border-purple-500/30 font-semibold"
+                icon={<Sparkles size={14} className="text-purple-500 animate-pulse" />}
+                onClick={() => setAiModalOpen(true)}
+              >
+                ✨ AI Ideas (Optional)
+              </Button>
+            )}
             {editable && <Button size="sm" onClick={() => save.mutate(false)} loading={save.isPending} disabled={!dirty && !!latest}>Save draft</Button>}
             {editable && <Button size="sm" variant="primary" icon={<Send size={14} />} onClick={() => submit.mutate()} loading={submit.isPending} disabled={!scriptText.trim()}>Submit for review</Button>}
             {latest && latest.status !== 'DRAFT' && latest.status !== 'SUBMITTED' && cur?.version === latest.version && <Button size="sm" variant="primary" icon={<Plus size={14} />} onClick={() => save.mutate(true)} loading={save.isPending}>Create V{latest.version + 1}</Button>}
@@ -160,6 +173,16 @@ export function ScriptTab({ d }: { d: any }) {
         open={diffOpen}
         onClose={() => setDiffOpen(false)}
         versions={versions}
+      />
+      <AiScriptModal
+        open={aiModalOpen}
+        onClose={() => setAiModalOpen(false)}
+        content={d.content}
+        currentScriptText={scriptText}
+        onInsertScript={(text) => {
+          setScriptText(text);
+          setDirty(true);
+        }}
       />
     </div>
   );
@@ -803,6 +826,7 @@ export function FilesTab({ d }: { d: any }) {
 export function ScheduleTab({ d }: { d: any }) {
   const inv = useInv(); const can = useCan(); const c = d.content; const post0 = d.posts.find((p: any) => p.status === 'SCHEDULED');
   const [v, setV] = useState({ scheduledAt: '', caption: '', hashtags: '' }); const [url, setUrl] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
   useEffect(() => { setV({ scheduledAt: toLocalInput(post0?.scheduledAt || c.scheduledAt), caption: c.caption || '', hashtags: c.hashtags || '' }); }, [c._id, c.updatedAt]); // eslint-disable-line
   const sched = useMutation({ mutationFn: () => post(`/content/${c._id}/schedule`, { ...v, scheduledAt: new Date(v.scheduledAt).toISOString() }), onSuccess: () => { toast.success('Post scheduled.'); inv(); }, onError: err });
   const meta = useMutation({ mutationFn: () => patch(`/content/${c._id}`, { caption: v.caption, hashtags: v.hashtags }), onSuccess: () => { toast.success('Caption saved.'); inv(); }, onError: err });
@@ -810,7 +834,45 @@ export function ScheduleTab({ d }: { d: any }) {
   const ready = ['SCHEDULE', 'PUBLISHED'].includes(c.stage); const w = can('content.write');
   return (
     <div className="grid gap-5 lg:grid-cols-2">
-      <Card title="Caption and hashtags" action={w && <Button size="sm" onClick={() => meta.mutate()} loading={meta.isPending}>Save</Button>}>
+      <Card
+        title="Caption and hashtags"
+        action={
+          w && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="bg-purple-500/10 text-purple-600 dark:text-purple-300 hover:bg-purple-500/20 border border-purple-500/30 font-semibold"
+                icon={<Sparkles size={13} className="text-purple-500" />}
+                loading={aiLoading}
+                onClick={async () => {
+                  setAiLoading(true);
+                  try {
+                    const res = await post<any>('/ai/generate-caption', {
+                      title: c.title,
+                      script: d.script?.dialogue || d.script?.body,
+                      niche: c.clientId?.industry || c.clientId?.name,
+                    });
+                    setV((prev) => ({
+                      ...prev,
+                      caption: res.caption || prev.caption,
+                      hashtags: (res.hashtags || []).join(' ') || prev.hashtags,
+                    }));
+                    toast.success('AI caption & hashtags generated!');
+                  } catch (e) {
+                    toast.error(errMsg(e));
+                  } finally {
+                    setAiLoading(false);
+                  }
+                }}
+              >
+                ✨ AI Caption (Optional)
+              </Button>
+              <Button size="sm" onClick={() => meta.mutate()} loading={meta.isPending}>Save</Button>
+            </div>
+          )
+        }
+      >
         <div className="space-y-3"><Field label="Caption"><Textarea rows={5} value={v.caption} disabled={!w} onChange={(e) => setV({ ...v, caption: e.target.value })} /></Field><Field label="Hashtags"><Textarea rows={2} value={v.hashtags} disabled={!w} onChange={(e) => setV({ ...v, hashtags: e.target.value })} placeholder="#diwali #jewellery" /></Field></div>
       </Card>
       <div className="space-y-5">

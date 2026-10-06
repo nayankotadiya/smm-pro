@@ -61,6 +61,9 @@ export const env = {
     password: process.env.EMAIL_PASSWORD || '',
     from: process.env.EMAIL_FROM || 'SMM PRO <no-reply@example.com>',
   },
+  gemini: {
+    apiKey: process.env.GEMINI_API_KEY || '',
+  },
 };
 
 export const isAllowedOrigin = (origin?: string): boolean => {

@@ -147,3 +147,11 @@ const dailyReviewAccessSchema = new Schema({
   whatsAppMessageId: String,
 }, ts);
 export const DailyReviewAccess = model('DailyReviewAccess', dailyReviewAccessSchema);
+
+const systemSettingSchema = new Schema({
+  key: { type: String, required: true, unique: true, index: true },
+  value: { type: Schema.Types.Mixed, required: true },
+  description: String,
+  updatedBy: { type: ObjectId, ref: 'User' },
+}, ts);
+export const SystemSetting = model('SystemSetting', systemSettingSchema);

@@ -27,6 +27,7 @@ import reminders from './routes/reminders';
 import automations from './routes/automations';
 import dashboard from './routes/dashboard';
 import misc from './routes/misc';
+import ai from './routes/ai';
 
 /** Removes keys that look like Mongo operators or paths from untrusted JSON (defence in depth; zod schemas are the first line) */
 function stripOperators(v: any): void {
@@ -105,6 +106,7 @@ export function createApp() {
   api.use('/reminders', reminders);
   api.use('/automations', automations);
   api.use('/dashboard', dashboard);
+  api.use('/ai', ai);
   api.use('/', misc);
   app.use('/api', api);
 

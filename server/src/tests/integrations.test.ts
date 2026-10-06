@@ -68,3 +68,45 @@ describe('Media MIME inference and safe storage', () => {
     expect(isImageMime('image/jpeg')).toBe(true);
   });
 });
+
+describe('AI Content Studio integration', () => {
+  it('generates viral script with 5 hooks and scenes even when no API key is provided (fallback mode)', async () => {
+    const { generateScriptAssistance, getAiStatus } = await import('../services/ai');
+    
+    // Check initial status
+    const status = await getAiStatus();
+    expect(status).toHaveProperty('configured');
+    expect(status.provider).toBe('gemini');
+
+    // When no key is set
+    const result = await generateScriptAssistance({
+      topic: 'Real Estate Investment Secrets',
+      niche: 'Real Estate',
+      language: 'Gujarati',
+      duration: '30s'
+    });
+
+    expect(result).toBeDefined();
+    expect(result.hooks).toHaveLength(5);
+    expect(result.scenes.length).toBeGreaterThanOrEqual(3);
+    expect(result.cta).toBeDefined();
+    expect(result.fullScriptText).toContain('SCENE');
+    expect(result.caption).toBeDefined();
+    expect(result.hashtags.length).toBeGreaterThanOrEqual(10);
+    expect(result.poweredBy).toBe('template');
+  });
+
+  it('generates trending captions and hashtags for approved scripts', async () => {
+    const { generateCaptionAssistance } = await import('../services/ai');
+
+    const result = await generateCaptionAssistance({
+      title: 'Top 5 Gold Buying Tips for Dhanteras',
+      script: 'Check hallmark 916 and always verify making charges before buying.',
+      niche: 'Jewelry'
+    });
+
+    expect(result.caption).toBeDefined();
+    expect(result.hashtags.length).toBeGreaterThanOrEqual(5);
+    expect(result.hashtags.some((h: string) => h.includes('#'))).toBe(true);
+  });
+});
