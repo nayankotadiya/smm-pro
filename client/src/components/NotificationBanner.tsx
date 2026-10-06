@@ -109,8 +109,7 @@ export function DeviceNotificationBanner() {
   );
 }
 
-/** Quick test notification button for settings & notification page */
-export function TestNotificationButton() {
+export function TestNotificationButton({ className, label }: { className?: string; label?: string } = {}) {
   const [testing, setTesting] = useState(false);
 
   const test = async () => {
@@ -157,10 +156,10 @@ export function TestNotificationButton() {
     <button
       onClick={test}
       disabled={testing}
-      className="inline-flex items-center gap-1.5 rounded-xl border border-line bg-surface-2 px-3 py-1.5 text-[12.5px] font-semibold text-ink hover:bg-surface-3 transition-colors active:scale-95"
+      className={`inline-flex select-none items-center justify-center gap-1.5 rounded-xl border border-primary/40 bg-primary/10 px-3.5 py-1.5 text-[12.5px] font-bold text-primary-ink shadow-xs hover:bg-primary/20 hover:border-primary transition-all active:scale-95 ${className || ''}`}
     >
       <Send size={13} className="text-primary" />
-      {testing ? 'ટેસ્ટિંગ…' : 'ટેસ્ટ નોટિફિકેશન (Sound & Vibrate)'}
+      {testing ? 'ટેસ્ટિંગ…' : label || '🔔 ટેસ્ટ નોટિફિકેશન (Sound & Vibrate)'}
     </button>
   );
 }

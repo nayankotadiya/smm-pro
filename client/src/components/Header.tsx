@@ -47,6 +47,8 @@ export function NotificationRow({ n, onOpen, onRead, onDelete }: { n: any; onOpe
   );
 }
 
+import { TestNotificationButton } from './NotificationBanner';
+
 export function NotificationBell() {
   const [open, setOpen] = useState(false); const ref = useRef<HTMLDivElement>(null);
   useOutside(ref, () => setOpen(false), open);
@@ -65,7 +67,10 @@ export function NotificationBell() {
           <div className="flex items-center justify-between border-b border-line/60 px-5 py-3"><span className="font-bold">Notifications {unread > 0 && <span className="ml-1 rounded-full bg-primary-soft px-2 py-0.5 text-meta font-bold text-primary-ink shadow-[0_0_8px_rgba(124,58,237,0.3)]">{unread}</span>}</span>{unread > 0 && <button className="link text-meta" onClick={() => a.readAll.mutate()}>Mark all as read</button>}</div>
           {q.isLoading ? <div className="flex justify-center p-6"><Spinner /></div> : !q.data?.items.length ? <Empty title="You're all caught up" /> :
             <ul className="stagger max-h-[60dvh] divide-y divide-line/60 overflow-y-auto">{q.data.items.map((n: any) => <NotificationRow key={n._id} n={n} onOpen={() => { a.open(n); setOpen(false); }} onRead={() => a.read.mutate(n._id)} />)}</ul>}
-          <Link to="/notifications" onClick={() => setOpen(false)} className="block border-t border-line/60 px-5 py-3 text-center text-[13px] font-bold text-primary-ink transition-colors hover:bg-surface-2/80">Open notification center</Link>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line/60 bg-surface-2/60 px-4 py-2.5">
+            <TestNotificationButton />
+            <Link to="/notifications" onClick={() => setOpen(false)} className="text-[12.5px] font-bold text-primary-ink transition-colors hover:underline">Open center →</Link>
+          </div>
         </div>
       )}
     </div>

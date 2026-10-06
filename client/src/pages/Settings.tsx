@@ -8,6 +8,7 @@ import { toast } from '@/store/ui';
 import { Async, Badge, Button, Card, Field, Input, Modal, PageHeader, Select, Table, Tabs } from '@/components/ui';
 import { canInstall, disablePush, enablePush, isIOS, isStandalone, onInstallChange, promptInstall, pushState, PushState } from '@/pwa';
 import { showDeviceNotification } from '@/lib/notifications';
+import { TestNotificationButton } from '@/components/NotificationBanner';
 import { ago, fmtSize, label, roleLabel } from '@/lib/format';
 import { ThemePicker } from '@/components/Header';
 import { useTheme } from '@/store/theme';
@@ -18,7 +19,10 @@ export default function Settings() {
   const tabs = [{ key: 'profile' as T, label: 'Profile' }, { key: 'notifications' as T, label: 'Notifications' }, ...(can('users.manage') ? [{ key: 'users' as T, label: 'Users' }] : []), ...(can('roles.manage') ? [{ key: 'roles' as T, label: 'Roles and permissions' }] : []), ...(can('integrations.manage') ? [{ key: 'integrations' as T, label: 'Integrations' }] : [])];
   return (
     <>
-      <PageHeader title="Settings" />
+      <PageHeader
+        title="Settings"
+        actions={<TestNotificationButton />}
+      />
       <Tabs tabs={tabs} value={tab} onChange={(k) => setSp(k === 'profile' ? {} : { tab: k }, { replace: true })} />
       {tab === 'profile' && <Profile />}{tab === 'notifications' && <NotificationSettings />}{tab === 'users' && can('users.manage') && <Users />}{tab === 'roles' && can('roles.manage') && <Roles />}{tab === 'integrations' && can('integrations.manage') && <Integrations />}
     </>
@@ -284,15 +288,62 @@ function NotificationSettings() {
       <div className="space-y-5">
         <Card title="Push notifications on this device">
           <p className="text-ink-2">Get notified about assignments, approvals, mentions and reminders even when SMM PRO is not open.</p>
-          <div className="mt-3">
-            {ps === null ? <span className="text-ink-3">Checking this device…</span>
-              : ps === 'on' ? <div className="flex flex-wrap items-center gap-2"><Badge t="green">Enabled on this device</Badge><Button size="sm" onClick={test} icon={<Send size={14} />}>Send test (Sound & Vibrate)</Button><Button size="sm" loading={busy} onClick={off} icon={<BellOff size={14} />}>Disable</Button></div>
-              : ps === 'off' ? <Button variant="primary" loading={busy} onClick={on} icon={<Bell size={15} />}>Enable notifications</Button>
-              : ps === 'ios-needs-install' ? <div className="rounded border border-line bg-surface-2 p-3 text-[13px]"><div className="flex items-center gap-2 font-medium"><Smartphone size={15} />Add SMM PRO to your Home Screen first</div><ol className="mt-1.5 list-decimal space-y-0.5 pl-5 text-ink-2"><li>In Safari, tap the Share button.</li><li>Choose "Add to Home Screen".</li><li>Open SMM PRO from the Home Screen and return to this page.</li></ol><p className="mt-1.5 text-ink-3">iPhone and iPad only allow push for installed web apps (iOS 16.4 or later).</p></div>
-              : ps === 'denied' ? <p className="rounded bg-warning-soft px-3 py-2 text-[13px] text-warning-ink">Notifications are blocked for this site. Allow them in your browser's site settings, then reload.</p>
-              : ps === 'server-off' ? <p className="text-[13px] text-ink-2">Push is not configured on the server yet. An admin needs to add VAPID keys.</p>
-              : <p className="text-[13px] text-ink-2">This browser does not support push notifications. In-app notifications still work.</p>}
+          {/* ALWAYS VISIBLE MAIN TEST BUTTON */}
+          <div className="mt-3.5 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+            <Button
+              variant="primary"
+              onClick={test}
+              icon={<Send size={15} />}
+              className="w-full sm:w-auto font-bold py-2.5 px-4 shadow-md shadow-primary/25"
+            >
+              🔔 Test Mobile Notification (Sound & Vibrate)
+            </Button>
+            {ps === 'on' ? (
+              <Button size="sm" loading={busy} onClick={off} icon={<BellOff size={14} />}>
+                Disable
+              </Button>
+            ) : (
+              <Button size="sm" variant="secondary" loading={busy} onClick={on} icon={<Bell size={14} />}>
+                Enable / Re-link device
+              </Button>
+            )}
           </div>
+
+          <div className="mt-2.5 flex items-center gap-2">
+            {ps === null ? (
+              <span className="text-[12px] text-ink-3">Checking this device…</span>
+            ) : ps === 'on' ? (
+              <Badge t="green">Active on this device</Badge>
+            ) : ps === 'off' ? (
+              <Badge t="amber">Permissions not active yet — tap Test above to enable</Badge>
+            ) : ps === 'ios-needs-install' ? (
+              <Badge t="amber">iOS: Add to Home Screen first</Badge>
+            ) : ps === 'denied' ? (
+              <Badge t="red">Blocked in browser permissions</Badge>
+            ) : ps === 'server-off' ? (
+              <Badge t="amber">VAPID key pending on server</Badge>
+            ) : (
+              <span className="text-[12px] text-ink-3">{ps}</span>
+            )}
+          </div>
+
+          {ps === 'ios-needs-install' && (
+            <div className="mt-3 rounded border border-line bg-surface-2 p-3 text-[13px]">
+              <div className="flex items-center gap-2 font-medium"><Smartphone size={15} />Add SMM PRO to your Home Screen first</div>
+              <ol className="mt-1.5 list-decimal space-y-0.5 pl-5 text-ink-2">
+                <li>In Safari, tap the Share button.</li>
+                <li>Choose "Add to Home Screen".</li>
+                <li>Open SMM PRO from the Home Screen and return to this page.</li>
+              </ol>
+              <p className="mt-1.5 text-ink-3">iPhone and iPad only allow push for installed web apps (iOS 16.4 or later).</p>
+            </div>
+          )}
+
+          {ps === 'denied' && (
+            <p className="mt-3 rounded bg-warning-soft px-3 py-2 text-[13px] text-warning-ink">
+              Notifications are blocked for this site. Allow them in your browser's site settings, then reload.
+            </p>
+          )}
 
           {/* Subscribed devices section */}
           {devices.data && devices.data.length > 0 ? (
