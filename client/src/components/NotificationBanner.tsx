@@ -11,13 +11,31 @@ export function DeviceNotificationBanner() {
   useEffect(() => {
     const s = getDeviceNotificationState();
     setState(s);
-    // Check session storage
     if (sessionStorage.getItem('dismiss_notif_banner') === 'true') {
       setDismissed(true);
     }
   }, []);
 
-  if (dismissed || state !== 'default') {
+  if (dismissed) {
+    return null;
+  }
+
+  if (state === 'denied') {
+    return (
+      <div className="relative mb-4 overflow-hidden rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 sm:p-4 text-xs text-amber-300 backdrop-blur-xl animate-fade-in flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <Bell size={18} className="shrink-0 text-amber-400" />
+          <div>
+            <span className="font-bold">ફોનમાં નોટિફિકેશન બ્લોક છે: </span>
+            <span>બ્રાઉઝરમાં ઉપર URL પાસે લોક/ટ્યુન આઈકન ➔ Permissions ➔ Notifications ➔ <b>Allow</b> કરો જેથી ફોનની પેનલમાં નોટિફિકેશન આવે.</span>
+          </div>
+        </div>
+        <button onClick={() => setDismissed(true)} className="p-1 hover:opacity-70 shrink-0"><X size={15} /></button>
+      </div>
+    );
+  }
+
+  if (state !== 'default') {
     return null;
   }
 

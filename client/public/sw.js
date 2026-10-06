@@ -3,7 +3,7 @@
  * - API, sockets, media and the public approval API are NEVER cached (private data stays off disk)
  * - Web Push: shows notifications and deep-links into the app on click
  */
-const VERSION = 'smmpro-v1';
+const VERSION = 'smmpro-v2';
 const SHELL = ['/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon.svg'];
 
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
@@ -36,20 +36,29 @@ self.addEventListener('push', (e) => {
     d = { title: 'SMM PRO', body: e.data ? e.data.text() : '' };
   }
   const title = d.title || 'SMM PRO';
-  const options = {
+  const url = d.url || '/';
+  const baseOptions = {
     body: d.body || 'You have a new update in SMM PRO',
     icon: '/icons/icon-192.png',
     badge: '/icons/icon-192.png',
     tag: d.tag || ('smm-' + Date.now()),
     renotify: true,
-    vibrate: [200, 100, 200, 100, 200],
-    data: { url: d.url || '/' },
-    actions: [
-      { action: 'open', title: 'Open' },
-      { action: 'dismiss', title: 'Dismiss' }
-    ]
+    data: { url },
   };
-  e.waitUntil(self.registration.showNotification(title, options));
+
+  e.waitUntil(
+    self.registration.showNotification(title, {
+      ...baseOptions,
+      vibrate: [200, 100, 200, 100, 200],
+      actions: [
+        { action: 'open', title: 'Open' },
+        { action: 'dismiss', title: 'Dismiss' }
+      ]
+    }).catch(() => {
+      // Fallback for mobile browsers that do not support actions
+      return self.registration.showNotification(title, baseOptions);
+    })
+  );
 });
 
 self.addEventListener('notificationclick', (e) => {

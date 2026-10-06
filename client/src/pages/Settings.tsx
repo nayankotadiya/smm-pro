@@ -247,14 +247,20 @@ function NotificationSettings() {
   const off = async () => { setBusy(true); await disablePush(); setPs(await pushState()); qc.invalidateQueries({ queryKey: ['push-devices'] }); setBusy(false); toast.success('Push disabled on this device.'); };
   const test = async () => {
     try {
-      showDeviceNotification({
-        title: '🔔 SMM PRO',
-        message: 'Push & device notifications are working on this device.',
+      const shown = await showDeviceNotification({
+        title: '🔔 SMM PRO Test Alert',
+        message: 'Notification panel is working properly on this phone/device!',
         sound: true,
         vibrate: true,
       });
       const r = await post('/push/test');
-      toast.info(r.devices ? `Test sent to ${r.devices} device${r.devices > 1 ? 's' : ''}. Check your notification panel.` : 'Notification triggered on this device.');
+      if (r.devices > 0) {
+        toast.success(`Test sent to ${r.devices} registered device(s)! Check your notification panel.`);
+      } else if (shown) {
+        toast.success('Test notification triggered! Check your phone notification panel.');
+      } else {
+        toast.info('Test initiated. If not shown in notification panel, check browser permissions.');
+      }
     } catch (e) {
       toast.error(errMsg(e));
     }
@@ -273,6 +279,18 @@ function NotificationSettings() {
               : ps === 'server-off' ? <p className="text-[13px] text-ink-2">Push is not configured on the server yet. An admin needs to add VAPID keys.</p>
               : <p className="text-[13px] text-ink-2">This browser does not support push notifications. In-app notifications still work.</p>}
           </div>
+
+          {/* Phone notification panel guidance */}
+          <div className="mt-3.5 rounded-lg border border-border/70 bg-surface-2/60 p-3 text-[12px] space-y-1.5 text-ink-2">
+            <div className="font-semibold text-ink flex items-center gap-1.5">
+              <Smartphone size={13} className="text-primary-ink" /> ફોનના Notification Panel માં ન દેખાય તો:
+            </div>
+            <ul className="list-disc pl-4 space-y-1 text-[11.5px] leading-relaxed">
+              <li><b>Android (Chrome):</b> ઉપર <b>"Enable notifications"</b> આપો. જો પરમિશન આપ્યા છતાં પેનલમાં ન આવે, તો ફોનના <i>Settings ➔ Apps ➔ Chrome ➔ Notifications ➔ All Notifications: ON</i> કરો.</li>
+              <li><b>iPhone (iOS):</b> Safari માં નીચે Share આઈકન ➔ <b>"Add to Home Screen"</b> કરો. પછી હોમ સ્ક્રીન પર આવેલી એપ ખોલીને આ પેજ પર આવીને Notifications ચાલુ કરો (iOS 16.4+).</li>
+            </ul>
+          </div>
+
           {!!devices.data?.length && <div className="mt-4 border-t border-line pt-3"><div className="label">Your subscribed devices</div><ul className="space-y-1 text-[13px]">{devices.data.map((d) => <li key={d.endpoint} className="flex justify-between"><span>{d.platform} · {d.browser}</span><span className="text-ink-3">{d.lastUsedAt ? `Last used ${ago(d.lastUsedAt)}` : ''}</span></li>)}</ul></div>}
         </Card>
         <Card title="Install the app">

@@ -88,11 +88,17 @@ export async function showDeviceNotification(opts: DeviceNotificationOptions) {
   const badge = '/icons/icon-192.png';
   const url = opts.link || '/';
 
-  // 1. First try ServiceWorker showNotification (best for Android & Desktop OS panels)
+  // 1. First try ServiceWorker showNotification (essential for Android and best for OS panels)
   if ('serviceWorker' in navigator) {
     try {
-      const reg = await navigator.serviceWorker.getRegistration();
-      if (reg && reg.showNotification) {
+      let reg = await navigator.serviceWorker.getRegistration();
+      if (!reg) {
+        reg = await navigator.serviceWorker.register('/sw.js').catch(() => null as any);
+      }
+      if (!reg?.active) {
+        reg = await navigator.serviceWorker.ready.catch(() => reg);
+      }
+      if (reg && typeof reg.showNotification === 'function') {
         await reg.showNotification(title, {
           body,
           icon,
@@ -105,32 +111,35 @@ export async function showDeviceNotification(opts: DeviceNotificationOptions) {
         return true;
       }
     } catch (e) {
-      console.warn('[notifications] SW showNotification failed, trying fallback', e);
+      console.warn('[notifications] SW showNotification failed', e);
     }
   }
 
-  // 2. Fallback to standard Notification constructor
-  try {
-    const n = new Notification(title, {
-      body,
-      icon,
-      badge,
-      tag,
-      data: { url },
-    } as any);
+  // 2. Fallback to standard Notification constructor (Desktop only; Chrome on Android throws Illegal constructor)
+  if (!/android/i.test(navigator.userAgent)) {
+    try {
+      const n = new Notification(title, {
+        body,
+        icon,
+        badge,
+        tag,
+        data: { url },
+      } as any);
 
-    n.onclick = () => {
-      window.focus();
-      if (opts.link && window.location.pathname !== opts.link) {
-        window.location.href = opts.link;
-      }
-      n.close();
-    };
-    return true;
-  } catch (e) {
-    console.warn('[notifications] Fallback Notification constructor failed', e);
-    return false;
+      n.onclick = () => {
+        window.focus();
+        if (opts.link && window.location.pathname !== opts.link) {
+          window.location.href = opts.link;
+        }
+        n.close();
+      };
+      return true;
+    } catch (e) {
+      console.warn('[notifications] Desktop Notification constructor failed', e);
+      return false;
+    }
   }
+  return false;
 }
 
 /**
