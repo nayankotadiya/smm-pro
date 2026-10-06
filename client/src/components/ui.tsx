@@ -103,15 +103,15 @@ export function Card({ title, action, children, className, pad = true }: { title
 
 export function PageHeader({ title, sub, actions }: { title: ReactNode; sub?: ReactNode; actions?: ReactNode }) {
   return (
-    <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-      <div className="min-w-0">
+    <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+      <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2.5">
-          <span className="h-5 w-1 rounded-full bg-gradient-to-b from-indigo-500 via-violet-500 to-fuchsia-500 shadow-[0_0_8px_rgba(139,92,246,0.7)]" aria-hidden />
-          <h1 className="truncate">{title}</h1>
+          <span className="h-5 w-1 shrink-0 rounded-full bg-gradient-to-b from-indigo-500 via-violet-500 to-fuchsia-500 shadow-[0_0_8px_rgba(139,92,246,0.7)]" aria-hidden />
+          <h1 className="truncate text-[20px] sm:text-[24px] font-bold text-ink">{title}</h1>
         </div>
         {sub && <div className="mt-1.5 pl-3.5 text-[13px] font-medium text-ink-2">{sub}</div>}
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2.5 pt-0.5">{actions}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-2 pt-0.5 sm:justify-end">{actions}</div>}
     </div>
   );
 }
@@ -301,7 +301,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<H
 
 export function Table({ head, children, minWidth = 640 }: { head: ReactNode[]; children: ReactNode; minWidth?: number }) {
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto touch-pan-x" style={{ WebkitOverflowScrolling: 'touch' }}>
       <table className="w-full border-collapse" style={{ minWidth }}>
         <thead>
           <tr className="border-b border-line/60 bg-surface-2/60">{head.map((h, i) => <th key={i} className="th">{h}</th>)}</tr>
@@ -478,7 +478,7 @@ export function DateRangePicker({ from, to, onChange, className }: { from: strin
           aria-label="From date"
           value={from}
           onChange={(e) => onChange(e.target.value, to)}
-          className="bg-transparent text-[13px] font-medium text-ink outline-none [color-scheme:dark] w-32"
+          className="bg-transparent text-[13px] font-medium text-ink outline-none w-28 sm:w-32"
         />
         <span className="text-ink-3">—</span>
         <input
@@ -486,7 +486,7 @@ export function DateRangePicker({ from, to, onChange, className }: { from: strin
           aria-label="To date"
           value={to}
           onChange={(e) => onChange(from, e.target.value)}
-          className="bg-transparent text-[13px] font-medium text-ink outline-none [color-scheme:dark] w-32"
+          className="bg-transparent text-[13px] font-medium text-ink outline-none w-28 sm:w-32"
         />
         {hasFilter && (
           <button

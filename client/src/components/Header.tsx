@@ -200,9 +200,10 @@ export function GlobalSearch() {
           onClick={() => setOpen(true)}
           className="flex h-10 w-full items-center justify-between rounded-full border border-line/65 bg-surface-2/60 px-4 text-left shadow-xs backdrop-blur-2xl transition-all duration-300 hover:border-primary/60 hover:bg-surface/90"
         >
-          <span className="flex items-center gap-2.5 text-[13px] text-ink-3">
-            <Search size={16} className="text-ink-3" />
-            <span className="truncate">Search content, clients, scripts, team...</span>
+          <span className="flex items-center gap-2 text-[13px] text-ink-3">
+            <Search size={16} className="text-ink-3 shrink-0" />
+            <span className="truncate hidden sm:inline">Search content, clients, scripts, team...</span>
+            <span className="truncate sm:hidden">Search...</span>
           </span>
           <kbd className="hidden rounded-full border border-line/80 bg-surface/80 px-2 py-0.5 text-[10px] font-bold text-ink-3 shadow-xs sm:inline-block">
             Ctrl K
