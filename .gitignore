@@ -10,3 +10,4 @@ backups/
 *.gz
 .DS_Store
 Thumbs.db
+scratch/

@@ -58,21 +58,25 @@ async function main() {
   const admin = { _id: String(U.Nayan._id), name: 'Nayan', email: U.Nayan.email, role: 'SUPER_ADMIN' as Role, permissions: await permissionsFor('SUPER_ADMIN') };
   const writer = { _id: String(U.Siddharth._id), name: 'Siddharth', email: U.Siddharth.email, role: 'SCRIPT_WRITER' as Role, permissions: await permissionsFor('SCRIPT_WRITER') };
 
-  const C: Record<string, any> = {};
-  for (const [i, c] of CLIENTS.entries()) {
-    C[c.name] = (await Client.findOne({ name: c.name })) || (await Client.create({ ...c, businessName: c.name, status: 'ACTIVE', createdBy: U.Nayan._id, assignedTeam: [U[i % 2 ? 'Dharmi' : 'Isha']._id, U.Siddharth._id, U.Bhargav._id, U.Tapesh._id, U.Hasti._id], defaultTeam: { writer: U.Siddharth._id, shooter: U.Bhargav._id, editor: U.Tapesh._id, smm: U.Dharmi._id, reviewer: U.Hasti._id } }));
-    await ensureClientRoom(C[c.name]);
-  }
-  const camp = (await Campaign.findOne({ name: 'Diwali 2026' })) || (await Campaign.create({ name: 'Diwali 2026', clientId: C['Zemora Jewels']._id, createdBy: U.Nayan._id }));
-
-  for (const c of CONTENT) {
-    if (await Content.exists({ title: c.title })) continue;
-    const doc: any = await createContent({ title: c.title, clientId: String(C[c.client]._id), campaignId: c.client === 'Zemora Jewels' ? camp._id : undefined, type: c.title.includes('Testimonial') ? 'VIDEO' : 'REEL', platform: 'INSTAGRAM', priority: c.priority, deadline: new Date(Date.now() + c.days * 864e5) }, admin);
-    if (c.script) {
-      await saveVersion(String(doc.scriptId), { hook: `Opening hook for ${c.title}`, scenes: [{ title: 'Scene 1', dialogue: 'Introduce the product.', visual: 'Close-up product shot' }, { title: 'Scene 2', dialogue: 'Show it in use.', visual: 'Lifestyle shot' }], cta: 'Shop now — link in bio', duration: '30s', music: 'Upbeat festive' }, writer);
-      if (c.script === 'submit') await submitScript(String(doc.scriptId), writer);
+  if (process.argv.includes('--demo')) {
+    const C: Record<string, any> = {};
+    for (const [i, c] of CLIENTS.entries()) {
+      C[c.name] = (await Client.findOne({ name: c.name })) || (await Client.create({ ...c, businessName: c.name, status: 'ACTIVE', createdBy: U.Nayan._id, assignedTeam: [U[i % 2 ? 'Dharmi' : 'Isha']._id, U.Siddharth._id, U.Bhargav._id, U.Tapesh._id, U.Hasti._id], defaultTeam: { writer: U.Siddharth._id, shooter: U.Bhargav._id, editor: U.Tapesh._id, smm: U.Dharmi._id, reviewer: U.Hasti._id } }));
+      await ensureClientRoom(C[c.name]);
     }
-    console.log('content', doc.contentId, c.title);
+    const camp = (await Campaign.findOne({ name: 'Diwali 2026' })) || (await Campaign.create({ name: 'Diwali 2026', clientId: C['Zemora Jewels']._id, createdBy: U.Nayan._id }));
+
+    for (const c of CONTENT) {
+      if (await Content.exists({ title: c.title })) continue;
+      const doc: any = await createContent({ title: c.title, clientId: String(C[c.client]._id), campaignId: c.client === 'Zemora Jewels' ? camp._id : undefined, type: c.title.includes('Testimonial') ? 'VIDEO' : 'REEL', platform: 'INSTAGRAM', priority: c.priority, deadline: new Date(Date.now() + c.days * 864e5) }, admin);
+      if (c.script) {
+        await saveVersion(String(doc.scriptId), { hook: `Opening hook for ${c.title}`, scenes: [{ title: 'Scene 1', dialogue: 'Introduce the product.', visual: 'Close-up product shot' }, { title: 'Scene 2', dialogue: 'Show it in use.', visual: 'Lifestyle shot' }], cta: 'Shop now — link in bio', duration: '30s', music: 'Upbeat festive' }, writer);
+        if (c.script === 'submit') await submitScript(String(doc.scriptId), writer);
+      }
+      console.log('content', doc.contentId, c.title);
+    }
+  } else {
+    console.log('Skipping demo clients & content seeding (pass --demo if you wish to generate sample clients).');
   }
   await new Promise((r) => setTimeout(r, 1500)); // let automations finish
   console.log(`\nSeed complete. Sign in with any of:\n${TEAM.map((t) => `  ${t.email}  (${t.role})`).join('\n')}\nPassword: ${PASSWORD}\nChange these passwords immediately.`);

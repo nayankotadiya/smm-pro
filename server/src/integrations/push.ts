@@ -1,17 +1,15 @@
 import webpush from 'web-push';
 import { env } from '../config/env';
-const FALLBACK_PUBLIC = 'BM4oiMoCIfSAONuA_s5AEEKP4vvxl7dr0YMDPHV9arv8YNZ2S0mYm81ib04YYgH2J1vI4DvlQUQYDYqWAurIetk';
-const FALLBACK_PRIVATE = '2GonNNyeE68ox1xr3AIxSnyzQ3fDWriSS2VioLGBvZE';
 
 export function getVapidPublicKey() {
-  return env.vapid.publicKey || FALLBACK_PUBLIC;
+  return env.vapid.publicKey || '';
 }
 
 let ready = false;
 
 export function pushConfigured() {
-  const pub = env.vapid.publicKey || FALLBACK_PUBLIC;
-  const priv = env.vapid.privateKey || FALLBACK_PRIVATE;
+  const pub = env.vapid.publicKey;
+  const priv = env.vapid.privateKey;
   if (!pub || !priv) return false;
   if (!ready) {
     try {

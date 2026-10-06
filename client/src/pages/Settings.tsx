@@ -634,10 +634,102 @@ function Integrations() {
         <Card title={<span className="flex items-center gap-2">Web Push<S ok={d.push.configured} /></span>}><p className="text-[13px] text-ink-2">{d.push.configured ? 'VAPID keys are set. Each person enables push per device under Notifications.' : 'Generate keys with "npx web-push generate-vapid-keys" and set VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY.'}</p></Card>
         <Card title={<span className="flex items-center gap-2">Email<S ok={d.email.configured} /></span>}><p className="text-[13px] text-ink-2">{d.email.configured ? 'SMTP is configured for password resets and email notifications.' : 'Set EMAIL_HOST, EMAIL_USER and EMAIL_PASSWORD. Without email, admins reset passwords from the Users tab.'}</p></Card>
         <Card title={<span className="flex items-center gap-2">Background jobs<S ok text={d.redis.scheduler} /></span>}><p className="text-[13px] text-ink-2">{d.redis.configured ? 'Reminders, deadline checks and approval follow-ups run on BullMQ with Redis.' : 'Running on the in-process scheduler. This is reliable for a single API instance; set REDIS_URL before running more than one.'}</p></Card>
+        <PurgeDemoDataCard />
         <SystemHealthCard />
         <p className="text-meta text-ink-3 lg:col-span-2">Credentials are stored only as server environment variables and are never shown here.</p>
       </div>
     )}</Async>
+  );
+}
+
+function PurgeDemoDataCard() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  if (user?.role !== 'SUPER_ADMIN') return null;
+
+  const handlePurge = async () => {
+    if (confirmText.trim().toUpperCase() !== 'PURGE') return;
+    setLoading(true);
+    try {
+      const res = await post<any>('/system/purge-demo-data');
+      toast.success(res.message || 'Demo data wiped successfully!');
+      setOpen(false);
+      setConfirmText('');
+      qc.invalidateQueries();
+      setTimeout(() => {
+        window.location.reload();
+      }, 1200);
+    } catch (e) {
+      toast.error(errMsg(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Card
+      title={
+        <span className="flex items-center gap-2 text-rose-500 font-semibold">
+          <Trash2 size={16} /> Clean Slate: Purge Demo Data
+        </span>
+      }
+      className="lg:col-span-2 border-rose-500/30 bg-rose-500/5"
+    >
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <div className="font-semibold text-ink">Remove all demo clients, scripts, chats & content</div>
+          <p className="text-[13px] text-ink-2 max-w-2xl">
+            Permanently wipes all sample/test operational data (clients, contents, scripts, versions, shoots, tasks, approvals, messages, chatrooms, uploaded test media).
+            <span className="block mt-1 text-emerald-500 font-medium">
+              ✓ All user accounts, team members, passwords, and device push notifications are preserved.
+            </span>
+          </p>
+        </div>
+        <Button variant="danger" onClick={() => { setConfirmText(''); setOpen(true); }}>
+          Purge Demo Data
+        </Button>
+      </div>
+
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Confirm Demo Data Purge"
+        footer={
+          <>
+            <Button onClick={() => setOpen(false)}>Cancel</Button>
+            <Button
+              variant="danger"
+              disabled={confirmText.trim().toUpperCase() !== 'PURGE'}
+              loading={loading}
+              onClick={handlePurge}
+            >
+              Confirm & Wipe Demo Data
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3 text-[14px]">
+          <div className="rounded border border-rose-500/30 bg-rose-500/10 p-3 text-rose-400">
+            ⚠️ <b>Caution:</b> This action is irreversible. All demo clients, scripts, shoots, tasks, messages, and uploaded files will be permanently deleted from this database.
+          </div>
+          <p className="text-ink-2">
+            Your login accounts, team members, passwords, and device push notification subscriptions will <b>NOT</b> be deleted.
+          </p>
+          <Field label="Type PURGE to confirm">
+            <Input
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              placeholder="PURGE"
+              autoFocus
+            />
+          </Field>
+        </div>
+      </Modal>
+    </Card>
   );
 }
 

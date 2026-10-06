@@ -351,5 +351,21 @@ r.get('/system-health', requirePerm('users.manage', 'roles.manage', 'integration
   });
 }));
 
+// ---------------- Purge Demo Data (SUPER_ADMIN only) ----------------
+r.post('/system/purge-demo-data', ah(async (req, res) => {
+  const u = req.user!;
+  if (u.role !== 'SUPER_ADMIN') {
+    throw forbidden('Only Super Admin can purge demo data');
+  }
+  const { purgeDemoData } = await import('../reset_clean');
+  await purgeDemoData();
+  const userCount = await User.countDocuments();
+  res.json({
+    ok: true,
+    message: 'All demo data (clients, contents, scripts, shoots, chats, tasks, media) successfully purged. All users and accounts preserved.',
+    preservedUsers: userCount,
+  });
+}));
+
 r.get('/meta', ah(async (_req, res) => { res.json({ stages: STAGES, roles: ROLES }); }));
 export default r;
