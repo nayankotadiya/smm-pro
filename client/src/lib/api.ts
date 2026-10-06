@@ -15,9 +15,19 @@ api.interceptors.request.use((cfg) => {
 
 let refreshing: Promise<string | null> | null = null;
 export function refreshSession(): Promise<string | null> {
-  refreshing ??= axios.post(`${API_URL}/api/auth/refresh`, {}, { withCredentials: true, headers: { 'X-Requested-With': 'smm-pro' } })
-    .then((r) => { useAuth.getState().setSession(r.data.accessToken, r.data.user); return r.data.accessToken as string; })
-    .catch((e: AxiosError) => { if (e.response?.status === 401 || e.response?.status === 403) useAuth.getState().clear(); return null; })
+  const currentToken = useAuth.getState().token;
+  const storedRt = typeof window !== 'undefined' ? localStorage.getItem('smm_rt') : null;
+  refreshing ??= axios.post(`${API_URL}/api/auth/refresh`, { refreshToken: storedRt || undefined }, { withCredentials: true, headers: { 'X-Requested-With': 'smm-pro' } })
+    .then((r) => {
+      useAuth.getState().setSession(r.data.accessToken, r.data.user, r.data.refreshToken);
+      return r.data.accessToken as string;
+    })
+    .catch((e: AxiosError) => {
+      if (e.response?.status === 401 || e.response?.status === 403) {
+        if (!currentToken) useAuth.getState().clear();
+      }
+      return null;
+    })
     .finally(() => { refreshing = null; });
   return refreshing;
 }

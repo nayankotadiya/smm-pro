@@ -5,7 +5,14 @@ export function registerSW() {
   if (!('serviceWorker' in navigator)) return;
   const isLocal = ['localhost', '127.0.0.1'].includes(window.location.hostname);
   if (!import.meta.env.PROD && !isLocal) return;
-  window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch((e) => console.warn('SW registration failed', e)); });
+  const doRegister = () => {
+    navigator.serviceWorker.register('/sw.js').catch((e) => console.warn('SW registration failed', e));
+  };
+  if (document.readyState === 'complete') {
+    doRegister();
+  } else {
+    window.addEventListener('load', doRegister);
+  }
 }
 
 let deferred: any = null;

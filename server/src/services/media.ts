@@ -146,21 +146,28 @@ export async function initUpload(u: AuthUser, b: { contentId?: string; clientId?
   const mode = storageMode();
   const media = await Media.create({ contentId: content?._id, clientId, storage: mode, fileName, originalName: b.fileName, mimeType: b.mimeType, size: b.size, category: b.category, versionNumber, version, stage: content?.stage, uploadedBy: u._id, status: 'UPLOADING' });
   if (mode === 'LOCAL') return { mediaId: String(media._id), fileName, mode, uploadUrl: `/api/media/${media._id}/local-upload` };
-  let parent: string;
-  if (content) {
-    await ensureContentFolders(content);
-    const fresh = await Content.findById(content._id).lean();
-    parent = (fresh!.driveSubfolders as any)?.[CATEGORY_CONTENT_FOLDER[b.category]] || fresh!.driveFolderId!;
-  } else if (clientId) {
-    const cl = await Client.findById(clientId);
-    const f = await ensureClientFolders(cl);
-    parent = f!.subs[b.category === 'BRAND_ASSET' ? '01_Brand_Assets' : '10_Other'];
-  } else {
-    parent = (await (await import('./storage')).rootFolders()).root;
+  try {
+    let parent: string;
+    if (content) {
+      await ensureContentFolders(content);
+      const fresh = await Content.findById(content._id).lean();
+      parent = (fresh!.driveSubfolders as any)?.[CATEGORY_CONTENT_FOLDER[b.category]] || fresh!.driveFolderId!;
+    } else if (clientId) {
+      const cl = await Client.findById(clientId);
+      const f = await ensureClientFolders(cl);
+      parent = f!.subs[b.category === 'BRAND_ASSET' ? '01_Brand_Assets' : '10_Other'];
+    } else {
+      parent = (await (await import('./storage')).rootFolders()).root;
+    }
+    media.driveFolderId = parent; await media.save();
+    const uploadUrl = await gd.createResumableSession({ name: fileName, mimeType: b.mimeType, size: b.size, parentId: parent, origin });
+    return { mediaId: String(media._id), fileName, mode, uploadUrl };
+  } catch (driveErr: any) {
+    console.warn('[initUpload] Drive session creation failed, falling back to LOCAL mode:', driveErr?.message || driveErr);
+    media.storage = 'LOCAL';
+    await media.save();
+    return { mediaId: String(media._id), fileName, mode: 'LOCAL', uploadUrl: `/api/media/${media._id}/local-upload` };
   }
-  media.driveFolderId = parent; await media.save();
-  const uploadUrl = await gd.createResumableSession({ name: fileName, mimeType: b.mimeType, size: b.size, parentId: parent, origin });
-  return { mediaId: String(media._id), fileName, mode, uploadUrl };
 }
 
 export async function completeUpload(u: AuthUser, mediaId: string, driveFileId?: string) {
@@ -327,9 +334,13 @@ export async function pipeMedia(media: any, res: Response, range?: string) {
 
 export async function saveLocalUpload(u: AuthUser, id: string, file: MulterFile) {
   const media = await Media.findById(id);
-  if (!media || String(media.uploadedBy) !== u._id || media.storage !== 'LOCAL' || media.status !== 'UPLOADING') {
+  if (!media || String(media.uploadedBy) !== u._id || media.status !== 'UPLOADING') {
     try { fs.unlinkSync(file.path); } catch {}
     throw forbidden();
+  }
+  if (media.storage !== 'LOCAL') {
+    media.storage = 'LOCAL';
+    await media.save();
   }
   // Magic-byte sniffing: don't trust the browser MIME
   const ft = await FileType.fromFile(file.path).catch(() => undefined);

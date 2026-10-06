@@ -18,6 +18,9 @@ export function useRealtime() {
     const inv = (...keys: string[]) => keys.forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
     const loadPresence = () => get('/dashboard/team-presence').then((list: any[]) => useUI.getState().setAllPresence(Object.fromEntries(list.map((p) => [p.userId, { status: p.status, lastActive: p.lastActive, lastSeen: p.lastSeen, currentActivity: p.currentActivity }])))).catch(() => undefined);
     loadPresence();
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+      import('@/pwa').then(({ enablePush }) => enablePush()).catch(() => undefined);
+    }
     const pres = (d: any) => { useUI.getState().setPresence(d.userId, { status: d.status, lastActive: d.lastActive, lastSeen: d.lastSeen, currentActivity: d.currentActivity }); };
     const handlers: Record<string, (d: any) => void> = {
       connect: () => { loadPresence(); qc.invalidateQueries(); },

@@ -7,12 +7,22 @@ import { requirePerm } from '../middleware/auth';
 import { driveConfigured, getFile, listFolder, findOrCreateFolder } from '../integrations/drive';
 import { ensureClientFolders, ensureContentFolders } from '../services/storage';
 import { initUpload } from '../services/media';
-import { env } from '../config/env';
+import { env, isAllowedOrigin } from '../config/env';
 import { logActivity } from '../services/activity';
 
 const r = Router();
 /** Drive only allows the resumable upload from the origin the session was created for */
-const originOf = (req: any) => { const o = String(req.get('origin') || '').replace(/\/$/, ''); return env.appOrigins.includes(o) ? o : env.appOrigins[0]; };
+const originOf = (req: any) => {
+  const o = String(req.get('origin') || req.get('referer') || '').replace(/\/$/, '');
+  if (o) {
+    try {
+      const parsed = new URL(o);
+      const origin = `${parsed.protocol}//${parsed.host}`;
+      if (isAllowedOrigin(origin)) return origin;
+    } catch {}
+  }
+  return env.appOrigins.find((x) => !x.includes('localhost')) || env.appOrigins[0];
+};
 const need = (_q: any, _s: any, next: any) => (driveConfigured() ? next() : next(new AppError(503, 'Google Drive is not connected. Ask an admin to configure it in Settings.', 'DRIVE_NOT_CONFIGURED')));
 
 r.post('/folders/client', need, requirePerm('clients.write'), ah(async (req, res) => {

@@ -193,6 +193,7 @@ export function Login() {
   const [mfaToken, setMfaToken] = useState<string | null>(null);
   const [mfaCode, setMfaCode] = useState('');
   const [mfaLoading, setMfaLoading] = useState(false);
+  const [remember, setRemember] = useState(true);
   const f = useForm<z.infer<typeof loginSchema>>({ resolver: zodResolver(loginSchema) });
 
   if (user) return <Navigate to="/" replace />;
@@ -200,12 +201,12 @@ export function Login() {
   const submit = f.handleSubmit(async (v) => {
     setErr('');
     try {
-      const r = await api.post('/auth/login', v);
+      const r = await api.post('/auth/login', { ...v, remember });
       if (r.data.mfaRequired) {
         setMfaToken(r.data.mfaToken);
         return;
       }
-      setSession(r.data.accessToken, r.data.user);
+      setSession(r.data.accessToken, r.data.user, r.data.refreshToken);
       nav('/');
     } catch (e) {
       setErr(errMsg(e));
@@ -222,7 +223,7 @@ export function Login() {
         mfaToken,
         code: mfaCode.trim(),
       });
-      setSession(r.data.accessToken, r.data.user);
+      setSession(r.data.accessToken, r.data.user, r.data.refreshToken);
       nav('/');
     } catch (e) {
       setErr(errMsg(e));
@@ -321,6 +322,18 @@ export function Login() {
             {err}
           </p>
         )}
+
+        <div className="flex items-center justify-between text-[13px] pt-1 pb-1">
+          <label className="flex items-center gap-2 cursor-pointer select-none text-ink-2 hover:text-ink">
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={(e) => setRemember(e.target.checked)}
+              className="h-4 w-4 rounded border-line text-primary focus:ring-primary accent-[#00a884]"
+            />
+            <span className="font-medium">Remember me (Stay logged in)</span>
+          </label>
+        </div>
 
         <Button
           type="submit"

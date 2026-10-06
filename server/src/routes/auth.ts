@@ -68,7 +68,7 @@ r.post('/login', loginLimiter, ah(async (req, res) => {
   const rt = await issueRefresh(u._id, randomToken(12), req);
   res.cookie(COOKIE, rt, cookieOpts());
   await logActivity({ actorId: u._id, action: 'auth.login', message: `${u.name} signed in`, ip: req.ip });
-  res.json({ accessToken: signAccess(u), user: await me(u) });
+  res.json({ accessToken: signAccess(u), refreshToken: rt, user: await me(u) });
 }));
 
 r.post('/mfa/verify-login', loginLimiter, ah(async (req, res) => {
@@ -111,12 +111,12 @@ r.post('/mfa/verify-login', loginLimiter, ah(async (req, res) => {
     message: `${u.name} signed in with ${isBackupCode ? 'MFA backup code' : '2FA'}`,
     ip: req.ip,
   });
-  res.json({ accessToken: signAccess(u), user: await me(u) });
+  res.json({ accessToken: signAccess(u), refreshToken: rt, user: await me(u) });
 }));
 
 /** Refresh token rotation with reuse detection: a reused token revokes the whole family. */
 r.post('/refresh', csrf, ah(async (req, res) => {
-  const token = req.cookies?.[COOKIE];
+  const token = req.cookies?.[COOKIE] || req.body?.refreshToken;
   if (!token) throw new AppError(401, 'Not signed in', 'UNAUTHORIZED');
   const rec = await RefreshToken.findOne({ tokenHash: sha256(token) });
   if (!rec) { res.clearCookie(COOKIE, clearOpts()); throw new AppError(401, 'Session expired', 'UNAUTHORIZED'); }
@@ -132,7 +132,7 @@ r.post('/refresh', csrf, ah(async (req, res) => {
   const next = await issueRefresh(u._id, rec.family!, req);
   rec.revokedAt = new Date(); rec.replacedBy = sha256(next); await rec.save();
   res.cookie(COOKIE, next, cookieOpts());
-  res.json({ accessToken: signAccess(u), user: await me(u) });
+  res.json({ accessToken: signAccess(u), refreshToken: next, user: await me(u) });
 }));
 
 r.post('/logout', csrf, ah(async (req, res) => {

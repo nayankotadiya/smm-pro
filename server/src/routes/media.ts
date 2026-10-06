@@ -8,7 +8,7 @@ import { Media, Content, Feedback } from '../models';
 import { ah } from '../utils/async';
 import { AppError, notFound, forbidden } from '../utils/errors';
 import { can, requireAuth, userFromToken } from '../middleware/auth';
-import { env } from '../config/env';
+import { env, isAllowedOrigin } from '../config/env';
 import { MEDIA_CATEGORIES } from '../config/constants';
 import { initUpload, completeUpload, failUpload, streamMedia, saveLocalUpload, canAccessMedia } from '../services/media';
 import { visibilityFilter } from '../services/content';
@@ -17,7 +17,17 @@ import { escapeRx } from './clients';
 
 const r = Router();
 /** Drive only allows the resumable upload from the origin the session was created for */
-const originOf = (req: any) => { const o = String(req.get('origin') || '').replace(/\/$/, ''); return env.appOrigins.includes(o) ? o : env.appOrigins[0]; };
+const originOf = (req: any) => {
+  const o = String(req.get('origin') || req.get('referer') || '').replace(/\/$/, '');
+  if (o) {
+    try {
+      const parsed = new URL(o);
+      const origin = `${parsed.protocol}//${parsed.host}`;
+      if (isAllowedOrigin(origin)) return origin;
+    } catch {}
+  }
+  return env.appOrigins.find((x) => !x.includes('localhost')) || env.appOrigins[0];
+};
 
 const UPLOAD_TMP = path.join(LOCAL_DIR, 'tmp');
 try { fs.mkdirSync(UPLOAD_TMP, { recursive: true }); } catch {}

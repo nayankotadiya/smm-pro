@@ -50,8 +50,8 @@ export const env = {
   },
   redisUrl: process.env.REDIS_URL || '',
   vapid: {
-    publicKey: process.env.VAPID_PUBLIC_KEY || '',
-    privateKey: process.env.VAPID_PRIVATE_KEY || '',
+    publicKey: process.env.VAPID_PUBLIC_KEY || 'BM4oiMoCIfSAONuA_s5AEEKP4vvxl7dr0YMDPHV9arv8YNZ2S0mYm81ib04YYgH2J1vI4DvlQUQYDYqWAurIetk',
+    privateKey: process.env.VAPID_PRIVATE_KEY || '2GonNNyeE68ox1xr3AIxSnyzQ3fDWriSS2VioLGBvZE',
     subject: process.env.VAPID_SUBJECT || 'mailto:admin@example.com',
   },
   email: {

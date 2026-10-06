@@ -95,9 +95,17 @@ export function startUpload(o: UploadOpts): Promise<any> {
       set(0); setActivity(`Uploading ${init.fileName}`);
       let media: any;
       if (init.mode === 'DRIVE') {
-        const r = await axios.put(init.uploadUrl, o.file, { signal: ctrl.signal, headers: { 'Content-Type': mime }, onUploadProgress: (e) => set(Math.min(99, Math.round((e.loaded / (e.total || o.file.size)) * 100))) });
-        set(100, 'processing');
-        media = await post(`/media/${init.mediaId}/complete`, { driveFileId: r.data.id });
+        try {
+          const r = await axios.put(init.uploadUrl, o.file, { signal: ctrl.signal, headers: { 'Content-Type': mime }, onUploadProgress: (e) => set(Math.min(99, Math.round((e.loaded / (e.total || o.file.size)) * 100))) });
+          set(100, 'processing');
+          media = await post(`/media/${init.mediaId}/complete`, { driveFileId: r.data.id });
+        } catch (driveErr: any) {
+          if (ctrl.signal.aborted) throw driveErr;
+          console.warn('[upload] Google Drive upload failed or blocked, falling back to server local upload...', driveErr?.message || driveErr);
+          const fd = new FormData(); fd.append('file', o.file);
+          const r = await api.post(`/media/${init.mediaId}/local-upload`, fd, { signal: ctrl.signal, onUploadProgress: (e) => set(Math.min(99, Math.round((e.loaded / (e.total || o.file.size)) * 100))) });
+          media = r.data;
+        }
       } else {
         const fd = new FormData(); fd.append('file', o.file);
         const r = await api.post(init.uploadUrl.replace(/^\/api/, ''), fd, { signal: ctrl.signal, onUploadProgress: (e) => set(Math.min(99, Math.round((e.loaded / (e.total || o.file.size)) * 100))) });

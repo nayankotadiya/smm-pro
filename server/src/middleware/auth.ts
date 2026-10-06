@@ -19,8 +19,8 @@ export async function permissionsFor(role: Role): Promise<string[]> {
 }
 export const clearPermCache = () => permCache.clear();
 
-export function signAccess(u: { _id: any; role: string }) {
-  return jwt.sign({ sub: String(u._id), role: u.role }, env.jwtSecret, { expiresIn: '15m' });
+export function signAccess(u: { _id: any; role: string }, remember = true) {
+  return jwt.sign({ sub: String(u._id), role: u.role }, env.jwtSecret, { expiresIn: remember ? '30d' : '12h' });
 }
 export async function userFromToken(token: string): Promise<AuthUser> {
   const p = jwt.verify(token, env.jwtSecret) as { sub: string };
