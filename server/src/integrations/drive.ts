@@ -143,10 +143,11 @@ export async function getRootFolderStatus(): Promise<{ id?: string; name: string
 export async function createResumableSession(opts: { name: string; mimeType: string; size: number; parentId: string; origin: string }) {
   const auth = getAuth();
   const { token } = await auth.getAccessToken();
+  const cleanOrigin = (opts.origin || '').trim().replace(/\/+$/, '');
   const r = await axios.post(
     'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true&fields=id,name,size,mimeType,webViewLink',
     { name: opts.name, parents: [opts.parentId], mimeType: opts.mimeType },
-    { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': opts.mimeType, 'X-Upload-Content-Length': String(opts.size), Origin: opts.origin } },
+    { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': opts.mimeType, 'X-Upload-Content-Length': String(opts.size), Origin: cleanOrigin } },
   );
   return r.headers.location as string;
 }

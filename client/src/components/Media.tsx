@@ -40,13 +40,18 @@ function extColor(name = '') { return EXT_COLOR[extOf(name)] ?? 'bg-ink-3'; }
 // ─── useStreamSrc — loads signed URL lazily ───────────────────────────────────
 function useStreamSrc(mediaId: string | undefined) {
   const [src, setSrc] = useState<string | null>(null);
+  const [driveUrl, setDriveUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   useEffect(() => {
     if (!mediaId) return;
     setLoading(true);
-    mediaLinks(mediaId).then((l) => { setSrc(l.stream); setLoading(false); }).catch(() => setLoading(false));
+    mediaLinks(mediaId).then((l) => {
+      setSrc(l.stream);
+      setDriveUrl(l.drive);
+      setLoading(false);
+    }).catch(() => setLoading(false));
   }, [mediaId]);
-  return { src, loading };
+  return { src, driveUrl, loading };
 }
 
 // ─── Lightbox ─────────────────────────────────────────────────────────────────
@@ -80,59 +85,81 @@ function Lightbox({ src, name, onClose }: { src: string; name: string; onClose: 
 
 // ─── ImageThumb ───────────────────────────────────────────────────────────────
 function ImageThumb({ mediaId, fileName, size = 'md' }: { mediaId: string; fileName: string; size?: 'sm' | 'md' | 'lg' }) {
-  const { src, loading } = useStreamSrc(mediaId);
+  const { src, driveUrl, loading } = useStreamSrc(mediaId);
   const [lightbox, setLightbox] = useState(false);
+  const [err, setErr] = useState(false);
   const h = size === 'sm' ? 'h-28' : size === 'lg' ? 'h-56' : 'h-44';
   return (
     <>
       <button
-        onClick={() => src && setLightbox(true)}
+        onClick={() => src && !err && setLightbox(true)}
         className={`group relative w-full overflow-hidden rounded-xl bg-surface-3 ${h}`}
         aria-label={`View ${fileName}`}
       >
         {loading && <div className="flex h-full items-center justify-center"><Spinner /></div>}
-        {src && (
+        {src && !err && (
           <>
-            <img src={src} alt={fileName} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+            <img
+              src={src}
+              alt={fileName}
+              onError={() => setErr(true)}
+              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+            />
             <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors duration-200 group-hover:bg-black/25 rounded-xl">
               <ZoomIn size={26} className="text-white opacity-0 drop-shadow-xl transition-opacity duration-200 group-hover:opacity-100" />
             </div>
           </>
         )}
-        {!loading && !src && (
-          <div className="flex h-full items-center justify-center text-ink-3"><ImageIcon size={28} /></div>
+        {(!loading && (!src || err)) && (
+          <div className="flex h-full flex-col items-center justify-center p-2 text-center text-ink-3">
+            <ImageIcon size={26} />
+            <span className="mt-1 text-[11px] truncate max-w-[90%]">{fileName}</span>
+            {driveUrl && (
+              <a
+                href={driveUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400 hover:underline"
+              >
+                Open in Drive <ExternalLink size={11} />
+              </a>
+            )}
+          </div>
         )}
       </button>
-      {lightbox && src && <Lightbox src={src} name={fileName} onClose={() => setLightbox(false)} />}
+      {lightbox && src && !err && <Lightbox src={src} name={fileName} onClose={() => setLightbox(false)} />}
     </>
   );
 }
 
 // ─── VideoThumb ───────────────────────────────────────────────────────────────
 function VideoThumb({ mediaId, fileName, size = 'md' }: { mediaId: string; fileName: string; size?: 'sm' | 'md' | 'lg' }) {
-  const { src, loading } = useStreamSrc(mediaId);
+  const { src, driveUrl, loading } = useStreamSrc(mediaId);
   const [playing, setPlaying] = useState(false);
+  const [err, setErr] = useState(false);
   const ref = useRef<HTMLVideoElement>(null);
   const h = size === 'sm' ? 'h-28' : size === 'lg' ? 'h-56' : 'h-44';
   const toggle = () => {
-    if (!ref.current) return;
+    if (!ref.current || err) return;
     if (playing) { ref.current.pause(); setPlaying(false); }
-    else { ref.current.play(); setPlaying(true); }
+    else { ref.current.play().catch(() => setErr(true)); setPlaying(true); }
   };
   return (
     <div className={`group relative w-full overflow-hidden rounded-xl bg-black ${h}`}>
       {loading && <div className="flex h-full items-center justify-center"><Spinner className="text-white" /></div>}
-      {src && (
+      {src && !err && (
         <video
           ref={ref}
           src={src}
+          onError={() => setErr(true)}
           className="h-full w-full object-cover"
           playsInline preload="metadata"
           onEnded={() => setPlaying(false)}
           onClick={toggle}
         />
       )}
-      {!loading && (
+      {!loading && !err && (
         <button
           onClick={toggle}
           aria-label={playing ? 'Pause' : 'Play'}
@@ -143,10 +170,29 @@ function VideoThumb({ mediaId, fileName, size = 'md' }: { mediaId: string; fileN
           </span>
         </button>
       )}
-      {/* Duration badge if paused */}
-      <div className="absolute bottom-2 left-2 rounded-md bg-black/55 px-1.5 py-0.5 text-[11px] text-white backdrop-blur-sm truncate max-w-[80%]">
-        {fileName}
-      </div>
+      {err && (
+        <div className="flex h-full flex-col items-center justify-center p-2 text-center text-white/80">
+          <Film size={26} />
+          <span className="mt-1 text-[11px] truncate max-w-[90%]">{fileName}</span>
+          {driveUrl ? (
+            <a
+              href={driveUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-1.5 inline-flex items-center gap-1 rounded bg-emerald-500/20 px-2 py-0.5 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-500/30"
+            >
+              Watch on Drive <ExternalLink size={11} />
+            </a>
+          ) : (
+            <span className="mt-1 text-[10px] text-white/50">Re-upload to view</span>
+          )}
+        </div>
+      )}
+      {!err && (
+        <div className="absolute bottom-2 left-2 rounded-md bg-black/55 px-1.5 py-0.5 text-[11px] text-white backdrop-blur-sm truncate max-w-[80%]">
+          {fileName}
+        </div>
+      )}
     </div>
   );
 }

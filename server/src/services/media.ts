@@ -314,7 +314,16 @@ export async function pipeMedia(media: any, res: Response, range?: string) {
   res.setHeader('Accept-Ranges', 'bytes');
   if (media.storage === 'LOCAL') {
     const p = media.localPath;
-    if (!p || !fs.existsSync(p)) throw notFound('File on disk');
+    if (!p || !fs.existsSync(p)) {
+      if (media.driveFileId && gd.driveConfigured()) {
+        const r = await gd.streamFile(media.driveFileId, range);
+        if (r.status === 206) { res.status(206); if (r.headers['content-range']) res.setHeader('Content-Range', r.headers['content-range']); }
+        if (r.headers['content-length']) res.setHeader('Content-Length', r.headers['content-length']);
+        r.stream.on('error', () => res.destroy());
+        return r.stream.pipe(res);
+      }
+      throw notFound('File on disk');
+    }
     const size = fs.statSync(p).size;
     const m = range && /bytes=(\d*)-(\d*)/.exec(range);
     if (m) {
@@ -338,10 +347,7 @@ export async function saveLocalUpload(u: AuthUser, id: string, file: MulterFile)
     try { fs.unlinkSync(file.path); } catch {}
     throw forbidden();
   }
-  if (media.storage !== 'LOCAL') {
-    media.storage = 'LOCAL';
-    await media.save();
-  }
+
   // Magic-byte sniffing: don't trust the browser MIME
   const ft = await FileType.fromFile(file.path).catch(() => undefined);
   const textLike = /^text\//.test(media.mimeType || '');
@@ -353,9 +359,73 @@ export async function saveLocalUpload(u: AuthUser, id: string, file: MulterFile)
     try { fs.unlinkSync(file.path); } catch {}
     throw badRequest('File is not a valid video');
   }
+
+  const finalMime = ft?.mime || inferMimeType(media.fileName, media.mimeType);
+
+  // If Google Drive is configured on the server, forward the file directly to Google Drive
+  // so it persists permanently and is never wiped by Render's ephemeral disk!
+  if (gd.driveConfigured()) {
+    try {
+      let parent = media.driveFolderId;
+      if (!parent) {
+        if (media.contentId) {
+          const content = await Content.findById(media.contentId);
+          if (content) {
+            await ensureContentFolders(content);
+            const fresh = await Content.findById(content._id).lean();
+            parent = (fresh!.driveSubfolders as any)?.[CATEGORY_CONTENT_FOLDER[media.category]] || fresh!.driveFolderId!;
+          }
+        }
+        if (!parent && media.clientId) {
+          const cl = await Client.findById(media.clientId);
+          const f = await ensureClientFolders(cl);
+          parent = f!.subs[media.category === 'BRAND_ASSET' ? '01_Brand_Assets' : '10_Other'];
+        }
+        if (!parent) {
+          parent = (await (await import('./storage')).rootFolders()).root;
+        }
+      }
+
+      const fileStream = fs.createReadStream(file.path);
+      const driveFile = await gd.uploadStream({
+        name: media.fileName,
+        mimeType: finalMime,
+        parentId: parent,
+        body: fileStream,
+      });
+
+      try { fs.unlinkSync(file.path); } catch {}
+
+      media.storage = 'DRIVE';
+      media.driveFolderId = parent;
+      media.driveFileId = driveFile.id;
+      media.webViewLink = driveFile.webViewLink || undefined;
+      media.size = file.size;
+      media.mimeType = finalMime;
+      media.status = ['EDIT', 'FINAL'].includes(media.category) ? 'REVIEW_REQUIRED' : 'READY';
+      media.uploadedAt = new Date();
+      await media.save();
+
+      if (media.contentId && VERSIONED.includes(media.category)) {
+        await Media.updateMany(
+          { contentId: media.contentId, category: media.category, _id: { $ne: media._id }, status: { $in: ['READY', 'REVIEW_REQUIRED'] } },
+          { status: 'SUPERSEDED' }
+        );
+      }
+      await onMediaReady(media, u);
+      return media;
+    } catch (driveErr: any) {
+      console.warn('[saveLocalUpload] Forwarding file to Google Drive failed, storing to local disk:', driveErr?.message || driveErr);
+    }
+  }
+
+  // Fallback to local storage
   const dest = localPathFor(media.fileName);
   safeMoveFile(file.path, dest);
-  const finalMime = ft?.mime || inferMimeType(media.fileName, media.mimeType);
-  await Media.updateOne({ _id: id }, { localPath: dest, size: file.size, mimeType: finalMime });
+  media.storage = 'LOCAL';
+  media.localPath = dest;
+  media.size = file.size;
+  media.mimeType = finalMime;
+  await media.save();
   return completeUpload(u, id);
 }
