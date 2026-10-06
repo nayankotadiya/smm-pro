@@ -75,7 +75,7 @@ const scriptVersionSchema = new Schema({
 scriptVersionSchema.index({ scriptId: 1, version: 1 }, { unique: true });
 export const ScriptVersion = model('ScriptVersion', scriptVersionSchema);
 
-const remarkSchema = new Schema({ text: { type: String, required: true }, by: { type: ObjectId, ref: 'User' }, byName: String, at: { type: Date, default: Date.now } }, { _id: true });
+const remarkSchema = new Schema({ text: { type: String, required: true }, by: { type: ObjectId, ref: 'User' }, byName: String, stage: { type: String, enum: ['BEFORE', 'AFTER'], default: 'BEFORE' }, at: { type: Date, default: Date.now } }, { _id: true });
 const shootSchema = new Schema({
   contentId: { type: ObjectId, ref: 'Content', required: true, index: true },
   clientId: { type: ObjectId, ref: 'Client' },
@@ -89,7 +89,9 @@ const shootSchema = new Schema({
     productReady: { type: Boolean, default: false }, equipmentReady: { type: Boolean, default: false },
     shotListReady: { type: Boolean, default: false }, rawUploaded: { type: Boolean, default: false },
   },
-  remarks: [remarkSchema], // shooter remarks / complaints
+  remarks: [remarkSchema], // shooter remarks / complaints (BEFORE & AFTER)
+  beforeShootRemarks: String,
+  afterShootRemarks: String,
 }, ts);
 export const Shoot = model('Shoot', shootSchema);
 

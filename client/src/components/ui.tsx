@@ -89,14 +89,14 @@ export function Priority({ p }: { p?: string }) {
 
 export function Card({ title, action, children, className, pad = true }: { title?: ReactNode; action?: ReactNode; children: ReactNode; className?: string; pad?: boolean }) {
   return (
-    <section className={clsx('card animate-rise overflow-hidden', className)}>
+    <section className={clsx('card animate-rise overflow-hidden min-w-0 max-w-full', className)}>
       {(title || action) && (
-        <header className="flex min-h-[48px] items-center justify-between gap-3 border-b border-line/50 bg-surface-2/25 px-5 py-3 backdrop-blur-sm">
-          <h2 className="text-[14px] font-bold tracking-tight">{title}</h2>
+        <header className="flex min-h-[48px] items-center justify-between gap-3 border-b border-line/50 bg-surface-2/25 px-4 sm:px-5 py-3 backdrop-blur-sm">
+          <h2 className="text-[14px] font-bold tracking-tight truncate">{title}</h2>
           <div className="shrink-0">{action}</div>
         </header>
       )}
-      <div className={pad ? 'p-5' : ''}>{children}</div>
+      <div className={pad ? 'p-3.5 sm:p-5' : ''}>{children}</div>
     </section>
   );
 }
@@ -301,7 +301,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<H
 
 export function Table({ head, children, minWidth = 640 }: { head: ReactNode[]; children: ReactNode; minWidth?: number }) {
   return (
-    <div className="overflow-x-auto touch-pan-x" style={{ WebkitOverflowScrolling: 'touch' }}>
+    <div className="w-full max-w-full overflow-x-auto touch-pan-x" style={{ WebkitOverflowScrolling: 'touch' }}>
       <table className="w-full border-collapse" style={{ minWidth }}>
         <thead>
           <tr className="border-b border-line/60 bg-surface-2/60">{head.map((h, i) => <th key={i} className="th">{h}</th>)}</tr>

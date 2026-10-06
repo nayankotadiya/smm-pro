@@ -4,7 +4,7 @@ import { ObjectId, ts, softDelete } from './common';
 const clientSchema = new Schema({
   name: { type: String, required: true, trim: true },
   businessName: String, contactPerson: String, phone: String, email: String, website: String,
-  instagram: String, facebook: String, youtube: String, location: String, category: String,
+  instagram: String, instagramPassword: String, facebook: String, facebookPassword: String, youtube: String, location: String, category: String,
   description: String, products: String, services: String, usp: String, targetAudience: String,
   goals: String, expectations: String, marketTrend: String, sellingPurpose: String, brandTone: String,
   brandColors: [String], fonts: [String], logoMediaId: { type: ObjectId, ref: 'Media' }, brandGuidelines: String,

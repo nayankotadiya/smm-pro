@@ -76,8 +76,8 @@ function OrgDashboard({ dateFrom, dateTo }: { dateFrom: string; dateTo: string }
   return (
     <div className="space-y-5">
       <div className="stagger grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">{sum.isLoading ? Array.from({ length: 10 }).map((_, i) => <div key={i} className="skeleton h-[76px] !rounded-lg" />) : kpis.map(([l, v, to, I, t]) => <Stat key={l} label={l} value={v} tone={t} icon={<I size={16} />} onClick={() => nav(to)} />)}</div>
-      <div className="grid gap-5 xl:grid-cols-3">
-        <div className="space-y-5 xl:col-span-2">
+      <div className="grid min-w-0 gap-5 xl:grid-cols-3">
+        <div className="min-w-0 space-y-5 xl:col-span-2">
           <NeedsAttention />
           <WaitingFor />
           <PendingReviewsDetail dateFrom={dateFrom} dateTo={dateTo} />
@@ -86,7 +86,7 @@ function OrgDashboard({ dateFrom, dateTo }: { dateFrom: string; dateTo: string }
           <Workload />
           <TodayTasks org />
         </div>
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
           <PendingApprovals />
           <BlockedCard />
           <RemindersCard />
@@ -111,15 +111,15 @@ function TeamDashboard({ dateFrom, dateTo }: { dateFrom: string; dateTo: string 
       <div className="stagger grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {m ? <><Stat label="My Assigned" value={m.assigned} icon={<ListChecks size={16} />} onClick={() => nav('/my-work')} /><Stat label="Due Today" value={m.dueToday} tone="amber" icon={<CalendarCheck size={16} />} onClick={() => nav('/my-work')} /><Stat label="In Progress" value={m.inProgress} icon={<Loader size={16} />} onClick={() => nav('/my-work')} /><Stat label="Waiting for Me" value={m.waitingForMe} icon={<Hourglass size={16} />} onClick={() => nav('/content?owner=me')} /><Stat label="Completed (7 days)" value={m.completed} icon={<CheckCheck size={16} />} onClick={() => nav('/my-work')} /></> : Array.from({ length: 5 }).map((_, i) => <div key={i} className="skeleton h-[76px] !rounded-lg" />)}
       </div>
-      <div className="grid gap-5 xl:grid-cols-3">
-        <div className="space-y-5 xl:col-span-2">
+      <div className="grid min-w-0 gap-5 xl:grid-cols-3">
+        <div className="min-w-0 space-y-5 xl:col-span-2">
           <NeedsAttention mine />
           <PendingReviewsDetail dateFrom={dateFrom} dateTo={dateTo} mine />
           <TodayTasks />
           <Card title="My content" pad={false} action={<More to="/content" />}><Async q={useQuery(dq('recent-content', { limit: 8 }))}>{(d: any[]) => <ContentTable items={d} compact />}</Async></Card>
           <Card title="Files shared with me" action={<More to="/media" />}><Async q={files} empty={<Empty title="No new files" />}>{(d: any[]) => <div className="grid gap-3 md:grid-cols-2">{d.slice(0, 4).map((f) => <FileCard key={f._id} m={f} a={a} />)}</div>}</Async></Card>
         </div>
-        <div className="space-y-5"><PendingApprovals /><RemindersCard /><ChatPreview /><LiveActivity /><TeamOnline /></div>
+        <div className="min-w-0 space-y-5"><PendingApprovals /><RemindersCard /><ChatPreview /><LiveActivity /><TeamOnline /></div>
       </div>
       {a.modal}
     </div>
@@ -348,9 +348,40 @@ function Workload() {
   const q = useQuery(dq('team-workload'));
   return (
     <Card title="Team workload" pad={false} action={<More to="/team" />}>
-      <Async q={q}>{(rows: any[]) => <Table head={['Member', 'Role', 'Assigned', 'Completed', 'Pending', 'Overdue', 'Workload', 'Presence']} minWidth={760}>
-        {rows.map((r) => <tr key={r.userId} className="hover:bg-surface-2 transition-colors"><td className="td"><Link to={`/team/${r.userId}`} className="flex items-center gap-2 font-semibold text-ink hover:text-primary-ink"><Avatar name={r.name} size={24} />{r.name}</Link></td><td className="td text-ink-2 font-medium">{roleLabel(r.role)}</td><td className="td tabular font-semibold text-ink">{r.assigned}</td><td className="td tabular text-ink-2">{r.completed}</td><td className="td tabular text-ink-2">{r.pending}</td><td className={clsx('td tabular font-semibold', r.overdue > 0 ? 'text-danger' : 'text-ink-3')}>{r.overdue}</td><td className="td"><div className="flex w-28 items-center gap-2"><Progress value={r.workload} tone={r.workload >= 90 ? 'red' : r.workload >= 70 ? 'amber' : 'blue'} /><span className="w-9 text-right text-meta font-medium tabular text-ink-2">{r.workload}%</span></div></td><td className="td"><PresenceLabel userId={r.userId} /></td></tr>)}
-      </Table>}</Async>
+      <Async q={q}>{(rows: any[]) => (
+        <>
+          <ul className="divide-y divide-line/60 md:hidden">
+            {rows.map((r) => (
+              <li key={r.userId} className="p-3.5 hover:bg-surface-2 transition-colors">
+                <div className="flex items-center justify-between gap-2">
+                  <Link to={`/team/${r.userId}`} className="flex items-center gap-2 font-semibold text-ink hover:text-primary-ink truncate">
+                    <Avatar name={r.name} size={28} />
+                    <span className="truncate">{r.name}</span>
+                  </Link>
+                  <PresenceLabel userId={r.userId} />
+                </div>
+                <div className="mt-2 flex items-center justify-between text-[12px] text-ink-2">
+                  <span className="font-medium">{roleLabel(r.role)}</span>
+                  <div className="flex items-center gap-2.5 font-medium">
+                    <span><strong className="text-ink">{r.assigned}</strong> assigned</span>
+                    <span><strong className="text-ink">{r.completed}</strong> done</span>
+                    {r.overdue > 0 && <span className="font-semibold text-danger">{r.overdue} overdue</span>}
+                  </div>
+                </div>
+                <div className="mt-2.5 flex items-center gap-2">
+                  <Progress value={r.workload} tone={r.workload >= 90 ? 'red' : r.workload >= 70 ? 'amber' : 'blue'} />
+                  <span className="w-9 text-right text-meta font-bold tabular text-ink-2">{r.workload}%</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <div className="hidden md:block">
+            <Table head={['Member', 'Role', 'Assigned', 'Completed', 'Pending', 'Overdue', 'Workload', 'Presence']} minWidth={760}>
+              {rows.map((r) => <tr key={r.userId} className="hover:bg-surface-2 transition-colors"><td className="td"><Link to={`/team/${r.userId}`} className="flex items-center gap-2 font-semibold text-ink hover:text-primary-ink"><Avatar name={r.name} size={24} />{r.name}</Link></td><td className="td text-ink-2 font-medium">{roleLabel(r.role)}</td><td className="td tabular font-semibold text-ink">{r.assigned}</td><td className="td tabular text-ink-2">{r.completed}</td><td className="td tabular text-ink-2">{r.pending}</td><td className={clsx('td tabular font-semibold', r.overdue > 0 ? 'text-danger' : 'text-ink-3')}>{r.overdue}</td><td className="td"><div className="flex w-28 items-center gap-2"><Progress value={r.workload} tone={r.workload >= 90 ? 'red' : r.workload >= 70 ? 'amber' : 'blue'} /><span className="w-9 text-right text-meta font-medium tabular text-ink-2">{r.workload}%</span></div></td><td className="td"><PresenceLabel userId={r.userId} /></td></tr>)}
+            </Table>
+          </div>
+        </>
+      )}</Async>
     </Card>
   );
 }

@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Plus, Pencil, Phone, Mail, Globe, Instagram, MapPin, ExternalLink, MessageSquareText } from 'lucide-react';
+import { Plus, Pencil, Phone, Mail, Globe, Instagram, Facebook, MapPin, ExternalLink, MessageSquareText, Eye, EyeOff, Copy, Check, KeyRound } from 'lucide-react';
 import { get, post, patch, errMsg } from '@/lib/api';
 import { useCan } from '@/store/auth';
 import { toast } from '@/store/ui';
@@ -35,22 +35,152 @@ export function Clients() {
   );
 }
 
-const schema = z.object({ name: z.string().min(2, 'Client name is required'), businessName: z.string().optional(), contactPerson: z.string().optional(), phone: z.string().optional(), email: z.string().email('Enter a valid email').or(z.literal('')).optional(), website: z.string().optional(), instagram: z.string().optional(), facebook: z.string().optional(), youtube: z.string().optional(), location: z.string().optional(), category: z.string().optional(), status: z.string().optional(), description: z.string().optional(), products: z.string().optional(), services: z.string().optional(), usp: z.string().optional(), targetAudience: z.string().optional(), goals: z.string().optional(), expectations: z.string().optional(), marketTrend: z.string().optional(), sellingPurpose: z.string().optional(), brandTone: z.string().optional(), brandColors: z.string().optional(), fonts: z.string().optional(), brandGuidelines: z.string().optional() });
+const schema = z.object({
+  name: z.string().min(2, 'Client name is required'),
+  businessName: z.string().optional(),
+  contactPerson: z.string().optional(),
+  phone: z.string().optional(),
+  email: z.string().email('Enter a valid email').or(z.literal('')).optional(),
+  website: z.string().optional(),
+  instagram: z.string().optional(),
+  instagramPassword: z.string().optional(),
+  facebook: z.string().optional(),
+  facebookPassword: z.string().optional(),
+  youtube: z.string().optional(),
+  location: z.string().optional(),
+  category: z.string().optional(),
+  status: z.string().optional(),
+  description: z.string().optional(),
+  products: z.string().optional(),
+  services: z.string().optional(),
+  usp: z.string().optional(),
+  targetAudience: z.string().optional(),
+  goals: z.string().optional(),
+  expectations: z.string().optional(),
+  marketTrend: z.string().optional(),
+  sellingPurpose: z.string().optional(),
+  brandTone: z.string().optional(),
+  brandColors: z.string().optional(),
+  fonts: z.string().optional(),
+  brandGuidelines: z.string().optional()
+});
 const TEXT: [string, string][] = [['description', 'Description'], ['products', 'Products'], ['services', 'Services'], ['usp', 'USP'], ['targetAudience', 'Target audience'], ['goals', 'Goals'], ['expectations', 'Expectations'], ['marketTrend', 'Market trend'], ['sellingPurpose', 'Selling purpose'], ['brandTone', 'Brand tone'], ['brandGuidelines', 'Brand guidelines']];
+
 function ClientForm({ open, onClose, client }: { open: boolean; onClose: () => void; client?: any }) {
   const qc = useQueryClient(); const nav = useNavigate(); const team = useTeam(); const [step, setStep] = useState<'basic' | 'brand' | 'team'>('basic');
+  const [showIgPass, setShowIgPass] = useState(false);
+  const [showFbPass, setShowFbPass] = useState(false);
   const f = useForm<any>({ resolver: zodResolver(schema) }); const [assigned, setAssigned] = useState<string[]>([]); const [dt, setDt] = useState<any>({});
-  useEffect(() => { if (!open) return; setStep('basic'); f.reset(client ? { ...client, brandColors: (client.brandColors || []).join(', '), fonts: (client.fonts || []).join(', '), status: client.status } : { status: 'ACTIVE' }); setAssigned((client?.assignedTeam || []).map((u: any) => u._id || u)); setDt(Object.fromEntries(Object.entries(client?.defaultTeam || {}).map(([k, v]: any) => [k, v?._id || v || '']))); }, [open, client?._id]); // eslint-disable-line
+  useEffect(() => {
+    if (!open) return;
+    setStep('basic');
+    setShowIgPass(false);
+    setShowFbPass(false);
+    f.reset(client ? { ...client, brandColors: (client.brandColors || []).join(', '), fonts: (client.fonts || []).join(', '), status: client.status } : { status: 'ACTIVE' });
+    setAssigned((client?.assignedTeam || []).map((u: any) => u._id || u));
+    setDt(Object.fromEntries(Object.entries(client?.defaultTeam || {}).map(([k, v]: any) => [k, v?._id || v || ''])));
+  }, [open, client?._id]); // eslint-disable-line
   const m = useMutation({
-    mutationFn: (v: any) => { const b: any = Object.fromEntries(Object.keys(schema.shape).map((k) => [k, v[k] ?? ''])); b.brandColors = String(v.brandColors || '').split(',').map((s) => s.trim()).filter(Boolean); b.fonts = String(v.fonts || '').split(',').map((s) => s.trim()).filter(Boolean); b.assignedTeam = assigned; b.defaultTeam = Object.fromEntries(['writer', 'shooter', 'editor', 'smm', 'reviewer'].map((k) => [k, dt[k] || null])); return client ? patch(`/clients/${client._id}`, b) : post('/clients', b); },
-    onSuccess: (c) => { toast.success(client ? 'Client updated.' : 'Client created. Drive folders are being set up.'); qc.invalidateQueries({ queryKey: ['clients'] }); onClose(); if (!client) nav(`/clients/${c._id}`); }, onError: (e) => toast.error(errMsg(e)),
+    mutationFn: (v: any) => {
+      const b: any = Object.fromEntries(Object.keys(schema.shape).map((k) => [k, v[k] ?? '']));
+      b.brandColors = String(v.brandColors || '').split(',').map((s) => s.trim()).filter(Boolean);
+      b.fonts = String(v.fonts || '').split(',').map((s) => s.trim()).filter(Boolean);
+      b.assignedTeam = assigned;
+      b.defaultTeam = Object.fromEntries(['writer', 'shooter', 'editor', 'smm', 'reviewer'].map((k) => [k, dt[k] || null]));
+      return client ? patch(`/clients/${client._id}`, b) : post('/clients', b);
+    },
+    onSuccess: (c) => { toast.success(client ? 'Client updated.' : 'Client created. Drive folders are being set up.'); qc.invalidateQueries({ queryKey: ['clients'] }); onClose(); if (!client) nav(`/clients/${c._id}`); },
+    onError: (e) => toast.error(errMsg(e)),
   });
   const e: any = f.formState.errors; const I = (k: string, l: string, p?: any) => <Field label={l} error={e[k]?.message}><Input {...f.register(k)} {...p} /></Field>;
   const roleFor: Record<string, string[]> = { writer: ['SCRIPT_WRITER'], shooter: ['SHOOTER'], editor: ['EDITOR'], smm: ['SMM'], reviewer: ['MANAGER', 'TEAM_LEAD', 'ADMIN', 'SUPER_ADMIN'] };
   return (
     <Modal open={open} onClose={onClose} wide title={client ? `Edit ${client.name}` : 'New client'} footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" loading={m.isPending} onClick={f.handleSubmit((v) => m.mutate(v), () => setStep('basic'))}>{client ? 'Save changes' : 'Create client'}</Button></>}>
-      <Tabs value={step} onChange={setStep} tabs={[{ key: 'basic', label: 'Basics' }, { key: 'brand', label: 'Brand and strategy' }, { key: 'team', label: 'Team' }]} />
-      <div className={step === 'basic' ? 'grid gap-3 sm:grid-cols-2' : 'hidden'}>{I('name', 'Client name', { autoFocus: true })}{I('businessName', 'Business name')}{I('contactPerson', 'Contact person')}{I('phone', 'WhatsApp / phone', { inputMode: 'tel', placeholder: '919876543210' })}{I('email', 'Email', { type: 'email' })}{I('website', 'Website')}{I('instagram', 'Instagram')}{I('facebook', 'Facebook')}{I('youtube', 'YouTube')}{I('location', 'Location')}{I('category', 'Category')}<Field label="Status"><Select {...f.register('status')}>{['ACTIVE', 'ONBOARDING', 'PAUSED', 'ARCHIVED'].map((s) => <option key={s} value={s}>{label(s)}</option>)}</Select></Field></div>
+      <Tabs value={step} onChange={setStep} tabs={[{ key: 'basic', label: 'Basics & Logins' }, { key: 'brand', label: 'Brand and strategy' }, { key: 'team', label: 'Team' }]} />
+      <div className={step === 'basic' ? 'space-y-4' : 'hidden'}>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {I('name', 'Client name *', { autoFocus: true, placeholder: 'e.g. Zemora Jewels' })}
+          {I('businessName', 'Business / Brand name', { placeholder: 'Trading or legal name' })}
+          {I('contactPerson', 'Contact person')}
+          {I('phone', 'WhatsApp / phone', { inputMode: 'tel', placeholder: '919876543210' })}
+          {I('email', 'Email', { type: 'email' })}
+          {I('website', 'Website', { placeholder: 'https://brand.com' })}
+          {I('location', 'Location', { placeholder: 'Surat, Gujarat' })}
+          {I('category', 'Category', { placeholder: 'Jewellery, Fashion...' })}
+          <Field label="Status">
+            <Select {...f.register('status')}>
+              {['ACTIVE', 'ONBOARDING', 'PAUSED', 'ARCHIVED'].map((s) => <option key={s} value={s}>{label(s)}</option>)}
+            </Select>
+          </Field>
+          {I('youtube', 'YouTube channel', { placeholder: '@channel' })}
+        </div>
+
+        {/* Social media credentials block */}
+        <div className="rounded-2xl border border-line/80 bg-surface-2/40 p-4 space-y-3.5 backdrop-blur-md">
+          <div className="flex items-center gap-2 text-[13.5px] font-bold text-ink">
+            <KeyRound size={16} className="text-primary-ink" />
+            Social Media Credentials (Instagram &amp; Facebook)
+          </div>
+          <p className="text-[12px] text-ink-3">
+            Securely saved in client profile for SMMs and publishing team.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-line/60 bg-surface/70 p-3 space-y-2.5">
+              <div className="flex items-center gap-1.5 text-[12.5px] font-bold text-ink">
+                <Instagram size={14} className="text-pink-500" />
+                Instagram Account
+              </div>
+              {I('instagram', 'Instagram ID / Username', { placeholder: '@brand_official' })}
+              <Field label="Instagram Password">
+                <div className="relative">
+                  <Input
+                    type={showIgPass ? 'text' : 'password'}
+                    placeholder="Instagram password"
+                    {...f.register('instagramPassword')}
+                    className="pr-10 font-mono text-[13px]"
+                  />
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={() => setShowIgPass((v) => !v)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-3 hover:text-ink p-1 transition-colors"
+                    title={showIgPass ? 'Hide password' : 'Show password'}
+                  >
+                    {showIgPass ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+              </Field>
+            </div>
+
+            <div className="rounded-xl border border-line/60 bg-surface/70 p-3 space-y-2.5">
+              <div className="flex items-center gap-1.5 text-[12.5px] font-bold text-ink">
+                <Facebook size={14} className="text-blue-500" />
+                Facebook Account
+              </div>
+              {I('facebook', 'Facebook ID / Page', { placeholder: 'facebook.com/brandpage' })}
+              <Field label="Facebook Password">
+                <div className="relative">
+                  <Input
+                    type={showFbPass ? 'text' : 'password'}
+                    placeholder="Facebook password"
+                    {...f.register('facebookPassword')}
+                    className="pr-10 font-mono text-[13px]"
+                  />
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={() => setShowFbPass((v) => !v)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-3 hover:text-ink p-1 transition-colors"
+                    title={showFbPass ? 'Hide password' : 'Show password'}
+                  >
+                    {showFbPass ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+              </Field>
+            </div>
+          </div>
+        </div>
+      </div>
       <div className={step === 'brand' ? 'grid gap-3 sm:grid-cols-2' : 'hidden'}>{TEXT.map(([k, l]) => <Field key={k} label={l}><Textarea rows={2} {...f.register(k)} /></Field>)}{I('brandColors', 'Brand colors', { placeholder: '#0F172A, #C9A227' })}{I('fonts', 'Fonts', { placeholder: 'Playfair Display, Inter' })}</div>
       <div className={step === 'team' ? 'space-y-4' : 'hidden'}>
         <div><div className="label">Default team for new content</div><p className="mb-2 text-meta text-ink-3">New content for this client is assigned to these people automatically, so the next owner is always known.</p><div className="grid gap-3 sm:grid-cols-2">{Object.keys(roleFor).map((k) => <Field key={k} label={k === 'smm' ? 'SMM' : roleLabel(k.toUpperCase())}><Select value={dt[k] || ''} onChange={(ev) => setDt({ ...dt, [k]: ev.target.value })}><option value="">Not set</option>{(team.data || []).filter((u) => roleFor[k].includes(u.role)).map((u) => <option key={u._id} value={u._id}>{u.name}</option>)}</Select></Field>)}</div></div>
@@ -79,7 +209,8 @@ export function ClientDetail() {
             <Card title="Upcoming follow-ups" pad={false}>{!ov.data?.followUps.length ? <Empty title="No follow-ups scheduled" /> : <ul className="divide-y divide-line">{ov.data.followUps.map((r: any) => <li key={r._id} className="flex justify-between gap-3 px-4 py-2.5"><span>{r.title}</span><span className="shrink-0 text-meta text-ink-2">{fmtDateTime(r.remindAt)}</span></li>)}</ul>}</Card>
           </div>
           <div className="space-y-5">
-            <Card title="Contact"><ul className="space-y-2 text-[13px]">{c.contactPerson && <li className="font-medium">{c.contactPerson}</li>}{c.phone && <li className="flex items-center gap-2"><Phone size={14} className="text-ink-2" /><a className="link" href={`tel:${c.phone}`}>{c.phone}</a></li>}{c.email && <li className="flex items-center gap-2"><Mail size={14} className="text-ink-2" /><a className="link" href={`mailto:${c.email}`}>{c.email}</a></li>}{c.website && <li className="flex items-center gap-2"><Globe size={14} className="text-ink-2" />{c.website}</li>}{c.instagram && <li className="flex items-center gap-2"><Instagram size={14} className="text-ink-2" />{c.instagram}</li>}{!c.phone && !c.email && !c.contactPerson && <li className="text-ink-3">No contact details. A phone number is needed to send WhatsApp reviews.</li>}</ul></Card>
+            <SocialCredentialsCard c={c} onEdit={() => setEdit(true)} />
+            <Card title="Contact"><ul className="space-y-2 text-[13px]">{c.contactPerson && <li className="font-medium">{c.contactPerson}</li>}{c.phone && <li className="flex items-center gap-2"><Phone size={14} className="text-ink-2" /><a className="link" href={`tel:${c.phone}`}>{c.phone}</a></li>}{c.email && <li className="flex items-center gap-2"><Mail size={14} className="text-ink-2" /><a className="link" href={`mailto:${c.email}`}>{c.email}</a></li>}{c.website && <li className="flex items-center gap-2"><Globe size={14} className="text-ink-2" /><a className="link" href={c.website.startsWith('http') ? c.website : `https://${c.website}`} target="_blank" rel="noopener noreferrer">{c.website}</a></li>}{!c.phone && !c.email && !c.contactPerson && <li className="text-ink-3">No contact details. A phone number is needed to send WhatsApp reviews.</li>}</ul></Card>
             <Card title="Brand"><div className="space-y-2 text-[13px]">{c.brandColors?.length > 0 && <div className="flex flex-wrap items-center gap-2">{c.brandColors.map((x: string) => <span key={x} className="flex items-center gap-1.5 rounded border border-line px-1.5 py-0.5 text-meta"><span className="h-3 w-3 rounded-sm border border-line" style={{ background: x }} />{x}</span>)}</div>}{c.fonts?.length > 0 && <div><span className="text-ink-2">Fonts:</span> {c.fonts.join(', ')}</div>}{c.driveFolderId && <a className="link flex items-center gap-1" target="_blank" rel="noopener noreferrer" href={`https://drive.google.com/drive/folders/${c.driveFolderId}`}>Open Drive folder<ExternalLink size={13} /></a>}{!c.brandColors?.length && !c.fonts?.length && !c.driveFolderId && <span className="text-ink-3">No brand assets recorded.</span>}</div></Card>
             <Card title="Team"><ul className="space-y-1.5 text-[13px]">{(c.assignedTeam || []).map((u: any) => <li key={u._id} className="flex justify-between"><Link to={`/team/${u._id}`} className="font-medium hover:text-primary-ink">{u.name}</Link><span className="text-ink-2">{roleLabel(u.role)}</span></li>)}{!c.assignedTeam?.length && <li className="text-ink-3">No team assigned.</li>}</ul></Card>
           </div>
@@ -101,6 +232,149 @@ export function ClientDetail() {
     )}</Async>
   );
 }
+function SocialCredentialsCard({ c, onEdit }: { c: any; onEdit: () => void }) {
+  const [showIg, setShowIg] = useState(false);
+  const [showFb, setShowFb] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const copy = (val: string, key: string, labelText: string) => {
+    if (!val) return;
+    navigator.clipboard.writeText(val);
+    setCopiedKey(key);
+    toast.success(`${labelText} copied to clipboard`);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  const hasAny = c.instagram || c.instagramPassword || c.facebook || c.facebookPassword;
+
+  return (
+    <Card
+      title={
+        <span className="flex items-center gap-2">
+          <KeyRound size={15} className="text-primary-ink" />
+          Social Credentials
+        </span>
+      }
+      action={
+        <button onClick={onEdit} className="text-meta font-semibold text-primary-ink hover:underline">
+          Edit
+        </button>
+      }
+    >
+      {!hasAny ? (
+        <div className="text-center py-2">
+          <p className="text-[13px] text-ink-3">No Instagram or Facebook credentials saved yet.</p>
+          <Button size="sm" variant="secondary" className="mt-2" onClick={onEdit}>
+            Add logins &amp; passwords
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-3 text-[13px]">
+          {/* Instagram */}
+          <div className="rounded-xl border border-line/60 bg-surface-2/40 p-3 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 font-bold text-ink">
+                <Instagram size={14} className="text-pink-500" />
+                Instagram
+              </span>
+              {c.instagram && (
+                <a
+                  href={`https://instagram.com/${c.instagram.replace(/^@/, '')}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="link text-meta flex items-center gap-0.5"
+                >
+                  Visit <ExternalLink size={11} />
+                </a>
+              )}
+            </div>
+            <div className="flex items-center justify-between text-meta">
+              <span className="text-ink-2">Username / ID:</span>
+              <span className="font-semibold text-ink font-mono">{c.instagram || '—'}</span>
+            </div>
+            <div className="flex items-center justify-between text-meta">
+              <span className="text-ink-2">Password:</span>
+              {c.instagramPassword ? (
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono font-semibold text-ink">
+                    {showIg ? c.instagramPassword : '••••••••••••'}
+                  </span>
+                  <button
+                    onClick={() => setShowIg((v) => !v)}
+                    className="rounded p-1 text-ink-3 hover:text-ink hover:bg-surface-3 transition-colors"
+                    title={showIg ? 'Hide password' : 'Show password'}
+                  >
+                    {showIg ? <EyeOff size={13} /> : <Eye size={13} />}
+                  </button>
+                  <button
+                    onClick={() => copy(c.instagramPassword, 'ig', 'Instagram password')}
+                    className="rounded p-1 text-ink-3 hover:text-primary-ink hover:bg-surface-3 transition-colors"
+                    title="Copy password"
+                  >
+                    {copiedKey === 'ig' ? <Check size={13} className="text-success" /> : <Copy size={13} />}
+                  </button>
+                </div>
+              ) : (
+                <span className="text-ink-3">Not set</span>
+              )}
+            </div>
+          </div>
+
+          {/* Facebook */}
+          <div className="rounded-xl border border-line/60 bg-surface-2/40 p-3 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 font-bold text-ink">
+                <Facebook size={14} className="text-blue-500" />
+                Facebook
+              </span>
+              {c.facebook && (
+                <a
+                  href={c.facebook.startsWith('http') ? c.facebook : `https://facebook.com/${c.facebook}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="link text-meta flex items-center gap-0.5"
+                >
+                  Visit <ExternalLink size={11} />
+                </a>
+              )}
+            </div>
+            <div className="flex items-center justify-between text-meta">
+              <span className="text-ink-2">Page / ID:</span>
+              <span className="font-semibold text-ink font-mono">{c.facebook || '—'}</span>
+            </div>
+            <div className="flex items-center justify-between text-meta">
+              <span className="text-ink-2">Password:</span>
+              {c.facebookPassword ? (
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono font-semibold text-ink">
+                    {showFb ? c.facebookPassword : '••••••••••••'}
+                  </span>
+                  <button
+                    onClick={() => setShowFb((v) => !v)}
+                    className="rounded p-1 text-ink-3 hover:text-ink hover:bg-surface-3 transition-colors"
+                    title={showFb ? 'Hide password' : 'Show password'}
+                  >
+                    {showFb ? <EyeOff size={13} /> : <Eye size={13} />}
+                  </button>
+                  <button
+                    onClick={() => copy(c.facebookPassword, 'fb', 'Facebook password')}
+                    className="rounded p-1 text-ink-3 hover:text-primary-ink hover:bg-surface-3 transition-colors"
+                    title="Copy password"
+                  >
+                    {copiedKey === 'fb' ? <Check size={13} className="text-success" /> : <Copy size={13} />}
+                  </button>
+                </div>
+              ) : (
+                <span className="text-ink-3">Not set</span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function Campaigns({ clientId }: { clientId: string }) {
   const qc = useQueryClient(); const can = useCan(); const q = useQuery({ queryKey: ['clients', 'campaigns', clientId], queryFn: () => get<any[]>(`/clients/${clientId}/campaigns`) }); const [open, setOpen] = useState(false); const [v, setV] = useState({ name: '', description: '', startDate: '', endDate: '' });
   const m = useMutation({ mutationFn: () => post(`/clients/${clientId}/campaigns`, { ...v, startDate: v.startDate || null, endDate: v.endDate || null }), onSuccess: () => { toast.success('Campaign created.'); setOpen(false); setV({ name: '', description: '', startDate: '', endDate: '' }); qc.invalidateQueries({ queryKey: ['clients', 'campaigns', clientId] }); }, onError: (e) => toast.error(errMsg(e)) });

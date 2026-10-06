@@ -186,13 +186,26 @@ export function ShootingTab({ d }: { d: any }) {
   const inv = useInv(); const a = useMediaActions(); const c = d.content; const s = d.shoot;
   const reached = d.stages.indexOf(c.stage) >= d.stages.indexOf('SHOOTING');
   const [v, setV] = useState<any>({});
-  useEffect(() => { setV({ shootDate: s?.shootDate ? toLocalInput(s.shootDate).slice(0, 10) : '', shootTime: s?.shootTime || '', location: s?.location || '', talent: s?.talent || '', product: s?.product || '', props: s?.props || '', shotList: s?.shotList || '', instructions: s?.instructions || '' }); }, [s?._id, s?.updatedAt]);
+  useEffect(() => {
+    setV({
+      shootDate: s?.shootDate ? toLocalInput(s.shootDate).slice(0, 10) : '',
+      shootTime: s?.shootTime || '',
+      location: s?.location || '',
+      talent: s?.talent || '',
+      product: s?.product || '',
+      props: s?.props || '',
+      shotList: s?.shotList || '',
+      instructions: s?.instructions || '',
+      beforeShootRemarks: s?.beforeShootRemarks || '',
+      afterShootRemarks: s?.afterShootRemarks || '',
+    });
+  }, [s?._id, s?.updatedAt]);
   const save = useMutation({ mutationFn: (b: any) => patch(`/content/${c._id}/shoot`, b), onSuccess: () => { inv(); }, onError: err });
   const raws = d.media.filter((m: any) => m.category === 'RAW');
   if (!reached) return <Card><Empty icon={<CameraIcon size={22} />} title="Shooting starts after the script is approved" hint="A shooting task is created automatically when the client approves the script." /></Card>;
   const set = (k: string) => (e: any) => setV((x: any) => ({ ...x, [k]: e.target.value }));
   return (
-    <div className="grid gap-5 lg:grid-cols-[1fr_300px]">
+    <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
       <div className="space-y-5">
         <Card title={<span className="flex items-center gap-2">Shoot plan<Badge status={s?.status || 'PENDING'} /></span>} action={<Button size="sm" variant="primary" loading={save.isPending} onClick={() => save.mutate({ ...v, shootDate: v.shootDate ? new Date(v.shootDate).toISOString() : null }, { onSuccess: () => toast.success('Shoot details saved.') })}>Save</Button>}>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -202,6 +215,14 @@ export function ShootingTab({ d }: { d: any }) {
             <div className="sm:col-span-2"><Field label="Props"><Input value={v.props || ''} onChange={set('props')} /></Field></div>
             <div className="sm:col-span-2"><Field label="Shot list"><Textarea rows={4} value={v.shotList || ''} onChange={set('shotList')} /></Field></div>
             <div className="sm:col-span-2"><Field label="Instructions"><Textarea value={v.instructions || ''} onChange={set('instructions')} /></Field></div>
+            <div className="sm:col-span-2 rounded-xl border border-line/60 bg-surface-2/40 p-3 space-y-3">
+              <Field label="⚡ Before-Shoot Remarks (Pre-Shoot Notes)" hint="Prep requirements, doubts, or notes before heading to shoot">
+                <Textarea rows={2} value={v.beforeShootRemarks || ''} onChange={set('beforeShootRemarks')} placeholder="e.g. Ensure gimbal battery charged, client wants 9:16 vertical only..." />
+              </Field>
+              <Field label="🎬 After-Shoot Remarks (Post-Shoot Summary)" hint="What was covered, lighting/audio notes, retake requirements">
+                <Textarea rows={2} value={v.afterShootRemarks || ''} onChange={set('afterShootRemarks')} placeholder="e.g. Completed 4 scenes, lighting was good, client was happy..." />
+              </Field>
+            </div>
           </div>
         </Card>
         <Card title="Raw footage" action={<UploadButton label="Upload raw video" category="RAW" contentId={c._id} accept="video/*" camera icon={<Film size={15} />} />}>
@@ -223,48 +244,122 @@ export function ShootingTab({ d }: { d: any }) {
   );
 }
 
-/** Shooter remark / complaint box — visible in the shooting tab's right column */
+/** Shooter remark / complaint box with BEFORE & AFTER shoot separation */
 function ShooterRemarkBox({ contentId, shoot, onSaved }: { contentId: string; shoot: any; onSaved: () => void }) {
+  const [stage, setStage] = useState<'BEFORE' | 'AFTER'>('BEFORE');
   const [text, setText] = useState('');
   const save = useMutation({
-    mutationFn: () => post(`/content/${contentId}/shoot/remark`, { text: text.trim() }),
-    onSuccess: () => { toast.success('Remark added.'); setText(''); onSaved(); },
+    mutationFn: () => post(`/content/${contentId}/shoot/remark`, { text: text.trim(), stage }),
+    onSuccess: () => {
+      toast.success(`${stage === 'BEFORE' ? 'Pre-shoot' : 'Post-shoot'} remark recorded.`);
+      setText('');
+      onSaved();
+    },
     onError: err,
   });
   const remarks: any[] = shoot?.remarks || [];
+  const beforeList = remarks.filter((r: any) => r.stage !== 'AFTER');
+  const afterList = remarks.filter((r: any) => r.stage === 'AFTER');
+  const activeList = stage === 'BEFORE' ? beforeList : afterList;
+
   return (
-    <Card title="Shooter Remarks / Complaints">
-      <div className="space-y-3">
-        {remarks.length > 0 ? (
-          <ul className="space-y-2">
-            {[...remarks].reverse().map((r: any) => (
+    <Card
+      title={
+        <span className="flex items-center gap-2">
+          Shooter Remarks
+          {remarks.length > 0 && <span className="rounded-full bg-surface-3 px-2 py-0.5 text-meta font-bold tabular">{remarks.length}</span>}
+        </span>
+      }
+      pad={false}
+    >
+      {/* Before / After Shoot Switcher Tabs */}
+      <div className="flex border-b border-line/60 bg-surface-2/30 p-1.5 gap-1.5">
+        <button
+          type="button"
+          onClick={() => setStage('BEFORE')}
+          className={clsx(
+            'flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-[12.5px] font-bold transition-all duration-150',
+            stage === 'BEFORE'
+              ? 'bg-surface text-primary-ink shadow-xs ring-1 ring-line/70'
+              : 'text-ink-2 hover:text-ink'
+          )}
+        >
+          <span>⚡ Before Shoot</span>
+          {beforeList.length > 0 && (
+            <span className={clsx('rounded-full px-1.5 text-[10.5px] font-bold', stage === 'BEFORE' ? 'bg-primary-soft text-primary-ink' : 'bg-surface-3 text-ink-2')}>
+              {beforeList.length}
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={() => setStage('AFTER')}
+          className={clsx(
+            'flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-[12.5px] font-bold transition-all duration-150',
+            stage === 'AFTER'
+              ? 'bg-surface text-emerald-600 dark:text-emerald-400 shadow-xs ring-1 ring-line/70'
+              : 'text-ink-2 hover:text-ink'
+          )}
+        >
+          <span>🎬 After Shoot</span>
+          {afterList.length > 0 && (
+            <span className={clsx('rounded-full px-1.5 text-[10.5px] font-bold', stage === 'AFTER' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-surface-3 text-ink-2')}>
+              {afterList.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      <div className="p-4 space-y-3.5">
+        {/* Remarks List for current phase */}
+        {activeList.length > 0 ? (
+          <ul className="space-y-2 max-h-64 overflow-y-auto pr-0.5">
+            {[...activeList].reverse().map((r: any) => (
               <li key={r._id} className="rounded-xl border border-line/60 bg-surface-2/50 px-3.5 py-2.5 text-[13px]">
-                <div className="font-medium text-ink">{r.text}</div>
-                <div className="mt-1 text-meta font-semibold text-ink-3">{r.byName} · {ago(r.at)}</div>
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <span className={clsx(
+                    'rounded px-1.5 py-0.5 text-[10px] font-extrabold tracking-wide uppercase',
+                    r.stage === 'AFTER'
+                      ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300'
+                      : 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-300'
+                  )}>
+                    {r.stage === 'AFTER' ? 'After Shoot' : 'Before Shoot'}
+                  </span>
+                  <span className="text-meta font-medium text-ink-3 tabular">{ago(r.at)}</span>
+                </div>
+                <div className="font-medium text-ink whitespace-pre-wrap">{r.text}</div>
+                <div className="mt-1 text-meta font-semibold text-ink-3">By {r.byName}</div>
               </li>
             ))}
           </ul>
         ) : (
-          <p className="text-meta text-ink-3">No remarks yet.</p>
+          <div className="rounded-xl border border-dashed border-line/80 p-3.5 text-center text-meta text-ink-3">
+            No {stage === 'BEFORE' ? 'before-shoot' : 'after-shoot'} remarks recorded yet.
+          </div>
         )}
-        <div className="border-t border-line/50 pt-3">
-          <Field label="Add a remark or complaint" hint="Visible to the manager and all team members.">
+
+        {/* Input form */}
+        <div className="border-t border-line/50 pt-3 space-y-2">
+          <Field
+            label={`Add ${stage === 'BEFORE' ? 'Before-Shoot' : 'After-Shoot'} Remark`}
+            hint={stage === 'BEFORE' ? 'Pre-shoot issues, prep notes, or doubts.' : 'Post-shoot feedback, footage details, or complaints.'}
+          >
             <Textarea
-              rows={3}
+              rows={2}
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder="Describe any issue, concern, or note about this shoot..."
+              placeholder={stage === 'BEFORE' ? 'e.g. Client requested extra lighting, props to be brought by team...' : 'e.g. Completed 4 reels, client arrived 30 mins late, battery died once...'}
             />
           </Field>
           <Button
             variant="primary"
             size="sm"
-            className="mt-2"
+            className="w-full"
             loading={save.isPending}
             disabled={!text.trim()}
             onClick={() => save.mutate()}
           >
-            Submit remark
+            Submit {stage === 'BEFORE' ? 'Before-Shoot' : 'After-Shoot'} Remark
           </Button>
         </div>
       </div>

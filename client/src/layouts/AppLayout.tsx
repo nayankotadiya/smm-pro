@@ -152,23 +152,23 @@ export default function AppLayout() {
         {/* Content Area */}
         <div className="flex min-w-0 flex-1 flex-col">
           {/* iOS 27 Liquid Glass Header */}
-          <header className="header-safe sticky top-0 z-30 flex shrink-0 items-center gap-3 bg-surface/80 px-4 backdrop-blur-2xl backdrop-saturate-150 sm:px-6" style={{ borderBottom: '1px solid rgb(var(--line) / 0.5)', boxShadow: '0 1px 0 0 rgb(var(--line) / 0.3)' }}>
+          <header className="header-safe sticky top-0 z-30 flex shrink-0 items-center gap-2 sm:gap-3 bg-surface/80 px-3 sm:px-6 backdrop-blur-2xl backdrop-saturate-150" style={{ borderBottom: '1px solid rgb(var(--line) / 0.5)', boxShadow: '0 1px 0 0 rgb(var(--line) / 0.3)' }}>
             <button className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-ink-2 transition-all duration-150 hover:bg-surface-3 hover:text-ink active:scale-90 lg:hidden" aria-label="Open menu" onClick={() => setSidebar(true)}>
               <Menu size={20} />
             </button>
             <GlobalSearch />
-            <div className="ml-auto flex items-center gap-1.5">
+            <div className="ml-auto flex items-center gap-1 sm:gap-1.5 shrink-0">
               <ThemeToggle />
               <NotificationBell />
               <UserMenu />
             </div>
           </header>
 
-          <main className={clsx('min-h-0 flex-1', isChat ? 'overflow-hidden' : 'overflow-y-auto')}>
+          <main className={clsx('min-h-0 flex-1 overflow-x-hidden', isChat ? 'overflow-hidden' : 'overflow-y-auto')}>
             {isChat ? (
               <div className="h-full animate-fade-in"><Outlet /></div>
             ) : (
-              <div key={pageKey} className="mx-auto w-full max-w-[1440px] animate-page px-4 py-5 pb-24 sm:px-6 sm:py-6 sm:pb-10">
+              <div key={pageKey} className="mx-auto w-full max-w-[1440px] min-w-0 animate-page px-3 sm:px-6 py-3.5 sm:py-6 pb-24 sm:pb-10">
                 <DeviceNotificationBanner />
                 <Outlet />
               </div>

@@ -144,7 +144,7 @@ r.post('/:id/stage', requirePerm('content.assign'), ah(async (req, res) => {
 // ----- Shooting -----
 r.patch('/:id/shoot', ah(async (req, res) => {
   const c: any = await getVisibleContent(req.user!, req.params.id);
-  const b = z.object({ shootDate: z.coerce.date().optional().nullable(), shootTime: z.string().max(20).optional().nullable(), location: z.string().max(300).optional().nullable(), talent: z.string().max(500).optional().nullable(), product: z.string().max(500).optional().nullable(), props: z.string().max(1000).optional().nullable(), shotList: z.string().max(5000).optional().nullable(), instructions: z.string().max(5000).optional().nullable(), status: z.enum(['PENDING', 'SCHEDULED', 'IN_PROGRESS', 'RAW_UPLOADED', 'COMPLETED']).optional(), checklist: z.record(z.boolean()).optional(), shooterId: oid }).parse(req.body);
+  const b = z.object({ shootDate: z.coerce.date().optional().nullable(), shootTime: z.string().max(20).optional().nullable(), location: z.string().max(300).optional().nullable(), talent: z.string().max(500).optional().nullable(), product: z.string().max(500).optional().nullable(), props: z.string().max(1000).optional().nullable(), shotList: z.string().max(5000).optional().nullable(), instructions: z.string().max(5000).optional().nullable(), beforeShootRemarks: z.string().max(5000).optional().nullable(), afterShootRemarks: z.string().max(5000).optional().nullable(), status: z.enum(['PENDING', 'SCHEDULED', 'IN_PROGRESS', 'RAW_UPLOADED', 'COMPLETED']).optional(), checklist: z.record(z.boolean()).optional(), shooterId: oid }).parse(req.body);
   let s: any = await Shoot.findOne({ contentId: c._id });
   if (!s) s = new Shoot({ contentId: c._id, clientId: c.clientId, shooterId: c.assignedShooter });
   const { checklist, ...rest } = b;
@@ -158,16 +158,17 @@ r.patch('/:id/shoot', ah(async (req, res) => {
   await broadcastContent(c); res.json(s);
 }));
 
-/** Shooter adds a remark/complaint about this shoot */
+/** Shooter adds a remark/complaint about this shoot (Before / After shoot) */
 r.post('/:id/shoot/remark', ah(async (req, res) => {
   const c = await getVisibleContent(req.user!, req.params.id);
-  const { text } = z.object({ text: z.string().min(1).max(2000) }).parse(req.body);
+  const { text, stage } = z.object({ text: z.string().min(1).max(2000), stage: z.enum(['BEFORE', 'AFTER']).default('BEFORE').optional() }).parse(req.body);
   let s: any = await Shoot.findOne({ contentId: c._id });
   if (!s) s = new Shoot({ contentId: c._id, clientId: c.clientId, shooterId: c.assignedShooter });
   if (!s.remarks) s.remarks = [];
-  s.remarks.push({ text, by: req.user!._id, byName: req.user!.name, at: new Date() });
+  const remarkStage = stage || 'BEFORE';
+  s.remarks.push({ text, by: req.user!._id, byName: req.user!.name, stage: remarkStage, at: new Date() });
   await s.save();
-  await logActivity({ actorId: req.user!._id, action: 'shoot.remark', message: `${req.user!.name} added a remark on ${c.contentId}: ${text.slice(0, 80)}`, entityType: 'shoot', entityId: s._id, contentId: c._id, clientId: c.clientId });
+  await logActivity({ actorId: req.user!._id, action: 'shoot.remark', message: `${req.user!.name} added ${remarkStage === 'BEFORE' ? 'pre-shoot' : 'post-shoot'} remark on ${c.contentId}: ${text.slice(0, 80)}`, entityType: 'shoot', entityId: s._id, contentId: c._id, clientId: c.clientId });
   res.json(s);
 }));
 
