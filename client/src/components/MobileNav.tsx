@@ -7,14 +7,14 @@ import { useUI } from '@/store/ui';
 
 export function MobileBottomNav() {
   const loc = useLocation();
-  const { setSidebar } = useUI();
+  const { setSidebar, sidebar } = useUI();
   const unread = useQuery({ queryKey: ['chat-unread'], queryFn: () => get('/chat/unread-count') });
   const appr = useQuery({ queryKey: ['approvals', 'counts'], queryFn: () => get('/approvals/counts') });
   const pendingApprovals = appr.data?.mine || 0;
 
-  // Hide bottom bar when inside a specific chat room on mobile so input isn't crowded
+  // Hide bottom bar when inside a specific chat room or when sidebar is open on mobile
   const isInsideChatRoom = loc.pathname.startsWith('/chat/') && loc.pathname !== '/chat';
-  if (isInsideChatRoom) return null;
+  if (isInsideChatRoom || sidebar) return null;
 
   const items = [
     { to: '/', label: 'Home', icon: LayoutDashboard },
@@ -26,7 +26,7 @@ export function MobileBottomNav() {
   return (
     <nav
       aria-label="Mobile Navigation"
-      className="fixed inset-x-0 bottom-0 z-40 flex items-center justify-around border-t border-line/70 bg-surface/92 px-2 py-1.5 backdrop-blur-2xl backdrop-saturate-150 safe-b lg:hidden shadow-[0_-4px_20px_rgba(0,0,0,0.08)] dark:shadow-[0_-4px_24px_rgba(0,0,0,0.4)]"
+      className="fixed inset-x-0 bottom-0 z-40 flex items-center justify-around border-t border-line/70 bg-surface/92 px-2 pt-1.5 pb-[max(0.6rem,calc(env(safe-area-inset-bottom)+0.25rem))] backdrop-blur-2xl backdrop-saturate-150 lg:hidden shadow-[0_-4px_20px_rgba(0,0,0,0.08)] dark:shadow-[0_-4px_24px_rgba(0,0,0,0.4)]"
     >
       {items.map((item) => (
         <NavLink

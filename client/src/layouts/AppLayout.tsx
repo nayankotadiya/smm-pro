@@ -59,13 +59,13 @@ export default function AppLayout() {
 
       <ConnectionBar />
 
-      <div className="relative z-10 flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1">
         {scrim && <div className={clsx('fixed inset-0 z-40 bg-overlay/50 backdrop-blur-[4px] lg:hidden', scrimClosing ? 'animate-fade-out' : 'animate-fade-in')} onClick={() => setSidebar(false)} />}
         
         {/* Premium Dark Agency Sidebar */}
         <aside
           className={clsx(
-            'fixed inset-y-0 left-0 z-50 flex w-64 flex-col transition-transform duration-300 ease-out safe-t lg:static lg:z-auto lg:w-56 lg:translate-x-0 xl:w-60',
+            'fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col transition-transform duration-300 ease-out safe-t safe-b lg:static lg:z-auto lg:w-56 lg:max-w-none lg:translate-x-0 xl:w-60',
             sidebar ? 'translate-x-0 shadow-pop lg:shadow-none' : '-translate-x-full'
           )}
           style={{ background: 'rgb(var(--sidebar-bg))', borderRight: '1px solid rgb(var(--sidebar-line))' }}
@@ -85,7 +85,7 @@ export default function AppLayout() {
             </button>
           </div>
 
-          <nav className="flex-1 space-y-0.5 overflow-y-auto px-2.5 py-3" aria-label="Main">
+          <nav className="flex-1 space-y-0.5 overflow-y-auto px-2.5 py-3 pb-8" aria-label="Main">
             {nav.filter((n) => n.show !== false).map((n) => (
               <div key={n.to}>
                 {n.section && (
@@ -139,7 +139,7 @@ export default function AppLayout() {
           </nav>
 
           {/* Sidebar footer */}
-          <div className="px-3 pb-4" style={{ borderTop: '1px solid rgb(var(--sidebar-line))' }}>
+          <div className="px-3 pb-6 safe-b" style={{ borderTop: '1px solid rgb(var(--sidebar-line))' }}>
             <div className="pt-3 text-[11px]" style={{ color: 'rgb(var(--sidebar-text))' }}>
               <div className="flex items-center gap-1.5 px-2">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_#34d399] animate-pulse" />
