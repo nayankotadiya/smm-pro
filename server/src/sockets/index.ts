@@ -17,6 +17,9 @@ async function upsertPresence(userId: string, patch: any) {
 async function setPresence(userId: string, patch: any, io: Server) {
   const p = await upsertPresence(userId, patch);
   const status = p!.socketIds.length === 0 ? 'OFFLINE' : p!.manualStatus === 'DND' ? 'DND' : p!.lastActive && Date.now() - p!.lastActive.getTime() > AWAY_AFTER_MS ? 'AWAY' : 'ONLINE';
+  if (status === 'OFFLINE' && !p!.lastSeen) {
+    p!.lastSeen = p!.lastActive || new Date();
+  }
   if (status !== p!.status) { p!.status = status as any; await p!.save(); }
   const evt = status === 'OFFLINE' ? 'user_offline' : status === 'AWAY' ? 'user_away' : 'user_online';
   io.to('org').emit(evt, { userId, status, lastSeen: p!.lastSeen, lastActive: p!.lastActive, currentActivity: p!.currentActivity });
@@ -57,16 +60,47 @@ export function initSockets(server: HttpServer) {
       ack?.(ok);
     });
     on('chat:leave', (roomId: string) => socket.leave(`chat:${roomId}`));
-    on('message:typing', (d: { roomId: string; typing: boolean }) => { if (socket.rooms.has(`chat:${d.roomId}`)) socket.to(`chat:${d.roomId}`).emit('message:typing', { roomId: d.roomId, userId: uid, name: user.name, typing: !!d.typing }); });
+    on('message:typing', async (d: { roomId: string; typing: boolean }) => {
+      if (!d?.roomId) return;
+      const rm = await ChatRoom.findById(d.roomId).select('participants').lean();
+      if (rm?.participants && rm.participants.map(String).includes(String(uid))) {
+        socket.to(`chat:${d.roomId}`).emit('message:typing', { roomId: d.roomId, userId: uid, name: user.name, typing: !!d.typing });
+        for (const p of rm.participants) {
+          if (String(p) !== String(uid)) {
+            io.to(`user:${p}`).emit('message:typing', { roomId: d.roomId, userId: uid, name: user.name, typing: !!d.typing });
+          }
+        }
+      }
+    });
     on('message:delivered', async (d: { roomId: string }) => {
-      if (!socket.rooms.has(`chat:${d.roomId}`) && !(await ChatRoom.exists({ _id: d.roomId, participants: uid }))) return;
+      if (!socket.rooms.has(`chat:${d.roomId}`)) {
+        const ok = !!(await ChatRoom.exists({ _id: d.roomId, participants: uid }));
+        if (ok) socket.join(`chat:${d.roomId}`);
+        else return;
+      }
       await Message.updateMany({ roomId: d.roomId, senderId: { $ne: uid }, deliveredTo: { $ne: uid } }, { $addToSet: { deliveredTo: uid } });
       io.to(`chat:${d.roomId}`).emit('message:delivered', { roomId: d.roomId, userId: uid });
+      const rm = await ChatRoom.findById(d.roomId).select('participants').lean();
+      if (rm?.participants) {
+        for (const p of rm.participants) {
+          if (String(p) !== String(uid)) io.to(`user:${p}`).emit('message:delivered', { roomId: d.roomId, userId: uid });
+        }
+      }
     });
     on('message:read', async (d: { roomId: string }) => {
-      if (!socket.rooms.has(`chat:${d.roomId}`)) return;
+      if (!socket.rooms.has(`chat:${d.roomId}`)) {
+        const ok = !!(await ChatRoom.exists({ _id: d.roomId, participants: uid }));
+        if (ok) socket.join(`chat:${d.roomId}`);
+        else return;
+      }
       await Message.updateMany({ roomId: d.roomId, readBy: { $ne: uid } }, { $addToSet: { readBy: uid, deliveredTo: uid } });
       io.to(`chat:${d.roomId}`).emit('message:read', { roomId: d.roomId, userId: uid });
+      const rm = await ChatRoom.findById(d.roomId).select('participants').lean();
+      if (rm?.participants) {
+        for (const p of rm.participants) {
+          if (String(p) !== String(uid)) io.to(`user:${p}`).emit('message:read', { roomId: d.roomId, userId: uid });
+        }
+      }
       io.to(`user:${uid}`).emit('chat:unread_changed', { roomId: d.roomId });
     });
     on('content:watch', async (contentId: string) => {

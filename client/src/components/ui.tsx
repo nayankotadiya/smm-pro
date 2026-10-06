@@ -2,7 +2,7 @@ import { ReactNode, ButtonHTMLAttributes, useEffect, useLayoutEffect, useRef, us
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { Loader2, X, AlertCircle, Inbox, RotateCw } from 'lucide-react';
-import { label as toLabel, tone, initials } from '@/lib/format';
+import { label as toLabel, tone, initials, ago, formatLastSeen } from '@/lib/format';
 import { useUI } from '@/store/ui';
 import { usePresence, useCountUp } from '@/hooks/useMotion';
 
@@ -155,10 +155,12 @@ export function Avatar({ name, size = 30 }: { name?: string; size?: number }) {
 }
 
 export function PresenceDot({ userId, className }: { userId?: string; className?: string }) {
-  const p = useUI((s) => (userId ? s.presence[userId]?.status : undefined)) || 'OFFLINE';
+  const pres = useUI((s) => (userId ? s.presence[userId] : undefined));
+  const p = pres?.status || 'OFFLINE';
   const c = p === 'ONLINE' ? 'bg-success shadow-[0_0_6px_#34d399]' : p === 'AWAY' ? 'bg-warning shadow-[0_0_6px_#fb923c]' : p === 'DND' ? 'bg-danger shadow-[0_0_6px_#f43f5e]' : 'bg-line-strong';
+  const tip = p === 'ONLINE' ? 'Online' : p === 'AWAY' ? `Away${pres?.lastActive ? ` · active ${ago(pres.lastActive)}` : ''}` : p === 'DND' ? 'Do Not Disturb' : (pres?.lastSeen || pres?.lastActive ? formatLastSeen(pres.lastSeen || pres.lastActive) : 'Offline');
   return (
-    <span title={toLabel(p)} className={clsx('inline-flex h-2 w-2', !className?.includes('absolute') && 'relative', className)}>
+    <span title={tip} className={clsx('inline-flex h-2 w-2', !className?.includes('absolute') && 'relative', className)}>
       {p === 'ONLINE' && <span className="absolute inset-0 animate-ping rounded-full bg-success opacity-75" />}
       <span className={clsx('relative inline-block h-2 w-2 rounded-full ring-2 ring-surface transition-colors duration-300', c)} />
     </span>

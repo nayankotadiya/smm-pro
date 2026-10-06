@@ -5,7 +5,7 @@ import clsx from 'clsx';
 import { ArrowLeft, Plus, Users, Clapperboard, Building2, Search, MessageSquarePlus, MoreVertical, CheckCheck, Check, ExternalLink } from 'lucide-react';
 import { get, post, errMsg } from '@/lib/api';
 import { useAuth, useCan } from '@/store/auth';
-import { toast } from '@/store/ui';
+import { toast, useUI } from '@/store/ui';
 import { Avatar, Button, Empty, Field, Input, Modal, PresenceDot, Spinner, IconButton } from '@/components/ui';
 import { ChatThread, roomTitle, RoomSub } from '@/features/ChatThread';
 import { useTeam } from '@/hooks/useData';
@@ -19,6 +19,7 @@ export default function Chat() {
   const [open, setOpen] = useState(false);
   const [f, setF] = useState('');
 
+  const typing = useUI((s) => s.typing);
   const rooms = useQuery({ queryKey: ['chat-rooms'], queryFn: () => get<any[]>('/chat/rooms') });
   const list = useMemo(() => (rooms.data || []).filter((r) => (tab === 'ALL' || r.type === tab) && (!f || roomTitle(r, me._id).toLowerCase().includes(f.toLowerCase()))), [rooms.data, tab, f, me._id]);
   const cur = (rooms.data || []).find((r) => r._id === roomId);
@@ -91,9 +92,13 @@ export default function Chat() {
             <Empty title="No conversations" hint="Start a direct chat, or open a content item to use its chat." />
           ) : (
             list.map((r) => {
-              const other = r.type === 'DIRECT' ? r.participants?.find((p: any) => p._id !== me._id) : null;
+              const other = r.type === 'DIRECT' ? r.participants?.find((p: any) => String(p?._id || p) !== me._id) : null;
+              const otherId = String(other?._id || other || '');
               const active = r._id === roomId;
               const hasUnread = r.unread > 0;
+              const typingInRoom = Object.values(typing || {}).find(
+                (t) => t.roomId === r._id && t.userId !== me._id
+              );
               return (
                 <button
                   key={r._id}
@@ -114,8 +119,8 @@ export default function Chat() {
                   <div className="relative shrink-0">
                     {other ? (
                       <>
-                        <Avatar name={other.name} size={48} />
-                        <PresenceDot userId={other._id} className="absolute -bottom-0.5 -right-0.5 ring-2 ring-white dark:ring-[#111b21]" />
+                        <Avatar name={other.name || 'User'} size={48} />
+                        <PresenceDot userId={otherId} className="absolute -bottom-0.5 -right-0.5 ring-2 ring-white dark:ring-[#111b21]" />
                       </>
                     ) : r.type === 'CONTENT' ? (
                       <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-tr from-emerald-500 to-teal-600 text-white shadow-sm">
@@ -143,9 +148,15 @@ export default function Chat() {
                       </span>
                     </div>
                     <div className="mt-0.5 flex items-center justify-between gap-2">
-                      <span className={clsx('truncate text-[13.5px]', hasUnread ? 'font-medium text-[#111b21] dark:text-[#e9edef]' : 'text-[#667781] dark:text-[#8696a0]')}>
-                        {r.lastMessagePreview || 'No messages yet'}
-                      </span>
+                      {typingInRoom ? (
+                        <span className="inline-flex items-center gap-1.5 text-[13.5px] font-semibold text-[#00a884] dark:text-[#25d366] animate-pulse">
+                          <span>{r.type === 'DIRECT' ? 'typing...' : `${typingInRoom.name.split(' ')[0]} is typing...`}</span>
+                        </span>
+                      ) : (
+                        <span className={clsx('truncate text-[13.5px]', hasUnread ? 'font-medium text-[#111b21] dark:text-[#e9edef]' : 'text-[#667781] dark:text-[#8696a0]')}>
+                          {r.lastMessagePreview || 'No messages yet'}
+                        </span>
+                      )}
                       {hasUnread && (
                         <span className="shrink-0 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#25d366] px-1.5 text-[11px] font-bold text-white tabular shadow-xs">
                           {r.unread}

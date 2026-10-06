@@ -16,7 +16,7 @@ import { useUI, toast } from '@/store/ui';
 import { Avatar, Button, Empty, IconButton, Spinner, Input } from '@/components/ui';
 import { useMediaActions } from '@/components/Media';
 import { ReminderFormModal } from '@/components/Forms';
-import { fmtDate, fmtTime, roleLabel } from '@/lib/format';
+import { fmtDate, fmtTime, roleLabel, ago, formatLastSeen } from '@/lib/format';
 import { startUpload } from '@/lib/upload';
 import { mediaLinks } from '@/lib/upload';
 import { useTeam } from '@/hooks/useData';
@@ -773,18 +773,25 @@ export function ChatThread({ roomId, embedded }: { roomId: string; embedded?: bo
   });
   const room = q.data?.room;
 
+  const markRead = useCallback(() => {
+    if (document.visibilityState === 'visible') getSocket()?.emit('message:read', { roomId });
+  }, [roomId]);
+
   useEffect(() => {
     if (q.data) {
       setMsgs(q.data.messages);
       setPinned(q.data.pinned || []);
       setHasMore(q.data.messages.length >= 50 && !search);
       atBottom.current = true;
+      markRead();
     }
-  }, [q.data, search]);
+  }, [q.data, search, markRead]);
 
-  const markRead = useCallback(() => {
-    if (document.visibilityState === 'visible') getSocket()?.emit('message:read', { roomId });
-  }, [roomId]);
+  useEffect(() => {
+    const onFocus = () => markRead();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [markRead]);
 
   useEffect(() => {
     const s = getSocket(); if (!s) return;
@@ -804,10 +811,31 @@ export function ChatThread({ roomId, embedded }: { roomId: string; embedded?: bo
       if (d.typing) setTimeout(() => setTyping((t) => { const n = { ...t }; delete n[d.userId]; return n; }), 4000);
     };
     const onRead = (d: any) => {
-      if (d.roomId === roomId) setMsgs((cur) => cur.map((m) => (m.readBy?.includes(d.userId) ? m : { ...m, readBy: [...(m.readBy || []), d.userId], deliveredTo: [...new Set([...(m.deliveredTo || []), d.userId])] })));
+      if (d.roomId === roomId) {
+        setMsgs((cur) => cur.map((m) => {
+          const readIds = (m.readBy || []).map((x: any) => String(x?._id || x));
+          const uStr = String(d.userId);
+          if (readIds.includes(uStr)) return m;
+          return {
+            ...m,
+            readBy: [...(m.readBy || []), d.userId],
+            deliveredTo: [...new Set([...(m.deliveredTo || []), d.userId])],
+          };
+        }));
+      }
     };
     const onDelivered = (d: any) => {
-      if (d.roomId === roomId) setMsgs((cur) => cur.map((m) => (m.deliveredTo?.includes(d.userId) ? m : { ...m, deliveredTo: [...(m.deliveredTo || []), d.userId] })));
+      if (d.roomId === roomId) {
+        setMsgs((cur) => cur.map((m) => {
+          const delivIds = (m.deliveredTo || []).map((x: any) => String(x?._id || x));
+          const uStr = String(d.userId);
+          if (delivIds.includes(uStr)) return m;
+          return {
+            ...m,
+            deliveredTo: [...(m.deliveredTo || []), d.userId],
+          };
+        }));
+      }
     };
     const onReaction = (d: any) => {
       if (d.roomId === roomId) setMsgs((cur) => cur.map((m) => (m._id === d.messageId ? { ...m, reactions: d.reactions } : m)));
@@ -1029,17 +1057,45 @@ export function ChatThread({ roomId, embedded }: { roomId: string; embedded?: bo
   const pin = (m: any) => post(`/chat/message/${m._id}/pin`).catch((e) => toast.error(errMsg(e)));
   const remove = (m: any) => del(`/chat/message/${m._id}`).catch((e) => toast.error(errMsg(e)));
 
-  const others = useMemo(() => (room?.participants || []).filter((p: any) => p._id !== me._id), [room, me._id]);
+  const others = useMemo(() => (room?.participants || []).filter((p: any) => String(p?._id || p) !== me._id), [room, me._id]);
   const stateOf = (m: any) => {
     if (m.failed) return 'Not sent';
     if (m.sending) return 'Sending';
-    const o = others.map((p: any) => p._id);
+    const readIds = (m.readBy || []).map((x: any) => String(x?._id || x));
+    const delivIds = (m.deliveredTo || []).map((x: any) => String(x?._id || x));
+    const o = others.map((p: any) => String(p?._id || p));
     if (!o.length) return 'Sent';
-    if (o.every((id: string) => m.readBy?.includes(id))) return 'Read';
-    if (o.some((id: string) => m.deliveredTo?.includes(id) || m.readBy?.includes(id))) return 'Delivered';
+    if (o.every((id: string) => readIds.includes(id))) return 'Read';
+    if (o.some((id: string) => delivIds.includes(id) || readIds.includes(id))) return 'Delivered';
     return 'Sent';
   };
-  const typingNames = Object.values(typing);
+  const seenTitle = (m: any) => {
+    if (m.failed) return 'Failed to send';
+    if (m.sending) return 'Sending...';
+    const readIds = (m.readBy || []).map((x: any) => String(x?._id || x));
+    const delivIds = (m.deliveredTo || []).map((x: any) => String(x?._id || x));
+    const readOthers = others.filter((p: any) => readIds.includes(String(p?._id || p)));
+    if (readOthers.length > 0) {
+      if (room?.type === 'DIRECT') return 'Seen';
+      return `Seen by ${readOthers.map((p: any) => p.name || 'Member').join(', ')}`;
+    }
+    const delivOthers = others.filter((p: any) => delivIds.includes(String(p?._id || p)));
+    if (delivOthers.length > 0) {
+      if (room?.type === 'DIRECT') return 'Delivered';
+      return `Delivered to ${delivOthers.map((p: any) => p.name || 'Member').join(', ')}`;
+    }
+    return 'Sent';
+  };
+  const globalTyping = useUI((s) => s.typing);
+  const typingNames = useMemo(() => {
+    const fromGlobal = Object.values(globalTyping || {})
+      .filter((t) => t.roomId === roomId && t.userId !== me._id)
+      .map((t) => t.name);
+    const fromLocal = Object.entries(typing)
+      .filter(([uid]) => uid !== me._id)
+      .map(([, name]) => name);
+    return [...new Set([...fromGlobal, ...fromLocal])];
+  }, [globalTyping, typing, roomId, me._id]);
 
   const actionsQ = useQuery({
     queryKey: ['chat-actions', roomId],
@@ -1359,13 +1415,13 @@ export function ChatThread({ roomId, embedded }: { roomId: string; embedded?: bo
                           m.failed ? (
                             <span className="text-red-500 font-bold" title="Failed to send">!</span>
                           ) : stateOf(m) === 'Read' ? (
-                            <span title="Read"><CheckCheck size={15} className="text-[#53bdeb]" /></span>
+                            <span title={seenTitle(m)} className="cursor-help"><CheckCheck size={15} className="text-[#53bdeb]" /></span>
                           ) : stateOf(m) === 'Delivered' ? (
-                            <span title="Delivered"><CheckCheck size={15} className="text-[#667781] dark:text-[#ffffff]/65" /></span>
+                            <span title={seenTitle(m)} className="cursor-help"><CheckCheck size={15} className="text-[#667781] dark:text-[#ffffff]/65" /></span>
                           ) : stateOf(m) === 'Sending' ? (
-                            <span title="Sending"><Clock size={11} className="text-[#667781] dark:text-[#ffffff]/65" /></span>
+                            <span title="Sending..."><Clock size={11} className="text-[#667781] dark:text-[#ffffff]/65" /></span>
                           ) : (
-                            <span title="Sent"><Check size={15} className="text-[#667781] dark:text-[#ffffff]/65" /></span>
+                            <span title={seenTitle(m)} className="cursor-help"><Check size={15} className="text-[#667781] dark:text-[#ffffff]/65" /></span>
                           )
                         )}
                       </div>
@@ -1680,14 +1736,86 @@ function renderMentions(t: string, isMine = false, myName = '') {
 }
 
 export function roomTitle(r: any, meId: string) {
-  return r.type === 'DIRECT' ? r.participants?.find((p: any) => p._id !== meId)?.name || 'Direct chat' : r.name;
+  return r.type === 'DIRECT' ? r.participants?.find((p: any) => String(p?._id || p) !== meId)?.name || 'Direct chat' : r.name;
 }
 
 export function RoomSub({ r, meId }: { r: any; meId: string }) {
-  const other = r.type === 'DIRECT' ? r.participants?.find((p: any) => p._id !== meId) : null;
-  const st = useUI((s) => (other ? s.presence[other._id]?.status : undefined));
-  if (other) return <>{roleLabel(other.role)} · {st === 'ONLINE' ? 'Online' : st === 'AWAY' ? 'Away' : st === 'DND' ? 'Do Not Disturb' : 'Offline'}</>;
-  if (r.type === 'CONTENT' && r.contentId) return <Link to={`/content/${r.contentId._id}`} className="hover:text-primary-ink">Content chat · {r.contentId.contentId}</Link>;
-  if (r.type === 'CLIENT') return <>Internal client workspace · {r.participants?.length} members</>;
-  return <>Team chat · {r.participants?.length} members</>;
+  const globalTyping = useUI((s) => s.typing);
+  const presence = useUI((s) => s.presence);
+
+  // Check if anyone in this room is typing
+  const typingUser = Object.values(globalTyping || {}).find(
+    (t) => t.roomId === r._id && t.userId !== meId
+  );
+
+  if (typingUser) {
+    return (
+      <span className="inline-flex items-center gap-1.5 font-medium text-[#00a884] dark:text-[#25d366] animate-pulse">
+        <span>{r.type === 'DIRECT' ? 'typing' : `${typingUser.name.split(' ')[0]} is typing`}</span>
+        <span className="inline-flex items-center gap-[2px]">
+          <span className="h-1 w-1 rounded-full bg-[#00a884] dark:bg-[#25d366] animate-bounce" style={{ animationDelay: '0ms' }} />
+          <span className="h-1 w-1 rounded-full bg-[#00a884] dark:bg-[#25d366] animate-bounce" style={{ animationDelay: '150ms' }} />
+          <span className="h-1 w-1 rounded-full bg-[#00a884] dark:bg-[#25d366] animate-bounce" style={{ animationDelay: '300ms' }} />
+        </span>
+      </span>
+    );
+  }
+
+  const other = r.type === 'DIRECT' ? r.participants?.find((p: any) => String(p?._id || p) !== meId) : null;
+  if (other) {
+    const otherId = String(other._id || other);
+    const pres = presence[otherId];
+    const st = pres?.status;
+    if (st === 'ONLINE') {
+      return (
+        <span className="inline-flex items-center gap-1.5 text-[#00a884] dark:text-[#25d366] font-medium">
+          <span className="h-2 w-2 rounded-full bg-[#00a884] dark:bg-[#25d366] animate-pulse" />
+          online
+        </span>
+      );
+    }
+    if (st === 'AWAY') {
+      return (
+        <span className="inline-flex items-center gap-1.5 text-amber-500 font-medium">
+          <span className="h-2 w-2 rounded-full bg-amber-500" />
+          away{pres?.lastActive ? ` · active ${ago(pres.lastActive)}` : ''}
+        </span>
+      );
+    }
+    if (st === 'DND') {
+      return (
+        <span className="inline-flex items-center gap-1.5 text-rose-500 font-medium">
+          <span className="h-2 w-2 rounded-full bg-rose-500" />
+          do not disturb
+        </span>
+      );
+    }
+    return (
+      <span className="text-ink-2">
+        {formatLastSeen(pres?.lastSeen || pres?.lastActive)}
+      </span>
+    );
+  }
+
+  const onlineCount = (r.participants || []).filter((p: any) => {
+    const pId = String(p?._id || p);
+    return pId !== meId && presence[pId]?.status === 'ONLINE';
+  }).length;
+
+  const onlineSuffix = onlineCount > 0 ? ` · ${onlineCount} online` : '';
+
+  if (r.type === 'CONTENT' && r.contentId) {
+    return (
+      <span className="truncate">
+        <Link to={`/content/${r.contentId._id || r.contentId}`} className="hover:text-primary-ink font-medium">
+          Content chat · {r.contentId.contentId || ''}
+        </Link>
+        <span className="text-ink-3">{onlineSuffix}</span>
+      </span>
+    );
+  }
+  if (r.type === 'CLIENT') {
+    return <span>Client workspace · {r.participants?.length || 0} members{onlineSuffix}</span>;
+  }
+  return <span>Team chat · {r.participants?.length || 0} members{onlineSuffix}</span>;
 }

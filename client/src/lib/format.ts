@@ -35,6 +35,18 @@ export function ago(x?: any) {
   if (s < 45) return 'just now'; if (s < 3600) return `${Math.round(s / 60)} min ago`; if (s < 86400) return `${Math.round(s / 3600)} h ago`; if (s < 7 * 86400) return `${Math.round(s / 86400)} d ago`;
   return fmtDate(x);
 }
+export function formatLastSeen(x?: any) {
+  if (!x) return 'offline';
+  const sec = Math.max(0, (Date.now() - +d(x)) / 1000);
+  if (sec < 60) return 'last seen just now';
+  if (sec < 3600) return `last seen ${Math.round(sec / 60)} min ago`;
+  const v = d(x);
+  const now = new Date();
+  const y = new Date(now); y.setDate(now.getDate() - 1);
+  if (sameDay(v, now)) return `last seen today at ${fmtTime(v)}`;
+  if (sameDay(v, y)) return `last seen yesterday at ${fmtTime(v)}`;
+  return `last seen ${fmtDate(v)}`;
+}
 export function fmtAge(hours?: number | null) { if (hours == null) return '—'; if (hours < 1) return '<1 h'; return hours < 48 ? `${hours} h` : `${Math.round(hours / 24)} d`; }
 export function fmtSize(b?: number) { if (!b) return '—'; if (b >= 1e9) return `${(b / 1e9).toFixed(2)} GB`; if (b >= 1e6) return `${(b / 1e6).toFixed(b >= 1e7 ? 0 : 1)} MB`; return `${Math.max(1, Math.round(b / 1e3))} KB`; }
 export function fmtTs(s?: number | null) { if (s == null) return ''; return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`; }

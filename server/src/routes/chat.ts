@@ -57,6 +57,17 @@ r.get('/:roomId/messages', ah(async (req, res) => {
   const msgs = await Message.find(q).sort({ createdAt: -1 }).limit(Math.min(100, Number(req.query.limit) || 50))
     .populate('senderId', 'name role').populate('attachments').populate('system.mediaId').populate({ path: 'replyTo', select: 'message senderId kind system.title', populate: { path: 'senderId', select: 'name' } }).lean();
   const pinned = await Message.find({ _id: { $in: rm.pinned || [] } }).populate('senderId', 'name').lean();
+  const unreadUpdated = await Message.updateMany(
+    { roomId: rm._id, senderId: { $ne: req.user!._id }, readBy: { $ne: req.user!._id } },
+    { $addToSet: { readBy: req.user!._id, deliveredTo: req.user!._id } }
+  );
+  if (unreadUpdated.modifiedCount > 0) {
+    emitToRoom(`chat:${rm._id}`, 'message:read', { roomId: String(rm._id), userId: req.user!._id });
+    for (const p of rm.participants) {
+      emitToUser(p, 'message:read', { roomId: String(rm._id), userId: req.user!._id });
+    }
+    emitToUser(req.user!._id, 'chat:unread_changed', { roomId: String(rm._id) });
+  }
   res.json({ room: await ChatRoom.findById(rm._id).populate('participants', 'name role').populate('contentId', 'contentId title').populate('clientId', 'name').lean(), messages: msgs.reverse(), pinned });
 }));
 

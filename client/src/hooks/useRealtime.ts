@@ -16,12 +16,13 @@ export function useRealtime() {
     if (!uid) return;
     const s = connectSocket();
     const inv = (...keys: string[]) => keys.forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
-    const loadPresence = () => get('/dashboard/team-presence').then((list: any[]) => useUI.getState().setAllPresence(Object.fromEntries(list.map((p) => [p.userId, { status: p.status, lastActive: p.lastActive, currentActivity: p.currentActivity }])))).catch(() => undefined);
+    const loadPresence = () => get('/dashboard/team-presence').then((list: any[]) => useUI.getState().setAllPresence(Object.fromEntries(list.map((p) => [p.userId, { status: p.status, lastActive: p.lastActive, lastSeen: p.lastSeen, currentActivity: p.currentActivity }])))).catch(() => undefined);
     loadPresence();
-    const pres = (d: any) => { useUI.getState().setPresence(d.userId, { status: d.status, lastActive: d.lastActive, currentActivity: d.currentActivity }); };
+    const pres = (d: any) => { useUI.getState().setPresence(d.userId, { status: d.status, lastActive: d.lastActive, lastSeen: d.lastSeen, currentActivity: d.currentActivity }); };
     const handlers: Record<string, (d: any) => void> = {
       connect: () => { loadPresence(); qc.invalidateQueries(); },
       user_online: pres, user_away: pres, user_offline: pres,
+      'message:typing': (d: any) => { if (d.userId !== uid) useUI.getState().setTyping(d.roomId, d.userId, d.name, d.typing); },
       'notification:new': (n) => {
         inv('notifications');
         const onChat = n.category === 'CHAT' && (window.location.pathname.startsWith('/chat') || new URLSearchParams(window.location.search).get('tab') === 'chat');
