@@ -37,6 +37,7 @@ export const env = {
     redirectUri: process.env.GOOGLE_REDIRECT_URI || '',
     refreshToken: process.env.GOOGLE_REFRESH_TOKEN || '',
     rootFolderName: process.env.DRIVE_ROOT_FOLDER_NAME || 'SMM PRO',
+    rootFolderId: process.env.DRIVE_ROOT_FOLDER_ID || process.env.GOOGLE_DRIVE_FOLDER_ID || '',
   },
   maxUploadMb: Number(process.env.MAX_UPLOAD_MB || 4096),
   aisensy: {

@@ -31,12 +31,58 @@ const escape = (s: string) => s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
 export async function findOrCreateFolder(name: string, parentId?: string): Promise<string> {
   const d = drive();
-  const parent = parentId || env.google.sharedDriveId || 'root';
-  const q = `mimeType='application/vnd.google-apps.folder' and name='${escape(name)}' and '${parent}' in parents and trashed=false`;
-  const list = await d.files.list({ q, fields: 'files(id,name)', includeItemsFromAllDrives: true, ...common(), ...(env.google.sharedDriveId ? { corpora: 'drive', driveId: env.google.sharedDriveId } : {}) });
-  if (list.data.files?.[0]?.id) return list.data.files[0].id;
-  const created = await d.files.create({ requestBody: { name, mimeType: 'application/vnd.google-apps.folder', parents: [parent] }, fields: 'id', ...common() });
+
+  // If parentId is explicitly specified, search inside that parent
+  if (parentId) {
+    const q = `mimeType='application/vnd.google-apps.folder' and name='${escape(name)}' and '${parentId}' in parents and trashed=false`;
+    const list = await d.files.list({ q, fields: 'files(id,name)', includeItemsFromAllDrives: true, ...common() });
+    if (list.data.files?.[0]?.id) return list.data.files[0].id;
+    const created = await d.files.create({ requestBody: { name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] }, fields: 'id', ...common() });
+    return created.data.id!;
+  }
+
+  // Root folder resolution (when parentId is not specified):
+  // 1. If explicit root folder ID is provided via env (e.g. DRIVE_ROOT_FOLDER_ID or GOOGLE_SHARED_DRIVE_ID)
+  const envFolderId = env.google.rootFolderId || env.google.sharedDriveId;
+  if (envFolderId) {
+    try {
+      const res = await d.files.get({ fileId: envFolderId, fields: 'id,name,trashed', ...common() });
+      if (res.data.id && !res.data.trashed) return res.data.id;
+    } catch (e: any) {
+      console.warn('[drive] configured rootFolderId not accessible, searching by name:', e.message);
+    }
+  }
+
+  // 2. Search for any folder with this name accessible to us (including folders in "Shared with me"!)
+  const qShared = `mimeType='application/vnd.google-apps.folder' and name='${escape(name)}' and trashed=false`;
+  const list = await d.files.list({ q: qShared, fields: 'files(id,name,owners)', includeItemsFromAllDrives: true, ...common(), pageSize: 10 });
+  if (list.data.files?.[0]?.id) {
+    return list.data.files[0].id;
+  }
+
+  // 3. Fallback: create in service account root
+  const created = await d.files.create({ requestBody: { name, mimeType: 'application/vnd.google-apps.folder', parents: ['root'] }, fields: 'id', ...common() });
   return created.data.id!;
+}
+
+export function serviceAccountEmail(): string | null {
+  if (!env.google.serviceAccountB64) return null;
+  try {
+    const creds = JSON.parse(Buffer.from(env.google.serviceAccountB64, 'base64').toString('utf8'));
+    return creds.client_email || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function getRootFolderStatus(): Promise<{ id?: string; name: string; found: boolean }> {
+  if (!driveConfigured()) return { name: env.google.rootFolderName, found: false };
+  try {
+    const id = await findOrCreateFolder(env.google.rootFolderName);
+    return { id, name: env.google.rootFolderName, found: !!id };
+  } catch {
+    return { name: env.google.rootFolderName, found: false };
+  }
 }
 
 /** Creates a resumable upload session. The browser PUTs bytes directly to the returned URL. */

@@ -349,8 +349,52 @@ function Integrations() {
     <Async q={q}>{(d: any) => (
       <div className="grid max-w-4xl gap-5 lg:grid-cols-2">
         <Card title={<span className="flex items-center gap-2">Google Drive<S ok={d.drive.configured && d.drive.ok !== false} text={d.drive.ok === false ? 'Error' : undefined} /></span>}>
-          {d.drive.configured ? <div className="space-y-2 text-[13px]"><div>Authentication: <b>{d.drive.mode}</b></div><div>Shared Drive: <b>{d.drive.sharedDrive ? 'Yes' : 'No (personal Drive)'}</b></div>{d.drive.quota?.limit && <div>Storage: <b>{fmtSize(Number(d.drive.quota.usage))} of {fmtSize(Number(d.drive.quota.limit))}</b></div>}{d.drive.error && <p className="rounded bg-danger-soft px-3 py-2 text-danger-ink">{d.drive.error}</p>}<Button size="sm" loading={busy === 'sync'} onClick={sync} icon={<RefreshCw size={14} />}>Run Drive sync</Button></div>
-            : <p className="text-[13px] text-ink-2">Not connected. Files are being stored on the API server's disk, which is only suitable for testing. Set <code>GOOGLE_SERVICE_ACCOUNT_JSON_BASE64</code> and <code>GOOGLE_SHARED_DRIVE_ID</code> on the server and restart.</p>}
+          {d.drive.configured ? (
+            <div className="space-y-2 text-[13px]">
+              <div className="flex items-center justify-between">
+                <span className="text-ink-2">Authentication:</span>
+                <span className="font-semibold">{d.drive.mode}</span>
+              </div>
+              {d.drive.serviceAccountEmail && (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-ink-2 shrink-0">Service account:</span>
+                  <span className="truncate rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[11px] text-ink" title={d.drive.serviceAccountEmail}>
+                    {d.drive.serviceAccountEmail}
+                  </span>
+                </div>
+              )}
+              <div className="flex items-center justify-between">
+                <span className="text-ink-2">Storage target:</span>
+                <span className="font-semibold">
+                  {d.drive.sharedDrive ? 'Workspace Shared Drive' : 'Personal Google Drive (Shared Folder)'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-ink-2">Target folder:</span>
+                <span className="font-semibold text-emerald-400">
+                  {d.drive.rootFolder?.name || d.drive.rootFolderName || 'SMM PRO'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-ink-2">Storage quota:</span>
+                <span className="font-semibold">
+                  {Number(d.drive.quota?.limit) > 0
+                    ? `${fmtSize(Number(d.drive.quota.usage))} of ${fmtSize(Number(d.drive.quota.limit))}`
+                    : 'Uses personal Drive quota of folder owner'}
+                </span>
+              </div>
+              {d.drive.error && <p className="rounded bg-danger-soft px-3 py-2 text-danger-ink">{d.drive.error}</p>}
+              <div className="pt-1.5">
+                <Button size="sm" loading={busy === 'sync'} onClick={sync} icon={<RefreshCw size={14} />}>
+                  Run Drive sync
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-[13px] text-ink-2">
+              Not connected. Files are being stored on the API server's disk, which is only suitable for testing. Set <code>GOOGLE_SERVICE_ACCOUNT_JSON_BASE64</code> on the server and restart.
+            </p>
+          )}
         </Card>
         <Card title={<span className="flex items-center gap-2">AiSensy WhatsApp<S ok={d.aisensy.configured} /></span>}>
           <div className="space-y-2 text-[13px]"><div>Campaign: <b>{d.aisensy.campaign || '—'}</b></div><div>Webhook secured: <b>{d.aisensy.webhookSecured ? 'Yes' : 'No'}</b></div><div>Last webhook received: <b>{d.aisensy.lastWebhookAt ? ago(d.aisensy.lastWebhookAt) : 'Never'}</b></div><div className="break-all text-ink-2">Webhook URL: <code>{window.location.origin.replace(/:\d+$/, '')}{d.aisensy.webhookUrl}?secret=…</code></div>

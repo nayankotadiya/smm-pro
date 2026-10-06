@@ -46,15 +46,16 @@ r.get('/folder/:id', need, requirePerm('media.read.all'), ah(async (req, res) =>
 /** Reconciles DB records against Drive: flags files removed from Drive, recreates missing folder structure. */
 r.post('/sync', need, requirePerm('integrations.manage'), ah(async (req, res) => {
   let missing = 0; let checked = 0;
+  await DriveFolder.deleteOne({ key: 'root' });
   const files = await Media.find({ storage: 'DRIVE', status: { $nin: ['UPLOADING', 'FAILED'] } }).sort({ updatedAt: 1 }).limit(300);
   for (const m of files) {
     checked++;
     try { const f = await getFile(m.driveFileId!); if (f.trashed) throw new Error('trashed'); if (f.webViewLink && f.webViewLink !== m.webViewLink) { m.webViewLink = f.webViewLink; await m.save(); } }
     catch { m.status = 'FAILED'; m.error = 'File missing in Google Drive'; await m.save(); missing++; }
   }
-  const clients = await Client.find({ driveFolderId: null });
+  const clients = await Client.find({});
   for (const c of clients) await ensureClientFolders(c);
-  await logActivity({ actorId: req.user!._id, action: 'drive.sync', message: `Drive sync: ${checked} files checked, ${missing} missing, ${clients.length} client folders created` });
+  await logActivity({ actorId: req.user!._id, action: 'drive.sync', message: `Drive sync: ${checked} files checked, ${missing} missing, ${clients.length} client folders updated` });
   res.json({ checked, missing, foldersCreated: clients.length });
 }));
 export default r;

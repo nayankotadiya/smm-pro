@@ -10,7 +10,7 @@ import { visibilityFilter } from '../services/content';
 import { ROLES, PERMISSIONS, DEFAULT_ROLE_PERMISSIONS, STAGES } from '../config/constants';
 import { logActivity } from '../services/activity';
 import { teamWorkload, storage } from '../services/dashboard';
-import { driveConfigured, storageQuota } from '../integrations/drive';
+import { driveConfigured, storageQuota, serviceAccountEmail, getRootFolderStatus } from '../integrations/drive';
 import { aisensyConfigured, sendTemplate } from '../integrations/aisensy';
 import { pushConfigured } from '../integrations/push';
 import { emailConfigured } from '../integrations/email';
@@ -249,8 +249,23 @@ r.patch('/roles/:key', requirePerm('roles.manage'), ah(async (req, res) => {
 
 // ---------------- Integrations (status only; secrets never leave the server) ----------------
 r.get('/integrations', requirePerm('integrations.manage'), ah(async (_req, res) => {
-  let drive: any = { configured: driveConfigured(), mode: env.google.serviceAccountB64 ? 'Service account' : env.google.refreshToken ? 'OAuth refresh token' : null, sharedDrive: !!env.google.sharedDriveId };
-  if (drive.configured) { try { drive.quota = await storageQuota(); drive.ok = true; } catch (e: any) { drive.ok = false; drive.error = String(e.message).slice(0, 200); } }
+  let drive: any = {
+    configured: driveConfigured(),
+    mode: env.google.serviceAccountB64 ? 'Service account' : env.google.refreshToken ? 'OAuth refresh token' : null,
+    sharedDrive: !!env.google.sharedDriveId,
+    serviceAccountEmail: serviceAccountEmail(),
+    rootFolderName: env.google.rootFolderName,
+  };
+  if (drive.configured) {
+    try {
+      drive.quota = await storageQuota();
+      drive.rootFolder = await getRootFolderStatus();
+      drive.ok = true;
+    } catch (e: any) {
+      drive.ok = false;
+      drive.error = String(e.message).slice(0, 200);
+    }
+  }
   const lastHook = await WebhookEvent.findOne({ provider: 'aisensy' }).sort({ createdAt: -1 }).select('createdAt eventType').lean();
   res.json({
     drive,
