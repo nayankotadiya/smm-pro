@@ -1,10 +1,11 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
-import { Check, Circle, CheckCircle2, Play, Film, Image as ImageIcon } from 'lucide-react';
+import { Check, Circle, CheckCircle2, Play, Film, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { Badge, Progress, Table, Priority, Empty } from './ui';
 import { label, fmtDateTime, isOverdue, STAGES, ago } from '@/lib/format';
-import { patch, errMsg } from '@/lib/api';
+import { patch, del, errMsg } from '@/lib/api';
+import { useAuth } from '@/store/auth';
 import { toast } from '@/store/ui';
 
 export function ContentThumb({ content, size = 'md' }: { content: any; size?: 'sm' | 'md' }) {
@@ -50,6 +51,18 @@ export function ContentThumb({ content, size = 'md' }: { content: any; size?: 's
 
 export function ContentTable({ items, compact }: { items: any[]; compact?: boolean }) {
   const nav = useNavigate();
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const delContent = useMutation({
+    mutationFn: (id: string) => del(`/content/${id}`),
+    onSuccess: () => {
+      toast.success('Content deleted permanently.');
+      qc.invalidateQueries({ queryKey: ['content'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+
   if (!items.length) return <Empty title="No content here" hint="Content appears as soon as it is created or assigned." />;
   return (
     <>
@@ -65,7 +78,25 @@ export function ContentTable({ items, compact }: { items: any[]; compact?: boole
                   <div className="mt-0.5 text-meta font-medium text-ink-2">{c.contentId} · {c.clientId?.name}</div>
                 </div>
               </div>
-              <StatusBadge c={c} />
+              <div className="flex items-center gap-1.5">
+                <StatusBadge c={c} />
+                {user?.role === 'SUPER_ADMIN' && (
+                  <button
+                    type="button"
+                    title="Delete content"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (window.confirm(`Permanently delete "${c.title}" (${c.contentId})?`)) {
+                        delContent.mutate(c._id);
+                      }
+                    }}
+                    className="p-1 text-ink-3 hover:text-rose-500 transition-colors"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </div>
             </div>
             <div className="mt-2 flex items-center gap-2">
               <Progress value={c.progress} tone={c.status === 'BLOCKED' ? 'red' : undefined} />
@@ -79,7 +110,7 @@ export function ContentTable({ items, compact }: { items: any[]; compact?: boole
         ))}
       </ul>
       <div className="hidden md:block">
-        <Table head={compact ? ['Content', 'Client', 'Stage', 'Progress', 'Owner', 'Deadline', 'Status'] : ['Content', 'Client', 'Type', 'Platform', 'Stage', 'Progress', 'Owner', 'Deadline', 'Status']} minWidth={compact ? 720 : 900}>
+        <Table head={compact ? ['Content', 'Client', 'Stage', 'Progress', 'Owner', 'Deadline', 'Status', ...(user?.role === 'SUPER_ADMIN' ? ['Actions'] : [])] : ['Content', 'Client', 'Type', 'Platform', 'Stage', 'Progress', 'Owner', 'Deadline', 'Status', ...(user?.role === 'SUPER_ADMIN' ? ['Actions'] : [])]} minWidth={compact ? 720 : 900}>
           {items.map((c) => (
             <tr key={c._id} onClick={() => nav(`/content/${c._id}`)} className="group cursor-pointer hover:bg-surface-2/80 transition-colors">
               <td className="td">
@@ -108,6 +139,22 @@ export function ContentTable({ items, compact }: { items: any[]; compact?: boole
                 {c.deadline ? fmtDateTime(c.deadline) : '—'}
               </td>
               <td className="td"><StatusBadge c={c} /></td>
+              {user?.role === 'SUPER_ADMIN' && (
+                <td className="td text-right" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    title="Delete content"
+                    onClick={() => {
+                      if (window.confirm(`Permanently delete "${c.title}" (${c.contentId})?`)) {
+                        delContent.mutate(c._id);
+                      }
+                    }}
+                    className="p-1 text-ink-3 hover:text-rose-500 hover:bg-rose-500/10 rounded transition-colors"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </td>
+              )}
             </tr>
           ))}
         </Table>
@@ -278,6 +325,19 @@ export function useCompleteTask() {
 }
 export function TaskList({ tasks, showAssignee = true, emptyText = 'No tasks' }: { tasks: any[]; showAssignee?: boolean; emptyText?: string }) {
   const done = useCompleteTask();
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const delTask = useMutation({
+    mutationFn: (id: string) => del(`/tasks/${id}?permanent=true`),
+    onSuccess: () => {
+      toast.success('Task deleted.');
+      qc.invalidateQueries({ queryKey: ['tasks'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      qc.invalidateQueries({ queryKey: ['content-detail'] });
+    },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+
   if (!tasks.length) return <Empty title={emptyText} />;
   return (
     <ul className="stagger divide-y divide-line">
@@ -294,7 +354,27 @@ export function TaskList({ tasks, showAssignee = true, emptyText = 'No tasks' }:
                 {t.source === 'AUTOMATIC' && <span className="text-ink-3">Automatic</span>}
               </div>
             </Link>
-            <div className="shrink-0 text-right"><div className={clsx('text-meta font-medium', over ? 'font-semibold text-danger' : 'text-ink-2')}>{t.dueAt ? fmtDateTime(t.dueAt) : 'No due date'}</div>{!complete && t.status !== 'TODO' && <div className="mt-0.5"><Badge status={over && t.status === 'OVERDUE' ? 'OVERDUE' : t.status} /></div>}</div>
+            <div className="shrink-0 flex items-center gap-2">
+              <div className="text-right">
+                <div className={clsx('text-meta font-medium', over ? 'font-semibold text-danger' : 'text-ink-2')}>{t.dueAt ? fmtDateTime(t.dueAt) : 'No due date'}</div>
+                {!complete && t.status !== 'TODO' && <div className="mt-0.5"><Badge status={over && t.status === 'OVERDUE' ? 'OVERDUE' : t.status} /></div>}
+              </div>
+              {(user?.role === 'SUPER_ADMIN' || user?.role === 'MANAGER') && (
+                <button
+                  type="button"
+                  aria-label="Delete task"
+                  title="Delete task"
+                  onClick={() => {
+                    if (window.confirm(`Delete task "${t.title}"?`)) {
+                      delTask.mutate(t._id);
+                    }
+                  }}
+                  className="opacity-0 group-hover:opacity-100 p-1 text-ink-3 hover:text-rose-500 rounded transition-all"
+                >
+                  <Trash2 size={15} />
+                </button>
+              )}
+            </div>
           </li>
         );
       })}

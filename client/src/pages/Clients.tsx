@@ -4,9 +4,9 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Plus, Pencil, Phone, Mail, Globe, Instagram, Facebook, MapPin, ExternalLink, MessageSquareText, Eye, EyeOff, Copy, Check, KeyRound } from 'lucide-react';
-import { get, post, patch, errMsg } from '@/lib/api';
-import { useCan } from '@/store/auth';
+import { Plus, Pencil, Phone, Mail, Globe, Instagram, Facebook, MapPin, ExternalLink, MessageSquareText, Eye, EyeOff, Copy, Check, KeyRound, Trash2 } from 'lucide-react';
+import { get, post, patch, del, errMsg } from '@/lib/api';
+import { useAuth, useCan } from '@/store/auth';
 import { toast } from '@/store/ui';
 import { Async, Badge, Button, Card, Empty, Field, Input, Modal, PageHeader, Select, Stat, Table, Tabs, Textarea } from '@/components/ui';
 import { ContentTable, ActivityFeed } from '@/components/Lists';
@@ -19,8 +19,23 @@ import { useTeam } from '@/hooks/useData';
 import { ago, fmtDate, fmtDateTime, label, roleLabel, toLocalInput } from '@/lib/format';
 
 export function Clients() {
-  const can = useCan(); const nav = useNavigate(); const [open, setOpen] = useState(false); const [term, setTerm] = useState('');
+  const can = useCan(); const nav = useNavigate(); const { user } = useAuth(); const qc = useQueryClient();
+  const [open, setOpen] = useState(false); const [term, setTerm] = useState('');
+  const [deleteClientItem, setDeleteClientItem] = useState<any>(null);
   const q = useQuery({ queryKey: ['clients', 'list', term], queryFn: () => get<any[]>('/clients', term ? { q: term } : {}) });
+
+  const deleteItemMut = useMutation({
+    mutationFn: (id: string) => del(`/clients/${id}?permanent=true`),
+    onSuccess: () => {
+      toast.success('Client and associated data permanently deleted.');
+      setDeleteClientItem(null);
+      qc.invalidateQueries({ queryKey: ['clients'] });
+      qc.invalidateQueries({ queryKey: ['content'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+
   return (
     <>
       <PageHeader title="Clients" sub="Internal records. Clients never sign in to this workspace." actions={can('clients.write') && <Button variant="primary" icon={<Plus size={16} />} onClick={() => setOpen(true)}>New client</Button>} />
@@ -42,7 +57,19 @@ export function Clients() {
                       <div className="text-[12px] font-medium text-ink-2 truncate">{c.businessName}</div>
                     )}
                   </div>
-                  <Badge status={c.status} />
+                  <div className="flex items-center gap-2">
+                    <Badge status={c.status} />
+                    {(user?.role === 'SUPER_ADMIN' || can('clients.delete')) && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setDeleteClientItem(c); }}
+                        className="p-1 text-ink-3 hover:text-rose-500 transition-colors"
+                        title="Delete client"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-ink-2">
@@ -80,7 +107,7 @@ export function Clients() {
 
           {/* Desktop Table View */}
           <div className="hidden sm:block">
-            <Table head={['Client', 'Category', 'Contact', 'Team', 'Active content', 'Status']}>
+            <Table head={['Client', 'Category', 'Contact', 'Team', 'Active content', 'Status', ...(user?.role === 'SUPER_ADMIN' || can('clients.delete') ? ['Actions'] : [])]}>
               {d.map((c) => (
                 <tr key={c._id} onClick={() => nav(`/clients/${c._id}`)} className="group cursor-pointer hover:bg-surface-2 transition-colors">
                   <td className="td">
@@ -100,6 +127,18 @@ export function Clients() {
                     {c.contentCount.active} <span className="font-normal text-ink-3">/ {c.contentCount.total}</span>
                   </td>
                   <td className="td"><Badge status={c.status} /></td>
+                  {(user?.role === 'SUPER_ADMIN' || can('clients.delete')) && (
+                    <td className="td text-right" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteClientItem(c)}
+                        className="p-1.5 text-ink-3 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-colors"
+                        title="Delete client"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </Table>
@@ -107,6 +146,32 @@ export function Clients() {
         </>
       )}</Async></Card>
       <ClientForm open={open} onClose={() => setOpen(false)} />
+      <Modal
+        open={!!deleteClientItem}
+        onClose={() => setDeleteClientItem(null)}
+        title={`Delete Client: ${deleteClientItem?.name}`}
+        footer={
+          <>
+            <Button onClick={() => setDeleteClientItem(null)}>Cancel</Button>
+            <Button
+              variant="danger"
+              loading={deleteItemMut.isPending}
+              onClick={() => deleteItemMut.mutate(deleteClientItem?._id)}
+            >
+              Permanently Delete
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3 text-[14px]">
+          <div className="rounded border border-rose-500/30 bg-rose-500/10 p-3 text-rose-500 font-medium">
+            ⚠️ Are you sure you want to delete client <b>{deleteClientItem?.name}</b>?
+          </div>
+          <p className="text-ink-2">
+            This will permanently delete this client, along with all their campaigns, contents, scripts, shoots, tasks, reviews, and chat history.
+          </p>
+        </div>
+      </Modal>
     </>
   );
 }
@@ -269,14 +334,37 @@ function ClientForm({ open, onClose, client }: { open: boolean; onClose: () => v
 type CTab = 'overview' | 'campaigns' | 'content' | 'scripts' | 'reviews' | 'communication' | 'files' | 'calendar' | 'reports' | 'activity' | 'chat';
 export function ClientDetail() {
   const { id } = useParams(); const [sp, setSp] = useSearchParams(); const can = useCan(); const tab = (sp.get('tab') as CTab) || 'overview';
+  const { user } = useAuth(); const qc = useQueryClient();
   const q = useQuery({ queryKey: ['clients', 'one', id], queryFn: () => get(`/clients/${id}`) });
   const ov = useQuery({ queryKey: ['clients', 'overview', id], queryFn: () => get(`/clients/${id}/overview`) });
   const [edit, setEdit] = useState(false); const [newContent, setNewContent] = useState(false); const a = useMediaActions(); const nav = useNavigate();
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
+  const deleteClient = useMutation({
+    mutationFn: () => del(`/clients/${id}?permanent=true`),
+    onSuccess: () => {
+      toast.success('Client and associated records deleted permanently.');
+      qc.invalidateQueries({ queryKey: ['clients'] });
+      qc.invalidateQueries({ queryKey: ['content'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      nav('/clients');
+    },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+
   return (
     <Async q={q}>{(c: any) => (
       <>
         <PageHeader title={c.name} sub={<span className="flex flex-wrap items-center gap-2"><Badge status={c.status} />{c.category && <span>{c.category}</span>}{c.location && <span className="flex items-center gap-1"><MapPin size={13} />{c.location}</span>}</span>}
-          actions={<>{can('content.write') && <Button variant="primary" icon={<Plus size={16} />} onClick={() => setNewContent(true)}>New content</Button>}{can('clients.write') && <Button icon={<Pencil size={15} />} onClick={() => setEdit(true)}>Edit</Button>}</>} />
+          actions={<>
+            {can('content.write') && <Button variant="primary" icon={<Plus size={16} />} onClick={() => setNewContent(true)}>New content</Button>}
+            {can('clients.write') && <Button icon={<Pencil size={15} />} onClick={() => setEdit(true)}>Edit</Button>}
+            {(user?.role === 'SUPER_ADMIN' || can('clients.delete')) && (
+              <Button variant="danger" icon={<Trash2 size={15} />} onClick={() => setDeleteOpen(true)}>
+                Delete Client
+              </Button>
+            )}
+          </>} />
         <Tabs value={tab} onChange={(k) => setSp(k === 'overview' ? {} : { tab: k }, { replace: true })} tabs={[{ key: 'overview', label: 'Overview' }, { key: 'campaigns', label: 'Campaigns' }, { key: 'content', label: 'Content', count: ov.data?.stats.active }, { key: 'scripts', label: 'Scripts' }, { key: 'reviews', label: 'Client Reviews', count: ov.data?.stats.approvalsOpen }, { key: 'communication', label: 'Communication' }, { key: 'files', label: 'Files' }, { key: 'calendar', label: 'Calendar' }, { key: 'reports', label: 'Reports' }, { key: 'activity', label: 'Activity' }, { key: 'chat', label: 'Internal Chat' }]} />
         {tab === 'overview' && <div className="grid gap-5 lg:grid-cols-3">
           <div className="space-y-5 lg:col-span-2">
@@ -356,6 +444,32 @@ export function ClientDetail() {
         {tab === 'chat' && (ov.data ? <ChatThread roomId={ov.data.roomId} embedded /> : null)}
         <ClientForm open={edit} onClose={() => setEdit(false)} client={c} />
         <ContentFormModal open={newContent} onClose={() => setNewContent(false)} clientId={c._id} />
+        <Modal
+          open={deleteOpen}
+          onClose={() => setDeleteOpen(false)}
+          title={`Delete Client: ${c.name}`}
+          footer={
+            <>
+              <Button onClick={() => setDeleteOpen(false)}>Cancel</Button>
+              <Button
+                variant="danger"
+                loading={deleteClient.isPending}
+                onClick={() => deleteClient.mutate()}
+              >
+                Permanently Delete Client
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-3 text-[14px]">
+            <div className="rounded border border-rose-500/30 bg-rose-500/10 p-3 text-rose-500 font-medium">
+              ⚠️ Are you sure you want to permanently delete <b>{c.name}</b>?
+            </div>
+            <p className="text-ink-2">
+              This will permanently delete this client and all their content items, scripts, shooting schedules, tasks, review links, and chat records. This cannot be undone.
+            </p>
+          </div>
+        </Modal>
         {a.modal}
       </>
     )}</Async>

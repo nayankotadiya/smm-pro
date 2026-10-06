@@ -2,8 +2,8 @@ import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import clsx from 'clsx';
-import { ArrowLeft, Plus, Users, Clapperboard, Building2, Search, MessageSquarePlus, MoreVertical, CheckCheck, Check, ExternalLink } from 'lucide-react';
-import { get, post, errMsg } from '@/lib/api';
+import { ArrowLeft, Plus, Users, Clapperboard, Building2, Search, MessageSquarePlus, MoreVertical, CheckCheck, Check, ExternalLink, Trash2 } from 'lucide-react';
+import { get, post, del, errMsg } from '@/lib/api';
 import { useAuth, useCan } from '@/store/auth';
 import { toast, useUI } from '@/store/ui';
 import { Avatar, Button, Empty, Field, Input, Modal, PresenceDot, Spinner, IconButton } from '@/components/ui';
@@ -14,6 +14,7 @@ import { ago, roleLabel } from '@/lib/format';
 export default function Chat() {
   const { roomId } = useParams();
   const nav = useNavigate();
+  const qc = useQueryClient();
   const me = useAuth((s) => s.user)!;
   const [tab, setTab] = useState<'ALL' | 'DIRECT' | 'TEAM' | 'CONTENT' | 'CLIENT'>('ALL');
   const [open, setOpen] = useState(false);
@@ -226,6 +227,26 @@ export default function Chat() {
                 >
                   <Search size={18} />
                 </button>
+                {me.role === 'SUPER_ADMIN' && roomId && (
+                  <button
+                    aria-label="Clear chat messages"
+                    title="Clear conversation messages (Super Admin)"
+                    onClick={async () => {
+                      if (!window.confirm('Are you sure you want to delete all messages in this conversation? This cannot be undone.')) return;
+                      try {
+                        await del(`/chat/room/${roomId}/clear`);
+                        toast.success('Conversation history cleared');
+                        qc.invalidateQueries({ queryKey: ['chat', roomId] });
+                        qc.invalidateQueries({ queryKey: ['chat-rooms'] });
+                      } catch (err: any) {
+                        toast.error(err?.message || 'Could not clear chat');
+                      }
+                    }}
+                    className="flex h-9 w-9 items-center justify-center rounded-xl text-ink-3 hover:text-danger hover:bg-danger/10 transition-colors"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                )}
               </div>
             </header>
 

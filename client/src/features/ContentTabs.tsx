@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import clsx from 'clsx';
 import { Plus, Trash2, Send, Check, RotateCcw, Copy, Film, Camera as CameraIcon, CalendarClock, ExternalLink, Play, GitCompare, MapPin, Clock, Lock, UserCheck, Calendar } from 'lucide-react';
-import { get, post, patch, errMsg } from '@/lib/api';
+import { get, post, patch, del, errMsg } from '@/lib/api';
 import { useAuth, useCan } from '@/store/auth';
 import { toast } from '@/store/ui';
 import { Badge, Button, Card, Empty, Field, Input, Modal, Select, Table, Textarea } from '@/components/ui';
@@ -225,6 +225,15 @@ export function ShootingTab({ d }: { d: any }) {
     onError: err,
   });
 
+  const delShoot = useMutation({
+    mutationFn: () => del(`/content/${c._id}/shoot`),
+    onSuccess: () => {
+      inv();
+      toast.success('Shoot details removed.');
+    },
+    onError: err,
+  });
+
   const saveChecklist = useMutation({
     mutationFn: (chk: any) => patch(`/content/${c._id}/shoot`, { checklist: chk }),
     onSuccess: () => inv(),
@@ -267,19 +276,35 @@ export function ShootingTab({ d }: { d: any }) {
               </div>
             }
             action={
-              <Button
-                size="sm"
-                variant="primary"
-                loading={save.isPending}
-                onClick={() =>
-                  save.mutate({
-                    ...v,
-                    shootDate: v.shootDate ? new Date(v.shootDate).toISOString() : null,
-                  })
-                }
-              >
-                Save & Schedule Shoot
-              </Button>
+              <div className="flex items-center gap-2">
+                {(me?.role === 'SUPER_ADMIN' || me?.role === 'MANAGER') && s && (
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    loading={delShoot.isPending}
+                    onClick={() => {
+                      if (window.confirm('Delete and reset shoot details?')) {
+                        delShoot.mutate();
+                      }
+                    }}
+                  >
+                    Delete Shoot
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="primary"
+                  loading={save.isPending}
+                  onClick={() =>
+                    save.mutate({
+                      ...v,
+                      shootDate: v.shootDate ? new Date(v.shootDate).toISOString() : null,
+                    })
+                  }
+                >
+                  Save & Schedule Shoot
+                </Button>
+              </div>
             }
           >
             <div className="mb-4 rounded-xl border border-primary/20 bg-primary/5 p-3 text-[12.5px] text-primary-ink flex items-center gap-2">

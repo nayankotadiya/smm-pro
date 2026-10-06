@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Ban, Pencil, Plus, ArrowRight, ShieldAlert, GitBranch } from 'lucide-react';
-import { get, post, patch, errMsg } from '@/lib/api';
+import { Ban, Pencil, Plus, ArrowRight, ShieldAlert, GitBranch, Trash2 } from 'lucide-react';
+import { get, post, patch, del, errMsg } from '@/lib/api';
 import { getSocket, setActivity } from '@/lib/socket';
 import { useAuth, useCan } from '@/store/auth';
 import { toast } from '@/store/ui';
@@ -22,9 +22,10 @@ const STAGE_TAB: Record<string, Tab> = { IDEA: 'script', SCRIPT: 'script', INTER
 
 export default function ContentDetail() {
   const { id } = useParams(); const [sp, setSp] = useSearchParams(); const can = useCan(); const qc = useQueryClient(); const nav = useNavigate();
+  const { user } = useAuth();
   const tab = (sp.get('tab') as Tab) || 'overview';
   const q = useQuery({ queryKey: ['content-detail', id], queryFn: () => get(`/content/${id}`) });
-  const [modal, setModal] = useState<null | 'edit' | 'block' | 'stage' | 'task' | 'reminder'>(null);
+  const [modal, setModal] = useState<null | 'edit' | 'block' | 'stage' | 'task' | 'reminder' | 'delete'>(null);
   const cid = q.data?.content?._id;
   // live: join this content's room so other people's changes appear without refresh
   useEffect(() => { if (!cid) return; const s = getSocket(); const watch = () => s?.emit('content:watch', cid); watch(); s?.on('connect', watch); return () => { s?.emit('content:unwatch', cid); s?.off('connect', watch); }; }, [cid]);
@@ -32,6 +33,16 @@ export default function ContentDetail() {
   const inv = () => { qc.invalidateQueries({ queryKey: ['content-detail', id] }); qc.invalidateQueries({ queryKey: ['content'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); };
   const block = useMutation({ mutationFn: (reason: string) => post(`/content/${cid}/block`, { reason }), onSuccess: () => { toast.success('Marked as blocked.'); setModal(null); inv(); }, onError: (e) => toast.error(errMsg(e)) });
   const unblock = useMutation({ mutationFn: () => post(`/content/${cid}/unblock`), onSuccess: () => { toast.success('Block removed.'); inv(); }, onError: (e) => toast.error(errMsg(e)) });
+  const deleteContent = useMutation({
+    mutationFn: () => del(`/content/${cid}`),
+    onSuccess: () => {
+      toast.success('Content deleted permanently.');
+      qc.invalidateQueries({ queryKey: ['content'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      nav('/content');
+    },
+    onError: (e) => toast.error(errMsg(e)),
+  });
 
   return (
     <Async q={q} rows={8}>{(d: any) => {
@@ -45,6 +56,11 @@ export default function ContentDetail() {
               {blocked ? <Button onClick={() => unblock.mutate()} loading={unblock.isPending}>Remove block</Button> : !done && <Button icon={<Ban size={15} />} onClick={() => setModal('block')}>Mark blocked</Button>}
               {(can('content.write') || can('content.assign')) && <Button icon={<Pencil size={15} />} onClick={() => setModal('edit')}>Edit</Button>}
               {can('content.assign') && <Button variant="primary" icon={<GitBranch size={15} />} onClick={() => setModal('stage')}>Move stage</Button>}
+              {(user?.role === 'SUPER_ADMIN' || can('content.delete' as any)) && (
+                <Button variant="danger" icon={<Trash2 size={15} />} onClick={() => setModal('delete')}>
+                  Delete
+                </Button>
+              )}
             </>} />
 
           {blocked && <div className="mb-4 flex animate-rise items-start gap-3 rounded-lg border border-danger/30 bg-danger-soft p-3"><ShieldAlert size={18} className="mt-0.5 shrink-0 text-danger" /><div className="text-[13px]"><div className="font-semibold">Blocked {ago(c.blocked?.since)} by {c.blocked?.by?.name}</div><div>{c.blocked?.reason}</div></div></div>}
@@ -115,6 +131,28 @@ export default function ContentDetail() {
           <ReasonModal open={modal === 'block'} onClose={() => setModal(null)} title="Mark content as blocked" label="What is blocking this content?" cta="Mark blocked" danger loading={block.isPending} onSubmit={(r) => block.mutate(r)} />
           <TaskFormModal open={modal === 'task'} onClose={() => setModal(null)} contentId={c._id} clientId={c.clientId._id} />
           <ReminderFormModal open={modal === 'reminder'} onClose={() => { setModal(null); inv(); }} preset={{ contentId: c._id, clientId: c.clientId._id, type: 'CONTENT', title: `${c.contentId}: ` }} />
+          <Modal
+            open={modal === 'delete'}
+            onClose={() => setModal(null)}
+            title={`Delete ${c.contentId}`}
+            footer={
+              <>
+                <Button onClick={() => setModal(null)}>Cancel</Button>
+                <Button variant="danger" loading={deleteContent.isPending} onClick={() => deleteContent.mutate()}>
+                  Permanently Delete
+                </Button>
+              </>
+            }
+          >
+            <div className="space-y-3 text-[14px]">
+              <div className="rounded border border-rose-500/30 bg-rose-500/10 p-3 text-rose-500 font-medium">
+                ⚠️ Are you sure you want to delete <b>{c.title}</b> ({c.contentId})?
+              </div>
+              <p className="text-ink-2">
+                This will permanently remove this content item along with its scripts, shot plans, editor tasks, client reviews, messages, and uploaded files. This action cannot be undone.
+              </p>
+            </div>
+          </Modal>
         </>
       );
     }}</Async>

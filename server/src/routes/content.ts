@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { Content, Script, ScriptVersion, Shoot, Media, Approval, Task, Feedback, ActivityLog, ScheduledPost, Reminder, User } from '../models';
+import { Content, Script, ScriptVersion, Shoot, Media, Approval, Task, Feedback, ActivityLog, ScheduledPost, Reminder, User, ChatRoom, Message, ChatActionMessage } from '../models';
 import { ah } from '../utils/async';
-import { badRequest, forbidden } from '../utils/errors';
+import { badRequest, forbidden, notFound } from '../utils/errors';
 import { requirePerm, can } from '../middleware/auth';
 import { createContent, getVisibleContent, visibilityFilter, applyStage, setLastAction, broadcastContent, moveToStage } from '../services/content';
 import { logActivity } from '../services/activity';
@@ -311,4 +311,52 @@ r.post('/:id/publish', ah(async (req, res) => {
   emitDomain('content.published', { contentId: String(c._id), actorId: req.user!._id });
   res.json(c);
 }));
+
+// Delete content permanently (Super Admin or content.delete)
+r.delete('/:id', ah(async (req, res) => {
+  if (req.user!.role !== 'SUPER_ADMIN' && !can(req.user, 'content.delete' as any)) {
+    throw forbidden('Only Super Admin can delete content');
+  }
+  const c = await Content.findById(req.params.id);
+  if (!c) throw notFound('Content not found');
+
+  await Promise.all([
+    Content.deleteOne({ _id: c._id }),
+    Script.deleteMany({ contentId: c._id }),
+    ScriptVersion.deleteMany({ contentId: c._id }),
+    Shoot.deleteMany({ contentId: c._id }),
+    Task.deleteMany({ contentId: c._id }),
+    Approval.deleteMany({ contentId: c._id }),
+    Media.deleteMany({ contentId: c._id }),
+    ScheduledPost.deleteMany({ contentId: c._id }),
+    Feedback.deleteMany({ contentId: c._id }),
+    Reminder.deleteMany({ contentId: c._id }),
+    ChatRoom.deleteMany({ contentId: c._id }),
+    Message.deleteMany({ contentId: c._id }),
+    ChatActionMessage.deleteMany({ contentId: c._id }),
+    ActivityLog.deleteMany({ contentId: c._id }),
+  ]);
+
+  await logActivity({
+    actorId: req.user!._id,
+    action: 'content.deleted',
+    message: `${req.user!.name} permanently deleted ${c.contentId} (${c.title})`,
+    entityType: 'content',
+    entityId: c._id,
+    clientId: c.clientId,
+  });
+
+  emitDomain('content.deleted', { contentId: String(c._id), actorId: req.user!._id });
+  res.json({ ok: true, message: `Content ${c.contentId} deleted successfully.` });
+}));
+
+// Delete / reset shoot record (Super Admin or shoot management)
+r.delete('/:id/shoot', ah(async (req, res) => {
+  if (req.user!.role !== 'SUPER_ADMIN' && !['ADMIN', 'MANAGER'].includes(req.user!.role)) {
+    throw forbidden('Only Super Admin or Manager can delete shoot details');
+  }
+  await Shoot.deleteMany({ contentId: req.params.id });
+  res.json({ ok: true, message: 'Shoot details removed.' });
+}));
+
 export default r;

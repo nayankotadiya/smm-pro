@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { Client, Campaign, CommunicationLog, Content, Approval, Media, ActivityLog, Script, Reminder } from '../models';
+import { Client, Campaign, CommunicationLog, Content, Approval, Media, ActivityLog, Script, ScriptVersion, Shoot, Task, ChatRoom, Message, ScheduledPost, Reminder } from '../models';
 import { ah } from '../utils/async';
 import { notFound } from '../utils/errors';
 import { requirePerm } from '../middleware/auth';
@@ -57,9 +57,36 @@ r.patch('/:id', requirePerm('clients.write'), ah(async (req, res) => {
 }));
 
 r.delete('/:id', requirePerm('clients.delete'), ah(async (req, res) => {
+  const permanent = req.query.permanent === 'true' || req.user!.role === 'SUPER_ADMIN';
+  if (permanent) {
+    const c = await Client.findById(req.params.id);
+    if (!c) throw notFound('Client');
+    await Promise.all([
+      Client.deleteOne({ _id: c._id }),
+      Content.deleteMany({ clientId: c._id }),
+      Script.deleteMany({ clientId: c._id }),
+      ScriptVersion.deleteMany({ clientId: c._id }),
+      Shoot.deleteMany({ clientId: c._id }),
+      Task.deleteMany({ clientId: c._id }),
+      Approval.deleteMany({ clientId: c._id }),
+      Campaign.deleteMany({ clientId: c._id }),
+      CommunicationLog.deleteMany({ clientId: c._id }),
+      ChatRoom.deleteMany({ clientId: c._id }),
+      Message.deleteMany({ clientId: c._id }),
+      ScheduledPost.deleteMany({ clientId: c._id }),
+      Media.deleteMany({ clientId: c._id }),
+      Reminder.deleteMany({ clientId: c._id }),
+      ActivityLog.deleteMany({ clientId: c._id }),
+    ]);
+    await logActivity({ actorId: req.user!._id, action: 'client.deleted', message: `${req.user!.name} permanently deleted client ${c.name}`, entityType: 'client', entityId: c._id, clientId: c._id, ip: req.ip });
+    emitOrg('client:updated', { _id: String(c._id), deleted: true });
+    return res.json({ ok: true, permanent: true, message: `Client ${c.name} deleted successfully.` });
+  }
+
   const c = await Client.findByIdAndUpdate(req.params.id, { deletedAt: new Date(), status: 'ARCHIVED' });
   if (!c) throw notFound('Client');
   await logActivity({ actorId: req.user!._id, action: 'client.deleted', message: `${req.user!.name} archived client ${c.name}`, entityType: 'client', entityId: c._id, clientId: c._id, ip: req.ip });
+  emitOrg('client:updated', { _id: String(c._id), archived: true });
   res.json({ ok: true });
 }));
 

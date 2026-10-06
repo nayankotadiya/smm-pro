@@ -71,8 +71,12 @@ r.patch('/:id', ah(async (req, res) => {
 r.delete('/:id', ah(async (req, res) => {
   const t = await Task.findById(req.params.id);
   if (!t) throw notFound('Task');
-  if (String(t.createdBy) !== req.user!._id && !can(req.user, 'tasks.manage')) throw forbidden();
-  await Task.updateOne({ _id: t._id }, { deletedAt: new Date() });
+  if (String(t.createdBy) !== req.user!._id && !can(req.user, 'tasks.manage') && req.user!.role !== 'SUPER_ADMIN') throw forbidden();
+  if (req.user!.role === 'SUPER_ADMIN' || req.query.permanent === 'true') {
+    await Task.deleteOne({ _id: t._id });
+  } else {
+    await Task.updateOne({ _id: t._id }, { deletedAt: new Date() });
+  }
   emitOrg('task:updated', { _id: String(t._id), deleted: true });
   res.json({ ok: true });
 }));

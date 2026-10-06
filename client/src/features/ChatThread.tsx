@@ -1009,6 +1009,12 @@ export function ChatThread({ roomId, embedded }: { roomId: string; embedded?: bo
     const onDeleted = (d: any) => {
       if (d.roomId === roomId) setMsgs((cur) => cur.filter((m) => m._id !== d.messageId));
     };
+    const onCleared = (d: any) => {
+      if (d.roomId === roomId) {
+        setMsgs([]);
+        qc.invalidateQueries({ queryKey: ['chat', roomId] });
+      }
+    };
     const onPinned = (d: any) => {
       if (d.roomId === roomId) qc.invalidateQueries({ queryKey: ['chat', roomId] });
     };
@@ -1018,6 +1024,7 @@ export function ChatThread({ roomId, embedded }: { roomId: string; embedded?: bo
     s.on('message:delivered', onDelivered);
     s.on('message:reaction', onReaction);
     s.on('message:deleted', onDeleted);
+    s.on('chat:cleared', onCleared);
     s.on('message:pinned', onPinned);
     s.emit('message:delivered', { roomId });
     const vis = () => markRead();
@@ -1031,6 +1038,7 @@ export function ChatThread({ roomId, embedded }: { roomId: string; embedded?: bo
       s.off('message:delivered', onDelivered);
       s.off('message:reaction', onReaction);
       s.off('message:deleted', onDeleted);
+      s.off('chat:cleared', onCleared);
       s.off('message:pinned', onPinned);
       document.removeEventListener('visibilitychange', vis);
     };
@@ -1221,7 +1229,17 @@ export function ChatThread({ roomId, embedded }: { roomId: string; embedded?: bo
     } catch (e) { toast.error(errMsg(e)); }
   };
   const pin = (m: any) => post(`/chat/message/${m._id}/pin`).catch((e) => toast.error(errMsg(e)));
-  const remove = (m: any) => del(`/chat/message/${m._id}`).catch((e) => toast.error(errMsg(e)));
+  const remove = (m: any) => {
+    if (!window.confirm('Delete this message permanently?')) return;
+    del(`/chat/message/${m._id}`)
+      .then(() => {
+        setMsgs((cur) => cur.filter((x) => x._id !== m._id));
+        toast.success('Message deleted');
+        qc.invalidateQueries({ queryKey: ['chat-messages', roomId] });
+        qc.invalidateQueries({ queryKey: ['chat-rooms'] });
+      })
+      .catch((e) => toast.error(errMsg(e)));
+  };
 
   const others = useMemo(() => (room?.participants || []).filter((p: any) => String(p?._id || p) !== me._id), [room, me._id]);
   const stateOf = (m: any) => {
@@ -1640,7 +1658,7 @@ export function ChatThread({ roomId, embedded }: { roomId: string; embedded?: bo
                         onReminder={() => setReminderFor(m)}
                         onPin={() => pin(m)}
                         onTagAlert={() => onTagAlert(m)}
-                        onDelete={mine ? () => remove(m) : undefined}
+                        onDelete={(mine || me.role === 'SUPER_ADMIN') ? () => remove(m) : undefined}
                         isMine={mine}
                         hasMention={Boolean(m.message && m.message.includes('@'))}
                       />

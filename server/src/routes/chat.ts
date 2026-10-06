@@ -112,10 +112,23 @@ r.post('/message/:messageId/pin', ah(async (req, res) => {
 r.delete('/message/:messageId', ah(async (req, res) => {
   const m = await Message.findById(req.params.messageId);
   if (!m) throw notFound('Message');
-  if (String(m.senderId) !== req.user!._id && !can(req.user, 'users.manage')) throw forbidden();
-  m.deletedAt = new Date(); await m.save();
+  if (String(m.senderId) !== req.user!._id && !can(req.user, 'users.manage') && req.user!.role !== 'SUPER_ADMIN') throw forbidden();
+  if (req.user!.role === 'SUPER_ADMIN' || req.query.permanent === 'true') {
+    await Message.deleteOne({ _id: m._id });
+  } else {
+    m.deletedAt = new Date(); await m.save();
+  }
   emitToRoom(`chat:${m.roomId}`, 'message:deleted', { roomId: String(m.roomId), messageId: String(m._id) });
   res.json({ ok: true });
+}));
+
+// Clear all messages in chat room (Super Admin only)
+r.delete('/room/:roomId/clear', ah(async (req, res) => {
+  if (req.user!.role !== 'SUPER_ADMIN') throw forbidden('Only Super Admin can clear chat history');
+  await Message.deleteMany({ roomId: req.params.roomId });
+  await ChatActionMessage.deleteMany({ roomId: req.params.roomId });
+  emitToRoom(`chat:${req.params.roomId}`, 'chat:cleared', { roomId: req.params.roomId });
+  res.json({ ok: true, message: 'Chat room cleared successfully.' });
 }));
 
 /** Chat -> Task */

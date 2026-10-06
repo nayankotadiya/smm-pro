@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events';
 /** Domain event bus. Workflow emits; automation engine subscribes. */
 export type DomainEvent =
-  | 'content.created' | 'script.submitted' | 'script.approved' | 'script.changes_requested'
+  | 'content.created' | 'content.deleted' | 'script.submitted' | 'script.approved' | 'script.changes_requested'
   | 'client_script.approved' | 'client_script.changes_requested'
   | 'raw.uploaded' | 'edit.uploaded' | 'smm.approved' | 'smm.changes_requested'
   | 'final.uploaded' | 'final.approved' | 'final.changes_requested'
