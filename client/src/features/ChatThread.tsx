@@ -233,23 +233,20 @@ function InlineImage({ mediaId, fileName }: { mediaId: string; fileName: string 
   return (
     <>
       <div
-        className="group relative block overflow-hidden rounded-2xl cursor-pointer shadow-md"
+        className="group relative block w-full min-w-[240px] max-w-[340px] sm:max-w-[360px] overflow-hidden rounded-xl cursor-pointer shadow-xs bg-black/5 dark:bg-black/30"
         onClick={() => setFullscreen(true)}
       >
         <img
           src={links.stream}
           alt={fileName}
-          className="max-h-64 max-w-xs w-full rounded-2xl object-cover transition-transform duration-300 group-hover:scale-105"
+          className="w-full max-h-[380px] rounded-xl object-contain bg-black/5 dark:bg-black/40 transition-transform duration-200 group-hover:scale-[1.01] block"
           onError={() => fetchLinks()}
         />
-        {/* Fullscreen icon overlay */}
-        <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/0 transition-colors duration-200 group-hover:bg-black/25">
+        {/* Fullscreen icon overlay on hover */}
+        <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-colors duration-200 group-hover:bg-black/20">
           <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100 shadow-xl">
             <Maximize2 size={18} />
           </span>
-        </div>
-        <div className="absolute top-2 right-2 rounded-lg bg-black/60 px-2 py-0.5 text-[10.5px] font-bold text-white shadow-xs">
-          Tap for full view
         </div>
       </div>
 
@@ -293,7 +290,7 @@ function InlineVideo({ mediaId, fileName }: { mediaId: string; fileName: string 
 
   if (loading) {
     return (
-      <div className="flex h-44 w-64 items-center justify-center rounded-2xl bg-black/80">
+      <div className="flex h-52 w-full min-w-[240px] max-w-[340px] sm:max-w-[360px] items-center justify-center rounded-xl bg-black">
         <Spinner className="text-white" />
       </div>
     );
@@ -301,7 +298,7 @@ function InlineVideo({ mediaId, fileName }: { mediaId: string; fileName: string 
 
   if (error || !links) {
     return (
-      <div className="flex h-36 w-64 flex-col items-center justify-center rounded-2xl bg-surface-3 p-3 text-center">
+      <div className="flex h-36 w-full min-w-[240px] max-w-[340px] flex-col items-center justify-center rounded-xl bg-surface-3 p-3 text-center">
         <p className="text-[12px] text-ink-3">Video unavailable</p>
         <button onClick={fetchLinks} className="mt-1 text-[11px] text-primary font-semibold hover:underline">
           Tap to retry
@@ -313,21 +310,20 @@ function InlineVideo({ mediaId, fileName }: { mediaId: string; fileName: string 
   return (
     <>
       <div
-        className="group relative block overflow-hidden rounded-2xl bg-black cursor-pointer shadow-md"
-        style={{ maxWidth: 300 }}
+        className="group relative block w-full min-w-[240px] max-w-[340px] sm:max-w-[360px] overflow-hidden rounded-xl bg-black cursor-pointer shadow-xs"
         onClick={() => setFullscreen(true)}
       >
         <video
           src={links.stream}
           playsInline
           preload="metadata"
-          className="max-h-56 w-full rounded-2xl object-cover bg-black"
+          className="w-full max-h-[380px] rounded-xl object-contain bg-black block"
           onError={() => fetchLinks()}
         />
 
-        {/* Center Play Button Overlay */}
-        <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/45 transition-colors">
-          <span className="flex h-13 w-13 items-center justify-center rounded-full bg-white/25 backdrop-blur-md ring-1 ring-white/30 text-white shadow-2xl transition-transform duration-200 group-hover:scale-110 active:scale-95">
+        {/* Center Play Button Overlay (WhatsApp style) */}
+        <div className="absolute inset-0 flex items-center justify-center bg-black/25 group-hover:bg-black/40 transition-colors">
+          <span className="flex h-13 w-13 items-center justify-center rounded-full bg-black/60 backdrop-blur-md ring-1 ring-white/30 text-white shadow-2xl transition-transform duration-200 group-hover:scale-110 active:scale-95">
             <Play size={24} className="ml-0.5 fill-white" />
           </span>
         </div>
@@ -346,10 +342,10 @@ function InlineVideo({ mediaId, fileName }: { mediaId: string; fileName: string 
           <span>Full view</span>
         </button>
 
-        {/* Bottom file title & tap hint */}
-        <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent p-2.5 pt-6 text-[11px] text-white flex items-center justify-between">
-          <span className="truncate max-w-[70%] font-medium drop-shadow">{fileName}</span>
-          <span className="text-[10px] text-white/90 font-semibold">Tap to play</span>
+        {/* Bottom video name pill */}
+        <div className="absolute bottom-2 left-2 flex items-center gap-1.5 rounded-md bg-black/60 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur-xs shadow-xs max-w-[70%]">
+          <Film size={12} className="shrink-0" />
+          <span className="truncate">{fileName}</span>
         </div>
       </div>
 
@@ -1478,8 +1474,9 @@ export function ChatThread({ roomId, embedded }: { roomId: string; embedded?: bo
           const grouped = !showDay && prev && prev.kind === 'USER' && m.kind === 'USER'
             && prev.senderId?._id === m.senderId?._id
             && +new Date(m.createdAt) - +new Date(prev.createdAt) < 5 * 60_000;
-          const hasOnlyMedia = !m.message && m.attachments?.length > 0;
-          const singleImage = hasOnlyMedia && m.attachments?.length === 1 && isImage(m.attachments[0]?.mimeType, m.attachments[0]?.fileName);
+          const hasMedia = (m.attachments || []).length > 0;
+          const hasOnlyMedia = !m.message && hasMedia;
+          const singleMedia = hasOnlyMedia && m.attachments?.length === 1 && (isImage(m.attachments[0]?.mimeType, m.attachments[0]?.fileName) || isVideo(m.attachments[0]?.mimeType, m.attachments[0]?.fileName));
 
           return (
             <div key={m._id}>
@@ -1520,21 +1517,25 @@ export function ChatThread({ roomId, embedded }: { roomId: string; embedded?: bo
                   m.sending && 'opacity-70'
                 )}>
                   {/* Bubble wrapper */}
-                  <div className={clsx('relative max-w-[85%] sm:max-w-[68%]', mine ? 'items-end flex flex-col' : 'items-start flex flex-col')}>
+                  <div className={clsx(
+                    'relative',
+                    hasMedia ? 'w-full max-w-[340px] sm:max-w-[360px]' : 'max-w-[85%] sm:max-w-[68%]',
+                    mine ? 'items-end flex flex-col' : 'items-start flex flex-col'
+                  )}>
                     {/* SVG Tails (only shown when not grouped) */}
                     {!grouped && (mine ? <OutgoingTail /> : <IncomingTail />)}
 
                     {/* Bubble body */}
                     <div className={clsx(
-                      'relative shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]',
+                      'relative shadow-[0_1px_0.5px_rgba(11,20,26,0.13)] w-full',
                       mine
                         ? clsx('bg-[#d9fdd3] dark:bg-[#005c4b] text-[#111b21] dark:text-[#e9edef] rounded-lg', !grouped && 'rounded-tr-none')
                         : clsx('bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] rounded-lg', !grouped && 'rounded-tl-none'),
-                      singleImage ? 'overflow-hidden p-0' : hasOnlyMedia ? 'p-1' : 'px-2.5 pt-1.5 pb-1'
+                      singleMedia ? 'overflow-hidden p-0.5' : hasOnlyMedia ? 'p-1 overflow-hidden' : hasMedia ? 'p-1 overflow-hidden' : 'px-2.5 pt-1.5 pb-1'
                     )}>
                       {/* Sender name for incoming messages */}
                       {!grouped && !mine && (
-                        <div className={clsx('text-[12.5px] font-semibold mb-0.5 select-none leading-tight', getParticipantColor(m.senderId?.name))}>
+                        <div className={clsx('text-[12.5px] font-semibold mb-0.5 select-none leading-tight px-1 pt-0.5', getParticipantColor(m.senderId?.name))}>
                           {m.senderId?.name || 'User'}
                         </div>
                       )}
@@ -1556,29 +1557,29 @@ export function ChatThread({ roomId, embedded }: { roomId: string; embedded?: bo
                         </div>
                       )}
 
-                      {/* Text */}
-                      {m.message && (
-                        <div className="whitespace-pre-wrap break-words text-[14.2px] leading-[1.42] select-text">
-                          {renderMentions(m.message, mine, me.name)}
-                        </div>
-                      )}
-
-                      {/* Attachments */}
+                      {/* WhatsApp style: Attachments rendered FIRST at the top */}
                       {(m.attachments || []).length > 0 && (
-                        <div className={clsx('flex flex-col gap-1', m.message && 'mt-1.5')}>
+                        <div className={clsx('flex flex-col gap-1 w-full', m.message && 'mb-1')}>
                           {(m.attachments || []).map((f: any) => (
                             <AttachmentBubble key={f._id} file={f} isMine={mine} />
                           ))}
                         </div>
                       )}
 
+                      {/* Text (WhatsApp style: caption rendered below media) */}
+                      {m.message && (
+                        <div className={clsx('whitespace-pre-wrap break-words text-[14.2px] leading-[1.42] select-text', hasMedia ? 'px-1.5 pt-0.5 pb-0.5' : '')}>
+                          {renderMentions(m.message, mine, me.name)}
+                        </div>
+                      )}
+
                       {/* Time + status checkmarks */}
                       <div className={clsx(
                         'flex items-center gap-1 text-[11px] tabular select-none leading-none',
-                        singleImage
-                          ? 'absolute bottom-1.5 right-1.5 rounded-md bg-black/50 px-1.5 py-0.5 text-white backdrop-blur-xs'
+                        singleMedia
+                          ? 'absolute bottom-2 right-2 rounded-md bg-black/55 px-1.5 py-0.5 text-white backdrop-blur-xs shadow-xs'
                           : 'float-right ml-2.5 mt-1',
-                        !singleImage && (mine ? 'text-[#667781] dark:text-[#ffffff]/65' : 'text-[#667781] dark:text-[#8696a0]')
+                        !singleMedia && (mine ? 'text-[#667781] dark:text-[#ffffff]/65' : 'text-[#667781] dark:text-[#8696a0]')
                       )}>
                         <span>{fmtTime(m.createdAt)}</span>
                         {mine && (
@@ -1591,7 +1592,7 @@ export function ChatThread({ roomId, embedded }: { roomId: string; embedded?: bo
                           ) : stateOf(m) === 'Sending' ? (
                             <span title="Sending..."><Clock size={11} className="text-[#667781] dark:text-[#ffffff]/65" /></span>
                           ) : (
-                            <span title={seenTitle(m)} className="cursor-help"><Check size={15} className="text-[#667781] dark:text-[#ffffff]/65" /></span>
+                            <span title={seenTitle(m)} className="cursor-help"><Check size={15} className={singleMedia ? 'text-white' : 'text-[#667781] dark:text-[#ffffff]/65'} /></span>
                           )
                         )}
                       </div>

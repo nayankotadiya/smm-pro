@@ -22,6 +22,7 @@ import media from './routes/media';
 import drive from './routes/drive';
 import chat from './routes/chat';
 import notifications, { push } from './routes/notifications';
+import { pushConfigured, getVapidPublicKey } from './integrations/push';
 import reminders from './routes/reminders';
 import automations from './routes/automations';
 import dashboard from './routes/dashboard';
@@ -82,6 +83,10 @@ export function createApp() {
   app.use('/api/auth', auth);
   app.use('/api/public', publicRoutes);
   app.use('/api/media', media); // handles its own auth (signed stream links)
+  // Public push config (VAPID key) so devices/service workers can subscribe without 401 race condition
+  app.get('/api/push/config', (_req, res) => {
+    res.json({ enabled: pushConfigured(), publicKey: getVapidPublicKey() });
+  });
 
   const api = express.Router();
   api.use(requireAuth);

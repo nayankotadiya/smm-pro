@@ -1,12 +1,14 @@
 import { get, post } from '@/lib/api';
 
-/** Service worker: app shell + push. Registered only in production builds so dev HMR is unaffected. */
+/** Service worker: app shell + push notification listener. Registered across all devices and origins. */
 export function registerSW() {
-  if (!('serviceWorker' in navigator)) return;
-  const isLocal = ['localhost', '127.0.0.1'].includes(window.location.hostname);
-  if (!import.meta.env.PROD && !isLocal) return;
+  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
   const doRegister = () => {
-    navigator.serviceWorker.register('/sw.js').catch((e) => console.warn('SW registration failed', e));
+    navigator.serviceWorker.register('/sw.js', { scope: '/' })
+      .then((reg) => {
+        console.log('[SW] ServiceWorker registered with scope:', reg.scope);
+      })
+      .catch((e) => console.warn('[SW] Registration failed', e));
   };
   if (document.readyState === 'complete') {
     doRegister();
