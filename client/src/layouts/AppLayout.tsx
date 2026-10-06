@@ -164,7 +164,7 @@ export default function AppLayout() {
             </div>
           </header>
 
-          <main className={clsx('min-h-0 flex-1 overflow-x-hidden', isChat ? 'overflow-hidden' : 'overflow-y-auto')}>
+          <main className={clsx('min-h-0 flex-1 overflow-x-hidden', isChat ? 'overflow-hidden' : 'overflow-y-auto overscroll-y-contain')} style={{ WebkitOverflowScrolling: 'touch' }}>
             {isChat ? (
               <div className="h-full animate-fade-in"><Outlet /></div>
             ) : (

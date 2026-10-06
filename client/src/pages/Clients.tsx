@@ -26,9 +26,85 @@ export function Clients() {
       <PageHeader title="Clients" sub="Internal records. Clients never sign in to this workspace." actions={can('clients.write') && <Button variant="primary" icon={<Plus size={16} />} onClick={() => setOpen(true)}>New client</Button>} />
       <div className="mb-4 max-w-xs"><Input placeholder="Search clients" value={term} onChange={(e) => setTerm(e.target.value)} /></div>
       <Card pad={false}><Async q={q} empty={<Empty title="No clients yet" action={can('clients.write') && <Button variant="primary" onClick={() => setOpen(true)}>Add first client</Button>} />}>{(d: any[]) => (
-        <Table head={['Client', 'Category', 'Contact', 'Team', 'Active content', 'Status']}>
-          {d.map((c) => <tr key={c._id} onClick={() => nav(`/clients/${c._id}`)} className="group cursor-pointer hover:bg-surface-2 transition-colors"><td className="td"><div className="font-semibold text-ink group-hover:text-primary-ink transition-colors">{c.name}</div>{c.businessName && c.businessName !== c.name && <div className="text-meta font-medium text-ink-2">{c.businessName}</div>}</td><td className="td font-medium text-ink-2">{c.category || '—'}</td><td className="td font-medium text-ink-2">{c.contactPerson || '—'}{c.phone && <div className="text-meta text-ink-3 font-mono">{c.phone}</div>}</td><td className="td font-medium text-ink-2">{(c.assignedTeam || []).slice(0, 3).map((u: any) => u.name).join(', ') || '—'}{c.assignedTeam?.length > 3 && ` +${c.assignedTeam.length - 3}`}</td><td className="td tabular font-semibold text-ink">{c.contentCount.active} <span className="font-normal text-ink-3">/ {c.contentCount.total}</span></td><td className="td"><Badge status={c.status} /></td></tr>)}
-        </Table>
+        <>
+          {/* Mobile Card List: Smooth vertical scrolling on mobile touch screens */}
+          <ul className="divide-y divide-line sm:hidden">
+            {d.map((c) => (
+              <li
+                key={c._id}
+                onClick={() => nav(`/clients/${c._id}`)}
+                className="p-3.5 active:bg-surface-2 transition-colors cursor-pointer"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bold text-ink text-[15px] truncate">{c.name}</div>
+                    {c.businessName && c.businessName !== c.name && (
+                      <div className="text-[12px] font-medium text-ink-2 truncate">{c.businessName}</div>
+                    )}
+                  </div>
+                  <Badge status={c.status} />
+                </div>
+
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-ink-2">
+                  {c.category && (
+                    <span className="font-medium text-ink bg-surface-2 px-2 py-0.5 rounded-md border border-line/60">
+                      {c.category}
+                    </span>
+                  )}
+                  {c.contactPerson && (
+                    <span className="truncate">👤 {c.contactPerson}</span>
+                  )}
+                  {c.phone && (
+                    <a
+                      href={`tel:${c.phone}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="font-mono text-primary font-semibold hover:underline"
+                    >
+                      📞 {c.phone}
+                    </a>
+                  )}
+                </div>
+
+                <div className="mt-2.5 flex items-center justify-between text-[12px] text-ink-3 pt-2 border-t border-line/40">
+                  <span className="truncate max-w-[65%]">
+                    👥 {(c.assignedTeam || []).slice(0, 3).map((u: any) => u.name).join(', ') || 'No team'}
+                    {c.assignedTeam?.length > 3 && ` +${c.assignedTeam.length - 3}`}
+                  </span>
+                  <span className="font-semibold text-ink">
+                    🎬 {c.contentCount.active} <span className="font-normal text-ink-3">/ {c.contentCount.total}</span>
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+
+          {/* Desktop Table View */}
+          <div className="hidden sm:block">
+            <Table head={['Client', 'Category', 'Contact', 'Team', 'Active content', 'Status']}>
+              {d.map((c) => (
+                <tr key={c._id} onClick={() => nav(`/clients/${c._id}`)} className="group cursor-pointer hover:bg-surface-2 transition-colors">
+                  <td className="td">
+                    <div className="font-semibold text-ink group-hover:text-primary-ink transition-colors">{c.name}</div>
+                    {c.businessName && c.businessName !== c.name && <div className="text-meta font-medium text-ink-2">{c.businessName}</div>}
+                  </td>
+                  <td className="td font-medium text-ink-2">{c.category || '—'}</td>
+                  <td className="td font-medium text-ink-2">
+                    {c.contactPerson || '—'}
+                    {c.phone && <div className="text-meta text-ink-3 font-mono">{c.phone}</div>}
+                  </td>
+                  <td className="td font-medium text-ink-2">
+                    {(c.assignedTeam || []).slice(0, 3).map((u: any) => u.name).join(', ') || '—'}
+                    {c.assignedTeam?.length > 3 && ` +${c.assignedTeam.length - 3}`}
+                  </td>
+                  <td className="td tabular font-semibold text-ink">
+                    {c.contentCount.active} <span className="font-normal text-ink-3">/ {c.contentCount.total}</span>
+                  </td>
+                  <td className="td"><Badge status={c.status} /></td>
+                </tr>
+              ))}
+            </Table>
+          </div>
+        </>
       )}</Async></Card>
       <ClientForm open={open} onClose={() => setOpen(false)} />
     </>
@@ -217,7 +293,60 @@ export function ClientDetail() {
         </div>}
         {tab === 'campaigns' && <Campaigns clientId={c._id} />}
         {tab === 'content' && <Card pad={false}><Async q={ov}>{(d: any) => <ContentTable items={d.content.map((x: any) => ({ ...x, clientId: { name: c.name } }))} compact />}</Async></Card>}
-        {tab === 'scripts' && <Card pad={false}><Async q={ov}>{(d: any) => !d.scripts.length ? <Empty title="No scripts yet" /> : <Table head={['Content', 'Writer', 'Version', 'Status']}>{d.scripts.filter((s: any) => s.contentId).map((s: any) => <tr key={s._id} className="group cursor-pointer hover:bg-surface-2 transition-colors" onClick={() => nav(`/content/${s.contentId._id}?tab=script`)}><td className="td"><div className="font-semibold text-ink group-hover:text-primary-ink transition-colors">{s.contentId.title}</div><div className="font-mono text-meta font-medium text-ink-3">{s.contentId.contentId}</div></td><td className="td font-medium text-ink-2">{s.writerId?.name || '—'}</td><td className="td tabular font-semibold text-ink">{s.currentVersion ? `V${s.currentVersion}` : '—'}</td><td className="td"><Badge status={s.status} /></td></tr>)}</Table>}</Async></Card>}
+        {tab === 'scripts' && (
+          <Card pad={false}>
+            <Async q={ov}>
+              {(d: any) => {
+                const scripts = (d.scripts || []).filter((s: any) => s.contentId);
+                if (!scripts.length) return <Empty title="No scripts yet" />;
+                return (
+                  <>
+                    <ul className="divide-y divide-line sm:hidden">
+                      {scripts.map((s: any) => (
+                        <li
+                          key={s._id}
+                          className="p-3.5 active:bg-surface-2 transition-colors cursor-pointer"
+                          onClick={() => nav(`/content/${s.contentId._id}?tab=script`)}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="font-bold text-ink text-[15px] truncate">{s.contentId.title}</div>
+                              <div className="font-mono text-[12px] text-ink-3">{s.contentId.contentId}</div>
+                            </div>
+                            <Badge status={s.status} />
+                          </div>
+                          <div className="mt-2 flex items-center justify-between text-[12.5px] text-ink-2 pt-2 border-t border-line/40">
+                            <span>✍️ {s.writerId?.name || 'Unassigned'}</span>
+                            <span className="font-semibold text-ink">{s.currentVersion ? `V${s.currentVersion}` : '—'}</span>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="hidden sm:block">
+                      <Table head={['Content', 'Writer', 'Version', 'Status']}>
+                        {scripts.map((s: any) => (
+                          <tr
+                            key={s._id}
+                            className="group cursor-pointer hover:bg-surface-2 transition-colors"
+                            onClick={() => nav(`/content/${s.contentId._id}?tab=script`)}
+                          >
+                            <td className="td">
+                              <div className="font-semibold text-ink group-hover:text-primary-ink transition-colors">{s.contentId.title}</div>
+                              <div className="font-mono text-meta font-medium text-ink-3">{s.contentId.contentId}</div>
+                            </td>
+                            <td className="td font-medium text-ink-2">{s.writerId?.name || '—'}</td>
+                            <td className="td tabular font-semibold text-ink">{s.currentVersion ? `V${s.currentVersion}` : '—'}</td>
+                            <td className="td"><Badge status={s.status} /></td>
+                          </tr>
+                        ))}
+                      </Table>
+                    </div>
+                  </>
+                );
+              }}
+            </Async>
+          </Card>
+        )}
         {tab === 'reviews' && <Async q={ov}>{(d: any) => !d.reviews.length ? <Card><Empty title="No client reviews yet" hint="Reviews appear here when content is sent to the client." /></Card> : <div className="space-y-3">{d.reviews.map((r: any) => <Card key={r._id} title={<span className="flex flex-wrap items-center gap-2"><Link className="hover:text-primary-ink" to={`/content/${r.contentId?._id}?tab=reviews`}>{r.contentId?.title}</Link><span className="font-normal text-ink-2">{r.version}</span><Badge status={r.status} /></span>}><ClientTracking a={r} /><div className="mt-2 text-meta text-ink-2">Source: {label(r.source)}{r.feedbackCount ? ` · ${r.feedbackCount} comment${r.feedbackCount > 1 ? 's' : ''}` : ''}</div></Card>)}</div>}</Async>}
         {tab === 'communication' && <Communication clientId={c._id} reviews={ov.data?.reviews || []} />}
         {tab === 'files' && <div className="space-y-4"><div><UploadButton label="Upload brand asset" category="BRAND_ASSET" clientId={c._id} onDone={() => ov.refetch()} /></div><Async q={ov}>{(d: any) => !d.files.length ? <Card><Empty title="No files for this client" /></Card> : <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{d.files.map((m: any) => <FileCard key={m._id} m={m} a={a} />)}</div>}</Async></div>}
@@ -380,7 +509,51 @@ function Campaigns({ clientId }: { clientId: string }) {
   const m = useMutation({ mutationFn: () => post(`/clients/${clientId}/campaigns`, { ...v, startDate: v.startDate || null, endDate: v.endDate || null }), onSuccess: () => { toast.success('Campaign created.'); setOpen(false); setV({ name: '', description: '', startDate: '', endDate: '' }); qc.invalidateQueries({ queryKey: ['clients', 'campaigns', clientId] }); }, onError: (e) => toast.error(errMsg(e)) });
   return (
     <Card title="Campaigns" pad={false} action={can('content.write') && <Button size="sm" icon={<Plus size={14} />} onClick={() => setOpen(true)}>Campaign</Button>}>
-      <Async q={q} empty={<Empty title="No campaigns" hint="Group related content, like a festival or a launch." />}>{(d: any[]) => <Table head={['Campaign', 'Dates', 'Status']} minWidth={420}>{d.map((x) => <tr key={x._id}><td className="td"><Link to={`/content?clientId=${clientId}&campaignId=${x._id}`} className="font-medium hover:text-primary-ink">{x.name}</Link>{x.description && <div className="text-meta text-ink-2">{x.description}</div>}</td><td className="td whitespace-nowrap text-ink-2">{x.startDate ? `${fmtDate(x.startDate)} – ${x.endDate ? fmtDate(x.endDate) : ''}` : '—'}</td><td className="td"><Badge status={x.status} /></td></tr>)}</Table>}</Async>
+      <Async q={q} empty={<Empty title="No campaigns" hint="Group related content, like a festival or a launch." />}>
+        {(d: any[]) => (
+          <>
+            <ul className="divide-y divide-line sm:hidden">
+              {d.map((x) => (
+                <li key={x._id} className="p-3.5 active:bg-surface-2 transition-colors">
+                  <div className="flex items-start justify-between gap-2">
+                    <Link
+                      to={`/content?clientId=${clientId}&campaignId=${x._id}`}
+                      className="font-bold text-ink text-[15px] hover:text-primary-ink"
+                    >
+                      {x.name}
+                    </Link>
+                    <Badge status={x.status} />
+                  </div>
+                  {x.description && <div className="mt-1 text-[12.5px] text-ink-2">{x.description}</div>}
+                  <div className="mt-2 text-[12px] text-ink-3">
+                    📅 {x.startDate ? `${fmtDate(x.startDate)} – ${x.endDate ? fmtDate(x.endDate) : ''}` : 'No date set'}
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <div className="hidden sm:block">
+              <Table head={['Campaign', 'Dates', 'Status']} minWidth={420}>
+                {d.map((x) => (
+                  <tr key={x._id}>
+                    <td className="td">
+                      <Link to={`/content?clientId=${clientId}&campaignId=${x._id}`} className="font-medium hover:text-primary-ink">
+                        {x.name}
+                      </Link>
+                      {x.description && <div className="text-meta text-ink-2">{x.description}</div>}
+                    </td>
+                    <td className="td whitespace-nowrap text-ink-2">
+                      {x.startDate ? `${fmtDate(x.startDate)} – ${x.endDate ? fmtDate(x.endDate) : ''}` : '—'}
+                    </td>
+                    <td className="td">
+                      <Badge status={x.status} />
+                    </td>
+                  </tr>
+                ))}
+              </Table>
+            </div>
+          </>
+        )}
+      </Async>
       <Modal open={open} onClose={() => setOpen(false)} title="New campaign" footer={<><Button onClick={() => setOpen(false)}>Cancel</Button><Button variant="primary" disabled={!v.name.trim()} loading={m.isPending} onClick={() => m.mutate()}>Create</Button></>}><div className="grid gap-3 sm:grid-cols-2"><div className="sm:col-span-2"><Field label="Name"><Input value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} autoFocus /></Field></div><Field label="Start"><Input type="date" value={v.startDate} onChange={(e) => setV({ ...v, startDate: e.target.value })} /></Field><Field label="End"><Input type="date" value={v.endDate} onChange={(e) => setV({ ...v, endDate: e.target.value })} /></Field><div className="sm:col-span-2"><Field label="Description"><Textarea value={v.description} onChange={(e) => setV({ ...v, description: e.target.value })} /></Field></div></div></Modal>
     </Card>
   );

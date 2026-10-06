@@ -221,7 +221,7 @@ export function Modal({ open, onClose, title, children, footer, wide }: { open: 
       <div role="dialog" aria-modal="true" className={clsx('flex max-h-[92dvh] w-full flex-col rounded-t-2xl border border-line/70 bg-surface-raised/90 backdrop-blur-2xl shadow-pop sm:rounded-2xl', wide ? 'sm:max-w-3xl' : 'sm:max-w-lg', closing ? 'animate-sheet-out sm:animate-modal-out' : 'animate-sheet-in sm:animate-modal-in')}>
         <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-line-strong sm:hidden" aria-hidden />
         <header className="flex items-center justify-between border-b border-line/60 px-5 py-3.5"><h2 className="text-[16px] font-bold">{title}</h2><IconButton label="Close" onClick={onClose}><X size={18} /></IconButton></header>
-        <div className="overflow-y-auto p-5">{children}</div>
+        <div className="overflow-y-auto overscroll-y-contain p-5" style={{ WebkitOverflowScrolling: 'touch' }}>{children}</div>
         {footer && <footer className="safe-b-3 flex flex-wrap justify-end gap-2 border-t border-line/60 px-5 pt-3.5">{footer}</footer>}
       </div>
     </div>, document.body);
@@ -236,7 +236,7 @@ export function Tabs<T extends string>({ tabs, value, onChange }: { tabs: { key:
   useEffect(() => { const ro = new ResizeObserver(measure); if (wrap.current) ro.observe(wrap.current); document.fonts?.ready.then(measure); return () => ro.disconnect(); }, [value]); // eslint-disable-line
   useEffect(() => { refs.current[value]?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' }); }, [value]);
   return (
-    <div className="-mx-4 mb-4 overflow-x-auto border-b border-line/60 px-4 sm:mx-0 sm:px-0" role="tablist" style={{ scrollbarWidth: 'none' }}>
+    <div className="-mx-4 mb-4 overflow-x-auto overscroll-x-contain border-b border-line/60 px-4 sm:mx-0 sm:px-0" role="tablist" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
       <div ref={wrap} className="relative flex min-w-max gap-6">
         {tabs.map((t) => (
           <button
@@ -301,7 +301,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<H
 
 export function Table({ head, children, minWidth = 640 }: { head: ReactNode[]; children: ReactNode; minWidth?: number }) {
   return (
-    <div className="w-full max-w-full overflow-x-auto touch-pan-x" style={{ WebkitOverflowScrolling: 'touch' }}>
+    <div className="w-full max-w-full overflow-x-auto overscroll-x-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
       <table className="w-full border-collapse" style={{ minWidth }}>
         <thead>
           <tr className="border-b border-line/60 bg-surface-2/60">{head.map((h, i) => <th key={i} className="th">{h}</th>)}</tr>
