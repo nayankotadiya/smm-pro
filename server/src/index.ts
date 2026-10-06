@@ -11,13 +11,19 @@ async function main() {
   await connectDb();
   await Presence.updateMany({}, { socketIds: [], status: 'OFFLINE' }); // sockets don't survive a restart
 
-  // Auto-purge demo seed data if present on startup (preserving all users & credentials)
-  const { Client } = await import('./models');
-  if (await Client.exists({ name: { $in: ['Zemora Jewels', 'Leafiber', 'Jasumati', 'Kukus91', 'Kukus69'] } })) {
-    console.log('[smm-pro] Detected demo seed data in database. Auto-purging demo operational data...');
+  // Auto-purge demo seed data strictly ONE-TIME ONLY if demo clients exist on startup (preserving all users & credentials)
+  const { Client, ActivityLog } = await import('./models');
+  const alreadyPurged = await ActivityLog.exists({ action: 'system.demo_purged' });
+  if (!alreadyPurged && await Client.exists({ name: { $in: ['Zemora Jewels', 'Leafiber', 'Jasumati', 'Kukus91', 'Kukus69'] } })) {
+    console.log('[smm-pro] Detected demo seed data in database. Auto-purging demo operational data (ONE-TIME ONLY)...');
     const { purgeDemoData } = await import('./reset_clean');
     await purgeDemoData();
-    console.log('[smm-pro] Demo data auto-purge completed successfully.');
+    await ActivityLog.create({
+      action: 'system.demo_purged',
+      message: 'Demo operational data automatically purged on startup. System is now running on a clean slate.',
+      entityType: 'system',
+    });
+    console.log('[smm-pro] Demo data auto-purge completed and permanently locked.');
   }
 
   await seedAutomations();
