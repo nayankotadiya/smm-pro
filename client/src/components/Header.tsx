@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
-import { Bell, Search, CheckCheck, X, ClipboardList, ShieldCheck, MessageSquare, AlarmClock, Clock, FileVideo, GitBranch, Settings2, LogOut, MinusCircle, User, Sun, Moon, Monitor, Plus, Calendar, Camera, Scissors, FileText, Sparkles, Building2, Users, CornerDownLeft } from 'lucide-react';
+import { Bell, Search, CheckCheck, X, ClipboardList, ShieldCheck, MessageSquare, AlarmClock, Clock, FileVideo, GitBranch, Settings2, LogOut, MinusCircle, User, Sun, Moon, Monitor, Plus, Calendar, Camera, Scissors, FileText, Sparkles, Building2, Users, CornerDownLeft, Zap } from 'lucide-react';
 import { get, post, patch, del } from '@/lib/api';
 import { ago, roleLabel } from '@/lib/format';
 import { Avatar, Empty, IconButton, Spinner, PresenceDot } from './ui';
@@ -84,6 +84,7 @@ const GROUPS: { key: string; title: string; to: (x: any) => string; text: (x: an
   { key: 'team', title: 'Team members', to: (x) => `/team/${x._id}`, text: (x) => x.name, sub: (x) => roleLabel(x.role) },
 ];
 const QUICK_ACTIONS = [
+  { label: '⚡ Fast-Track Client Video', sub: 'Client shot raw footage? Drop & assign to editor in 1 click', to: '/content?action=fast-track', icon: Zap, badge: 'Fast-Track' },
   { label: 'Create New Content', sub: 'Start a new script or campaign', to: '/content', icon: Plus, badge: 'Action' },
   { label: 'Pending Approvals', sub: 'Client & internal reviews waiting', to: '/approvals', icon: ShieldCheck, badge: 'Reviews' },
   { label: 'Production Calendar', sub: 'Timeline of shoots, edits & deadlines', to: '/calendar', icon: Calendar, badge: 'Plan' },

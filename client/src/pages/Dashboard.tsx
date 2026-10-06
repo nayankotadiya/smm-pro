@@ -2,13 +2,13 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
-import { Plus, ArrowRight, HardDrive, Building2, Clapperboard, FileText, Camera, Scissors, MessagesSquare, ShieldCheck, CalendarClock, Rocket, AlarmClockOff, ListChecks, CalendarCheck, Loader, Hourglass, CheckCheck, CalendarDays, FileVideo, FilePen, Users } from 'lucide-react';
+import { Plus, ArrowRight, HardDrive, Building2, Clapperboard, FileText, Camera, Scissors, MessagesSquare, ShieldCheck, CalendarClock, Rocket, AlarmClockOff, ListChecks, CalendarCheck, Loader, Hourglass, CheckCheck, CalendarDays, FileVideo, FilePen, Users, Zap } from 'lucide-react';
 import { get } from '@/lib/api';
 import { useAuth, useCan } from '@/store/auth';
 import { useUI } from '@/store/ui';
 import { Async, Avatar, Badge, BarList, Button, Card, DateRangePicker, Empty, PageHeader, PresenceDot, Progress, Segmented, Stat, Table } from '@/components/ui';
 import { ContentTable, TaskList, ActivityFeed } from '@/components/Lists';
-import { ContentFormModal, TaskFormModal, ReminderFormModal } from '@/components/Forms';
+import { ContentFormModal, TaskFormModal, ReminderFormModal, FastTrackVideoModal } from '@/components/Forms';
 import { ago, fmtAge, fmtDateTime, fmtSize, label, roleLabel } from '@/lib/format';
 import { FileCard, useMediaActions } from '@/components/Media';
 
@@ -21,7 +21,7 @@ const More = ({ to, children = 'View all' }: { to: string; children?: string }) 
 
 export default function Dashboard() {
   const user = useAuth((s) => s.user)!; const can = useCan(); const org = can('dashboard.org');
-  const [modal, setModal] = useState<'content' | 'task' | 'reminder' | null>(null);
+  const [modal, setModal] = useState<'content' | 'task' | 'reminder' | 'fast-track' | null>(null);
   const [showReport, setShowReport] = useState(false);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -31,7 +31,16 @@ export default function Dashboard() {
       <PageHeader title={`Good ${h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening'}, ${user.name.split(' ')[0]}`} sub={new Date().toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })}
         actions={<>
           <Button icon={<Sparkles size={15} className="text-emerald-400" />} onClick={() => setShowReport(true)}>Daily / Weekly Report</Button>
-          {can('content.write') && <Button variant="primary" icon={<Plus size={16} />} onClick={() => setModal('content')}>New content</Button>}
+          {can('content.write') && (
+            <Button
+              variant="primary"
+              icon={<Zap size={15} className="text-amber-300 fill-amber-300/30" />}
+              onClick={() => setModal('fast-track')}
+            >
+              Fast-track Video
+            </Button>
+          )}
+          {can('content.write') && <Button icon={<Plus size={16} />} onClick={() => setModal('content')}>New content</Button>}
           <Button icon={<Plus size={16} />} onClick={() => setModal('task')}>Task</Button>
           <Button icon={<Plus size={16} />} onClick={() => setModal('reminder')}>Reminder</Button>
         </>} />
@@ -48,6 +57,7 @@ export default function Dashboard() {
       </div>
       {org ? <OrgDashboard dateFrom={dateFrom} dateTo={dateTo} /> : <TeamDashboard dateFrom={dateFrom} dateTo={dateTo} />}
       <ContentFormModal open={modal === 'content'} onClose={() => setModal(null)} />
+      <FastTrackVideoModal open={modal === 'fast-track'} onClose={() => setModal(null)} />
       <TaskFormModal open={modal === 'task'} onClose={() => setModal(null)} />
       <ReminderFormModal open={modal === 'reminder'} onClose={() => setModal(null)} />
       <ClientReportModal open={showReport} onClose={() => setShowReport(false)} />

@@ -1,12 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, SlidersHorizontal, X } from 'lucide-react';
+import { Plus, SlidersHorizontal, X, Zap } from 'lucide-react';
 import { get } from '@/lib/api';
 import { useCan } from '@/store/auth';
 import { Async, Badge, Button, Card, Empty, Input, PageHeader, Select, Table } from '@/components/ui';
 import { ContentTable } from '@/components/Lists';
-import { ContentFormModal } from '@/components/Forms';
+import { ContentFormModal, FastTrackVideoModal } from '@/components/Forms';
 import { useClients, useTeam } from '@/hooks/useData';
 import { STAGES, fmtDate, fmtDateTime, label, roleLabel } from '@/lib/format';
 
@@ -45,14 +45,50 @@ function useContentQuery(extra: Record<string, string> = {}) {
 }
 
 export function ContentList() {
-  const can = useCan(); const [open, setOpen] = useState(false); const q = useContentQuery(); const [sp] = useSearchParams();
+  const can = useCan();
+  const [open, setOpen] = useState(false);
+  const q = useContentQuery();
+  const [sp, setSp] = useSearchParams();
+  const [fastTrackOpen, setFastTrackOpen] = useState(sp.get('action') === 'fast-track');
   const stage = sp.get('stage');
+
+  useEffect(() => {
+    if (sp.get('action') === 'fast-track') {
+      setFastTrackOpen(true);
+      const next = new URLSearchParams(sp);
+      next.delete('action');
+      setSp(next, { replace: true });
+    }
+  }, [sp, setSp]);
+
   return (
     <>
-      <PageHeader title="Content" sub={stage ? `Filtered: ${stage.split(',').map(label).join(', ')}` : q.data ? `${q.data.total} items` : undefined} actions={can('content.write') && <Button variant="primary" icon={<Plus size={16} />} onClick={() => setOpen(true)}>New content</Button>} />
+      <PageHeader
+        title="Content"
+        sub={stage ? `Filtered: ${stage.split(',').map(label).join(', ')}` : q.data ? `${q.data.total} items` : undefined}
+        actions={
+          <div className="flex items-center gap-2">
+            {can('content.write') && (
+              <Button
+                variant="primary"
+                icon={<Zap size={15} className="text-amber-300 fill-amber-300/30" />}
+                onClick={() => setFastTrackOpen(true)}
+              >
+                Fast-track Video
+              </Button>
+            )}
+            {can('content.write') && (
+              <Button icon={<Plus size={16} />} onClick={() => setOpen(true)}>
+                New content
+              </Button>
+            )}
+          </div>
+        }
+      />
       <ContentFilters />
       <Card pad={false}><Async q={q}>{(d: any) => <ContentTable items={d.items} />}</Async></Card>
       <ContentFormModal open={open} onClose={() => setOpen(false)} />
+      <FastTrackVideoModal open={fastTrackOpen} onClose={() => setFastTrackOpen(false)} />
     </>
   );
 }

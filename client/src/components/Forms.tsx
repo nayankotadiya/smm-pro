@@ -1,15 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useNavigate } from 'react-router-dom';
-import { Button, Field, Input, Modal, Select, Textarea } from './ui';
+import { Button, Field, Input, Modal, Select, Textarea, Badge } from './ui';
 import { post, patch, errMsg } from '@/lib/api';
 import { toast } from '@/store/ui';
 import { useClients, useTeam, useContentOptions } from '@/hooks/useData';
-import { roleLabel, toLocalInput } from '@/lib/format';
+import { roleLabel, toLocalInput, fmtSize } from '@/lib/format';
 import { useAuth, useCan } from '@/store/auth';
+import { startUpload } from '@/lib/upload';
+import { Zap, Upload, Film, X } from 'lucide-react';
 
 const contentSchema = z.object({ title: z.string().min(2, 'Give the content a title'), clientId: z.string().min(1, 'Choose a client'), type: z.string(), platform: z.string(), priority: z.string(), deadline: z.string().optional(), description: z.string().optional() });
 export function ContentFormModal({ open, onClose, clientId }: { open: boolean; onClose: () => void; clientId?: string }) {
@@ -96,3 +98,285 @@ export function ReasonModal({ open, onClose, title, label: lbl, cta, onSubmit, l
   useEffect(() => { if (open) setR(''); }, [open]);
   return <Modal open={open} onClose={onClose} title={title} footer={<><Button onClick={onClose}>Cancel</Button><Button variant={danger ? 'danger' : 'primary'} disabled={r.trim().length < 3} loading={loading} onClick={() => onSubmit(r.trim())}>{cta}</Button></>}><Field label={lbl}><Textarea value={r} onChange={(e) => setR(e.target.value)} autoFocus rows={4} /></Field></Modal>;
 }
+
+export function FastTrackVideoModal({ open, onClose, clientId }: { open: boolean; onClose: () => void; clientId?: string }) {
+  const clients = useClients();
+  const team = useTeam();
+  const qc = useQueryClient();
+  const nav = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [selClient, setSelClient] = useState(clientId || '');
+  const [title, setTitle] = useState('');
+  const [editorId, setEditorId] = useState('');
+  const [type, setType] = useState('REEL');
+  const [platform, setPlatform] = useState('INSTAGRAM');
+  const [notes, setNotes] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setSelClient(clientId || '');
+      setTitle('');
+      setEditorId('');
+      setType('REEL');
+      setPlatform('INSTAGRAM');
+      setNotes('');
+      setFile(null);
+      setIsDragging(false);
+      setSubmitting(false);
+    }
+  }, [open, clientId]);
+
+  // When client changes, auto-suggest default editor if available
+  useEffect(() => {
+    if (selClient) {
+      const c = (clients.data || []).find((x) => x._id === selClient);
+      if (c?.defaultTeam?.editor) {
+        setEditorId(c.defaultTeam.editor);
+      }
+    }
+  }, [selClient, clients.data]);
+
+  const handleFile = (f: File) => {
+    setFile(f);
+    if (!title.trim()) {
+      const clean = f.name
+        .replace(/\.[^/.]+$/, '')
+        .replace(/[-_.]+/g, ' ')
+        .trim();
+      if (clean) {
+        setTitle(clean.charAt(0).toUpperCase() + clean.slice(1));
+      }
+    }
+  };
+
+  const onDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+  const onDragLeave = () => setIsDragging(false);
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const dropped = e.dataTransfer.files?.[0];
+    if (dropped) handleFile(dropped);
+  };
+
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!selClient) {
+      toast.error('Please select a client');
+      return;
+    }
+    if (!file) {
+      toast.error('Please select or drop a video file');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const finalTitle = title.trim() || file.name.replace(/\.[^/.]+$/, '').replace(/[-_.]+/g, ' ').trim() || 'Client Raw Video';
+      const desc = notes.trim()
+        ? `[Client-Shot Raw Footage]: ${notes.trim()}`
+        : '[Client-Shot Raw Footage] Uploaded directly for editing.';
+
+      // 1. Create content item
+      const content = await post('/content', {
+        title: finalTitle,
+        clientId: selClient,
+        type,
+        platform,
+        priority: 'HIGH',
+        assignedEditor: editorId || undefined,
+        description: desc,
+      });
+
+      // 2. Start RAW upload - automatically advances stage to RAW_FOOTAGE, sets editor as owner, and notifies editor
+      toast.success(`${content.contentId} created! Uploading raw footage...`);
+      await startUpload({
+        file,
+        category: 'RAW',
+        contentId: content._id,
+        clientId: selClient,
+        silent: false,
+      });
+
+      qc.invalidateQueries({ queryKey: ['content'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      qc.invalidateQueries({ queryKey: ['editing'] });
+      qc.invalidateQueries({ queryKey: ['tasks'] });
+
+      onClose();
+      nav(`/content/${content._id}?tab=editing`);
+      toast.success(`⚡ Fast-tracked to editor! ${content.contentId} is ready for editing.`);
+    } catch (err: any) {
+      toast.error(errMsg(err, 'Failed to fast-track video'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const clientObj = (clients.data || []).find((c) => c._id === selClient);
+
+  return (
+    <Modal
+      open={open}
+      onClose={submitting ? () => {} : onClose}
+      title={
+        <div className="flex items-center gap-2">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/10 text-amber-400">
+            <Zap size={16} />
+          </span>
+          <span>Fast-Track Client Video</span>
+        </div>
+      }
+      footer={
+        <>
+          <Button onClick={onClose} disabled={submitting}>Cancel</Button>
+          <Button
+            variant="primary"
+            loading={submitting}
+            disabled={!selClient || !file || submitting}
+            onClick={handleSubmit}
+            icon={<Zap size={15} className="text-amber-300 fill-amber-300/30" />}
+          >
+            {submitting ? 'Uploading & Assigning...' : '⚡ Upload & Send to Editor'}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {/* Info banner */}
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3.5 text-[13px] text-ink-2">
+          <div className="font-semibold text-ink flex items-center gap-1.5 mb-1">
+            <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+            1-Click Client-Shot Workflow
+          </div>
+          Client has already shot the footage? Skip scripting &amp; shooting entirely. This drops the raw video straight into <strong className="text-ink">RAW FOOTAGE</strong> stage and alerts the assigned editor immediately.
+        </div>
+
+        {/* Video Dropzone */}
+        {!file ? (
+          <div
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            onDrop={onDrop}
+            onClick={() => fileInputRef.current?.click()}
+            className={`group cursor-pointer rounded-2xl border-2 border-dashed p-6 text-center transition-all duration-200 ${
+              isDragging
+                ? 'border-primary bg-primary-soft/30 scale-[1.01]'
+                : 'border-line/80 bg-surface-2/40 hover:border-primary/50 hover:bg-surface-2/70'
+            }`}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="video/*,.mp4,.mov,.m4v,.mkv,.webm,.avi"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleFile(f);
+              }}
+            />
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-surface-3 text-ink-2 group-hover:scale-110 group-hover:bg-primary-soft group-hover:text-primary-ink transition-all">
+              <Upload size={22} />
+            </div>
+            <div className="mt-3 text-[14px] font-semibold text-ink">
+              Drop raw client video here or <span className="text-primary-ink underline underline-offset-2">browse</span>
+            </div>
+            <p className="mt-1 text-[12px] text-ink-3">
+              Supports MP4, MOV, MKV, WebM, M4V (up to 5GB)
+            </p>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between rounded-xl border border-line bg-surface-2/80 p-3.5 backdrop-blur-md">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary-ink">
+                <Film size={20} />
+              </div>
+              <div className="min-w-0">
+                <div className="truncate text-[13px] font-semibold text-ink">{file.name}</div>
+                <div className="flex items-center gap-2 text-[12px] text-ink-3">
+                  <span>{fmtSize(file.size)}</span>
+                  <span>•</span>
+                  <Badge t="green" dot>Ready to upload</Badge>
+                </div>
+              </div>
+            </div>
+            {!submitting && (
+              <Button size="sm" variant="ghost" onClick={() => setFile(null)} icon={<X size={14} />}>
+                Change
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* Client & Editor row */}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Client *" hint={clientObj ? `Selected: ${clientObj.name}` : undefined}>
+            <Select value={selClient} onChange={(e) => setSelClient(e.target.value)} disabled={submitting}>
+              <option value="">Select client</option>
+              {(clients.data || []).map((c) => (
+                <option key={c._id} value={c._id}>{c.name}</option>
+              ))}
+            </Select>
+          </Field>
+
+          <Field label="Assigned Editor" hint={clientObj?.defaultTeam?.editor ? 'Defaults to client assigned editor' : undefined}>
+            <Select value={editorId} onChange={(e) => setEditorId(e.target.value)} disabled={submitting}>
+              <option value="">Auto (Client default editor)</option>
+              {(team.data || []).map((u) => (
+                <option key={u._id} value={u._id}>
+                  {u.name} — {roleLabel(u.role)}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+
+        {/* Title */}
+        <Field label="Title" hint="Auto-generated from video name, or customize it">
+          <Input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="e.g. Founder Interview Reel"
+            disabled={submitting}
+          />
+        </Field>
+
+        {/* Type & Platform */}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Type">
+            <Select value={type} onChange={(e) => setType(e.target.value)} disabled={submitting}>
+              {['REEL', 'POST', 'CAROUSEL', 'STORY', 'VIDEO', 'SHORT', 'AD'].map((t) => (
+                <option key={t} value={t}>{roleLabel(t)}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Platform">
+            <Select value={platform} onChange={(e) => setPlatform(e.target.value)} disabled={submitting}>
+              {['INSTAGRAM', 'FACEBOOK', 'YOUTUBE', 'LINKEDIN', 'X', 'MULTI'].map((t) => (
+                <option key={t} value={t}>{roleLabel(t)}</option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+
+        {/* Notes for editor */}
+        <Field label="Instructions for Editor (Optional)">
+          <Textarea
+            rows={2}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="e.g. Cut awkward pauses, add bold captions, fast-paced transitions & trending audio..."
+            disabled={submitting}
+          />
+        </Field>
+      </div>
+    </Modal>
+  );
+}
+
