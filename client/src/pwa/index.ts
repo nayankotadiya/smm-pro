@@ -41,14 +41,41 @@ export async function pushState(): Promise<PushState> {
 const b64 = (s: string) => { const pad = '='.repeat((4 - (s.length % 4)) % 4); const raw = atob((s + pad).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from([...raw].map((c) => c.charCodeAt(0))); };
 function device() { const ua = navigator.userAgent; const platform = /android/i.test(ua) ? 'Android' : isIOS() ? 'iOS' : /mac/i.test(ua) ? 'macOS' : /win/i.test(ua) ? 'Windows' : 'Other'; const browser = /edg\//i.test(ua) ? 'Edge' : /firefox/i.test(ua) ? 'Firefox' : /chrome|crios/i.test(ua) ? 'Chrome' : /safari/i.test(ua) ? 'Safari' : 'Browser'; return { platform, browser, deviceType: /mobi|android|iphone|ipad/i.test(ua) ? 'mobile' : 'desktop' }; }
 
-export async function enablePush(): Promise<PushState> {
-  const cfg = await get('/push/config').catch(() => ({ enabled: false }));
+export async function enablePush(forceFresh = false): Promise<PushState> {
+  const cfg = await get<{ enabled: boolean; publicKey?: string }>('/push/config').catch(() => ({ enabled: false, publicKey: '' }));
   if (!cfg.enabled || !cfg.publicKey) return 'server-off';
   const perm = await Notification.requestPermission();
   if (perm !== 'granted') return perm === 'denied' ? 'denied' : 'off';
   const reg = (await navigator.serviceWorker.getRegistration()) || (await navigator.serviceWorker.register('/sw.js'));
   await navigator.serviceWorker.ready;
-  const sub = (await reg.pushManager.getSubscription()) || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(cfg.publicKey) }));
+
+  let sub = await reg.pushManager.getSubscription();
+  if (sub && forceFresh) {
+    try {
+      await sub.unsubscribe();
+      sub = null;
+    } catch (e) {
+      console.warn('Unsubscribe before refresh failed', e);
+    }
+  }
+
+  if (!sub) {
+    try {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: b64(cfg.publicKey),
+      });
+    } catch (subErr) {
+      console.warn('[pwa] Subscribe attempt threw, retrying fresh subscription:', subErr);
+      const stale = await reg.pushManager.getSubscription();
+      if (stale) await stale.unsubscribe().catch(() => undefined);
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: b64(cfg.publicKey),
+      });
+    }
+  }
+
   const j = sub.toJSON();
   await post('/push/subscribe', { endpoint: j.endpoint, keys: j.keys, ...device() });
   return 'on';

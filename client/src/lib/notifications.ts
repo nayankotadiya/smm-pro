@@ -8,6 +8,23 @@ let audioCtx: AudioContext | null = null;
 
 export function playNotificationChime() {
   try {
+    // 1. First try playing the clean recorded chime WAV
+    const audio = new Audio('/sounds/notification.wav');
+    audio.volume = 0.85;
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise.catch(() => {
+        // Fallback to Web Audio synthesizer if HTML5 Audio autoplay policy intervenes
+        playWebAudioChime();
+      });
+    }
+  } catch {
+    playWebAudioChime();
+  }
+}
+
+function playWebAudioChime() {
+  try {
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioContextClass) return;
     if (!audioCtx || audioCtx.state === 'closed') {
@@ -30,7 +47,7 @@ export function playNotificationChime() {
     osc2.frequency.setValueAtTime(880, now + 0.08);
 
     gainNode.gain.setValueAtTime(0, now);
-    gainNode.gain.linearRampToValueAtTime(0.25, now + 0.02);
+    gainNode.gain.linearRampToValueAtTime(0.35, now + 0.02);
     gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
 
     osc1.connect(gainNode);
@@ -41,12 +58,12 @@ export function playNotificationChime() {
     osc1.stop(now + 0.15);
     osc2.start(now + 0.08);
     osc2.stop(now + 0.45);
-  } catch (e) {
-    // Audio autoplay restrictions or errors silently ignored
+  } catch {
+    // Silently ignore if audio context is blocked
   }
 }
 
-export function vibrateDevice(pattern: number[] = [180, 80, 180]) {
+export function vibrateDevice(pattern: number[] = [300, 100, 400, 100, 300]) {
   try {
     if ('vibrate' in navigator && typeof navigator.vibrate === 'function') {
       navigator.vibrate(pattern);
@@ -78,7 +95,7 @@ export async function showDeviceNotification(opts: DeviceNotificationOptions) {
     playNotificationChime();
   }
   if (opts.vibrate !== false) {
-    vibrateDevice([180, 90, 180]);
+    vibrateDevice([300, 100, 400, 100, 300]);
   }
 
   const title = opts.title || 'SMM PRO';
@@ -87,6 +104,7 @@ export async function showDeviceNotification(opts: DeviceNotificationOptions) {
   const icon = '/icons/icon-192.png';
   const badge = '/icons/icon-192.png';
   const url = opts.link || '/';
+  const vibrate = [300, 100, 400, 100, 300];
 
   // 1. First try ServiceWorker showNotification (essential for Android and best for OS panels)
   if ('serviceWorker' in navigator) {
@@ -105,8 +123,12 @@ export async function showDeviceNotification(opts: DeviceNotificationOptions) {
           badge,
           tag,
           renotify: true,
+          silent: false,
+          requireInteraction: true,
+          timestamp: Date.now(),
+          sound: '/sounds/notification.wav',
+          vibrate,
           data: { url },
-          vibrate: [200, 100, 200],
         } as any);
         return true;
       }
@@ -123,6 +145,8 @@ export async function showDeviceNotification(opts: DeviceNotificationOptions) {
         icon,
         badge,
         tag,
+        renotify: true,
+        silent: false,
         data: { url },
       } as any);
 

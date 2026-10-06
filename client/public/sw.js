@@ -3,8 +3,8 @@
  * - API, sockets, media and the public approval API are NEVER cached (private data stays off disk)
  * - Web Push: shows notifications and deep-links into the app on click
  */
-const VERSION = 'smmpro-v2';
-const SHELL = ['/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon.svg'];
+const VERSION = 'smmpro-v3';
+const SHELL = ['/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon.svg', '/sounds/notification.wav'];
 
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => {
@@ -20,7 +20,7 @@ self.addEventListener('fetch', (e) => {
     e.respondWith(fetch(req).then((r) => { const copy = r.clone(); caches.open(VERSION).then((c) => c.put('/', copy)); return r; }).catch(() => caches.match('/')));
     return;
   }
-  if (/\.(js|css|woff2?|png|svg|webmanifest)$/.test(url.pathname)) {
+  if (/\.(js|css|woff2?|png|svg|webmanifest|wav|mp3)$/.test(url.pathname)) {
     e.respondWith(caches.match(req).then((hit) => {
       const net = fetch(req).then((r) => { if (r.ok) { const copy = r.clone(); caches.open(VERSION).then((c) => c.put(req, copy)); } return r; }).catch(() => hit);
       return hit || net;
@@ -37,26 +37,32 @@ self.addEventListener('push', (e) => {
   }
   const title = d.title || 'SMM PRO';
   const url = d.url || '/';
-  const baseOptions = {
+  const vibratePattern = [300, 100, 400, 100, 300];
+
+  const fullOptions = {
     body: d.body || 'You have a new update in SMM PRO',
     icon: '/icons/icon-192.png',
     badge: '/icons/icon-192.png',
     tag: d.tag || ('smm-' + Date.now()),
     renotify: true,
+    silent: false,
+    requireInteraction: true,
+    vibrate: vibratePattern,
+    sound: '/sounds/notification.wav',
+    timestamp: Date.now(),
     data: { url },
   };
 
   e.waitUntil(
     self.registration.showNotification(title, {
-      ...baseOptions,
-      vibrate: [200, 100, 200, 100, 200],
+      ...fullOptions,
       actions: [
         { action: 'open', title: 'Open' },
         { action: 'dismiss', title: 'Dismiss' }
       ]
     }).catch(() => {
-      // Fallback for mobile browsers that do not support actions
-      return self.registration.showNotification(title, baseOptions);
+      // Fallback for mobile browsers that do not support action buttons (e.g. mobile Chrome/Safari PWA)
+      return self.registration.showNotification(title, fullOptions);
     })
   );
 });
@@ -87,8 +93,12 @@ self.addEventListener('message', (e) => {
     self.registration.showNotification(title || 'SMM PRO', {
       icon: '/icons/icon-192.png',
       badge: '/icons/icon-192.png',
-      vibrate: [200, 100, 200],
+      vibrate: [300, 100, 400, 100, 300],
       renotify: true,
+      silent: false,
+      requireInteraction: true,
+      sound: '/sounds/notification.wav',
+      timestamp: Date.now(),
       ...options,
     });
   }

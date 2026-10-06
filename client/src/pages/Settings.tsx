@@ -243,23 +243,37 @@ function NotificationSettings() {
   useEffect(() => { pushState().then(setPs); return onInstallChange(() => force((n) => n + 1)); }, []);
   const save = useMutation({ mutationFn: (p: any) => patch('/auth/me', { notificationPrefs: p }), onSuccess: (r) => setUser(r.user), onError: (e) => toast.error(errMsg(e)) });
   const devices = useQuery({ queryKey: ['push-devices'], queryFn: () => get<any[]>('/push/devices') });
-  const on = async () => { setBusy(true); try { const s = await enablePush(); setPs(s); if (s === 'on') { toast.success('Push notifications enabled on this device.'); save.mutate({ push: true }); qc.invalidateQueries({ queryKey: ['push-devices'] }); } else if (s === 'denied') toast.error('Notifications are blocked for this site in your browser settings.'); } catch (e) { toast.error(errMsg(e, 'Could not enable push on this device.')); } setBusy(false); };
+  const on = async () => { setBusy(true); try { const s = await enablePush(true); setPs(s); if (s === 'on') { toast.success('Push notifications enabled on this device.'); save.mutate({ push: true }); qc.invalidateQueries({ queryKey: ['push-devices'] }); } else if (s === 'denied') toast.error('Notifications are blocked for this site in your browser settings.'); } catch (e) { toast.error(errMsg(e, 'Could not enable push on this device.')); } setBusy(false); };
   const off = async () => { setBusy(true); await disablePush(); setPs(await pushState()); qc.invalidateQueries({ queryKey: ['push-devices'] }); setBusy(false); toast.success('Push disabled on this device.'); };
   const test = async () => {
     try {
-      const shown = await showDeviceNotification({
-        title: '🔔 SMM PRO Test Alert',
-        message: 'Notification panel is working properly on this phone/device!',
+      if (ps !== 'on') {
+        const s = await enablePush(true);
+        setPs(s);
+        if (s !== 'on') {
+          toast.error('કૃપા કરીને પહેલા આ ફોન પર "Enable notifications" ક્લિક કરીને પરવાનગી આપો.');
+          return;
+        }
+      }
+
+      // Trigger local OS notification shade alert with sound & vibration
+      await showDeviceNotification({
+        title: '🔔 SMM PRO Mobile Alert',
+        message: 'Notification panel & vibration test successful!',
         sound: true,
         vibrate: true,
       });
-      const r = await post('/push/test');
-      if (r.devices > 0) {
-        toast.success(`Test sent to ${r.devices} registered device(s)! Check your notification panel.`);
-      } else if (shown) {
-        toast.success('Test notification triggered! Check your phone notification panel.');
+
+      // Send backend test push to all user's registered devices
+      const r = await post<any>('/push/test');
+      qc.invalidateQueries({ queryKey: ['push-devices'] });
+
+      if (r?.devices === 0) {
+        toast.error('⚠️ ડેટાબેઝમાં આ ફોનનું સબસ્ક્રિપ્શન મળ્યું નથી. "Enable notifications" ફરી દબાવો.');
+      } else if (r?.sentCount > 0) {
+        toast.success(`✅ ${r.sentCount} ડિવાઇસ પર ટેસ્ટ પુશ સફળતાપૂર્વક મોકલાયો! ફોનની નોટિફિકેશન પેનલ ચેક કરો.`);
       } else {
-        toast.info('Test initiated. If not shown in notification panel, check browser permissions.');
+        toast.info('ટેસ્ટ પુશ સેન્ડ થઈ ગયો છે.');
       }
     } catch (e) {
       toast.error(errMsg(e));
@@ -272,7 +286,7 @@ function NotificationSettings() {
           <p className="text-ink-2">Get notified about assignments, approvals, mentions and reminders even when SMM PRO is not open.</p>
           <div className="mt-3">
             {ps === null ? <span className="text-ink-3">Checking this device…</span>
-              : ps === 'on' ? <div className="flex flex-wrap items-center gap-2"><Badge t="green">Enabled on this device</Badge><Button size="sm" onClick={test} icon={<Send size={14} />}>Send test</Button><Button size="sm" loading={busy} onClick={off} icon={<BellOff size={14} />}>Disable</Button></div>
+              : ps === 'on' ? <div className="flex flex-wrap items-center gap-2"><Badge t="green">Enabled on this device</Badge><Button size="sm" onClick={test} icon={<Send size={14} />}>Send test (Sound & Vibrate)</Button><Button size="sm" loading={busy} onClick={off} icon={<BellOff size={14} />}>Disable</Button></div>
               : ps === 'off' ? <Button variant="primary" loading={busy} onClick={on} icon={<Bell size={15} />}>Enable notifications</Button>
               : ps === 'ios-needs-install' ? <div className="rounded border border-line bg-surface-2 p-3 text-[13px]"><div className="flex items-center gap-2 font-medium"><Smartphone size={15} />Add SMM PRO to your Home Screen first</div><ol className="mt-1.5 list-decimal space-y-0.5 pl-5 text-ink-2"><li>In Safari, tap the Share button.</li><li>Choose "Add to Home Screen".</li><li>Open SMM PRO from the Home Screen and return to this page.</li></ol><p className="mt-1.5 text-ink-3">iPhone and iPad only allow push for installed web apps (iOS 16.4 or later).</p></div>
               : ps === 'denied' ? <p className="rounded bg-warning-soft px-3 py-2 text-[13px] text-warning-ink">Notifications are blocked for this site. Allow them in your browser's site settings, then reload.</p>
@@ -280,18 +294,48 @@ function NotificationSettings() {
               : <p className="text-[13px] text-ink-2">This browser does not support push notifications. In-app notifications still work.</p>}
           </div>
 
-          {/* Phone notification panel guidance */}
-          <div className="mt-3.5 rounded-lg border border-border/70 bg-surface-2/60 p-3 text-[12px] space-y-1.5 text-ink-2">
-            <div className="font-semibold text-ink flex items-center gap-1.5">
-              <Smartphone size={13} className="text-primary-ink" /> ફોનના Notification Panel માં ન દેખાય તો:
+          {/* Subscribed devices section */}
+          {devices.data && devices.data.length > 0 ? (
+            <div className="mt-4 border-t border-line pt-3">
+              <div className="flex items-center justify-between text-[13px] font-semibold text-ink">
+                <span>રજીસ્ટર્ડ ડિવાઇસ ({devices.data.length})</span>
+                <span className="text-[11px] font-normal text-success-ink bg-success-soft px-2 py-0.5 rounded-full">Active in DB</span>
+              </div>
+              <ul className="mt-2 space-y-1.5 text-[12.5px]">
+                {devices.data.map((d: any) => (
+                  <li key={d.endpoint} className="flex items-center justify-between rounded-lg bg-surface-2/70 px-2.5 py-1.5 border border-border/50">
+                    <span className="flex items-center gap-2 font-medium text-ink">
+                      {d.deviceType === 'mobile' ? <Smartphone size={14} className="text-primary" /> : <Laptop size={14} className="text-primary" />}
+                      <span>{d.platform || 'Device'} · {d.browser || 'Browser'}</span>
+                    </span>
+                    <span className="text-[11px] text-ink-3">
+                      {d.lastUsedAt ? `Active ${ago(d.lastUsedAt)}` : 'Recently linked'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
             </div>
-            <ul className="list-disc pl-4 space-y-1 text-[11.5px] leading-relaxed">
-              <li><b>Android (Chrome):</b> ઉપર <b>"Enable notifications"</b> આપો. જો પરમિશન આપ્યા છતાં પેનલમાં ન આવે, તો ફોનના <i>Settings ➔ Apps ➔ Chrome ➔ Notifications ➔ All Notifications: ON</i> કરો.</li>
-              <li><b>iPhone (iOS):</b> Safari માં નીચે Share આઈકન ➔ <b>"Add to Home Screen"</b> કરો. પછી હોમ સ્ક્રીન પર આવેલી એપ ખોલીને આ પેજ પર આવીને Notifications ચાલુ કરો (iOS 16.4+).</li>
+          ) : (
+            <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-[12px] text-amber-300">
+              <b>⚠️ આ ફોન હજી સુધી સર્વર પર લિંક નથી થયો:</b>
+              <div className="mt-1">
+                ઉપર આપેલ <b>"Enable notifications"</b> બટન દબાવો અને બ્રાઉઝરમાં <b>Allow</b> કરો જેથી તમારો ફોન બેકએન્ડ ડેટાબેઝમાં એડ થઈ જાય.
+              </div>
+            </div>
+          )}
+
+          {/* Phone notification panel & sound guidance */}
+          <div className="mt-3.5 rounded-xl border border-border/80 bg-surface-2/80 p-3.5 text-[12px] space-y-2 text-ink-2">
+            <div className="font-semibold text-ink flex items-center gap-1.5 text-[13px]">
+              <Smartphone size={15} className="text-primary" /> ફોનમાં સાઉન્ડ કે વાઇબ્રેટ ન થાય તો આ સેટિંગ્સ ચકાસો:
+            </div>
+            <ul className="list-disc pl-4 space-y-1.5 text-[11.5px] leading-relaxed">
+              <li><b>1. Android Sound Mode:</b> ફોન <i>Silent</i> કે <i>Do Not Disturb (DND)</i> મોડ પર ન હોય તે ચેક કરો. જો સાયલન્ટ હશે તો કોઈ સાઉન્ડ નહીં આવે.</li>
+              <li><b>2. Chrome Notification Category:</b> ફોન <i>Settings ➔ Apps ➔ Chrome ➔ Notifications ➔ Notification categories ➔ Sites ➔ તમારો ડોમેન</i> પર જઈને <b>"Alert"</b> (Sound & Vibrate Allowed) સિલેક્ટ કરો.</li>
+              <li><b>3. Battery Saver (Xiaomi / Vivo / Oppo / Realme / Samsung):</b> <i>Settings ➔ Apps ➔ Chrome ➔ Battery ➔ "Unrestricted"</i> અને <i>"Autostart"</i> ચાલુ કરો, જેથી સ્ક્રીન લૉક હોય ત્યારે પણ તરત નોટિફિકેશન આવે.</li>
+              <li><b>4. iPhone (iOS):</b> Safari માં <b>Share ➔ Add to Home Screen</b> કરો. હોમ સ્ક્રીન એપ ખોલીને આ પેજ પર આવીને Notifications ઓન કરો (iOS 16.4+).</li>
             </ul>
           </div>
-
-          {!!devices.data?.length && <div className="mt-4 border-t border-line pt-3"><div className="label">Your subscribed devices</div><ul className="space-y-1 text-[13px]">{devices.data.map((d) => <li key={d.endpoint} className="flex justify-between"><span>{d.platform} · {d.browser}</span><span className="text-ink-3">{d.lastUsedAt ? `Last used ${ago(d.lastUsedAt)}` : ''}</span></li>)}</ul></div>}
         </Card>
         <Card title="Install the app">
           {isStandalone() ? <Badge t="green">Installed</Badge> : canInstall() ? <Button icon={<Download size={15} />} onClick={() => promptInstall()}>Install SMM PRO</Button> : isIOS() ? <p className="text-[13px] text-ink-2">In Safari, tap Share, then "Add to Home Screen".</p> : <p className="text-[13px] text-ink-2">Use your browser menu and choose "Install app" or "Add to Home screen". Available in Chrome and Edge on Android, Windows and macOS, and in Safari on macOS ("Add to Dock").</p>}

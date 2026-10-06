@@ -48,8 +48,43 @@ push.post('/unsubscribe', ah(async (req, res) => {
 }));
 push.get('/devices', ah(async (req, res) => { res.json(await PushSubscription.find({ userId: req.user!._id }).select('deviceType platform browser lastUsedAt createdAt endpoint').lean()); }));
 push.post('/test', ah(async (req, res) => {
+  const configured = pushConfigured();
+  if (!configured) {
+    return res.status(400).json({
+      ok: false,
+      configured: false,
+      devices: 0,
+      sentCount: 0,
+      message: 'Push notifications are not configured on the server (missing VAPID keys).',
+      results: [],
+    });
+  }
   const subs = await PushSubscription.find({ userId: req.user!._id });
-  const results: string[] = [];
-  for (const s of subs) results.push(await sendPush(s, { title: 'SMM PRO', body: 'Push notifications are working on this device.', url: '/settings' }));
-  res.json({ devices: subs.length, results });
+  const results: any[] = [];
+  for (const s of subs) {
+    const status = await sendPush(s, {
+      title: '🔔 SMM PRO Mobile Alert',
+      body: 'Push notification & vibration test successful!',
+      url: '/settings',
+      tag: 'test-' + Date.now(),
+    });
+    results.push({
+      id: s._id,
+      deviceType: s.deviceType || 'unknown',
+      platform: s.platform || 'unknown',
+      browser: s.browser || 'unknown',
+      status,
+    });
+  }
+  const sentCount = results.filter((r) => r.status === 'SENT').length;
+  res.json({
+    ok: true,
+    configured: true,
+    devices: subs.length,
+    sentCount,
+    results,
+    message: subs.length === 0
+      ? 'No device registered on server for this user.'
+      : `${sentCount} of ${subs.length} push notification(s) delivered to push service.`,
+  });
 }));

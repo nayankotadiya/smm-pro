@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Bell, X, CheckCircle, Smartphone, Laptop, Send } from 'lucide-react';
+import { Bell, X, Smartphone, Laptop, Send } from 'lucide-react';
 import { getDeviceNotificationState, requestAndEnableDeviceNotifications, showDeviceNotification } from '@/lib/notifications';
 import { toast } from '@/store/ui';
+import { post } from '@/lib/api';
+import { enablePush } from '@/pwa';
 
 export function DeviceNotificationBanner() {
   const [state, setState] = useState<'default' | 'granted' | 'denied' | 'unsupported'>('granted');
@@ -66,7 +68,7 @@ export function DeviceNotificationBanner() {
 
   return (
     <div className="relative mb-4 overflow-hidden rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/10 via-surface-2 to-surface-1 p-3.5 sm:p-4 shadow-lg backdrop-blur-xl animate-fade-in">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+      <div className="flex flex-col sm:row items-start sm:items-center justify-between gap-3">
         <div className="flex items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-violet-600 to-indigo-600 text-white shadow-md shadow-violet-500/25">
             <Bell size={20} className="animate-bounce" />
@@ -117,21 +119,35 @@ export function TestNotificationButton() {
       if (getDeviceNotificationState() !== 'granted') {
         const res = await requestAndEnableDeviceNotifications();
         if (!res.granted) {
-          toast.error('Please allow notifications in browser permissions.');
+          toast.error('કૃપા કરીને બ્રાઉઝરમાં Notification Allow કરો.');
           setTesting(false);
           return;
         }
+      } else {
+        // Ensure this device has its push subscription active on backend
+        await enablePush().catch(() => undefined);
       }
+
+      // 1. Trigger local OS shade alert with sound & vibration
       await showDeviceNotification({
-        title: '🔔 SMM PRO Alert',
-        message: 'Device notification panel test successful! Works on Mobile, PC & Laptop.',
+        title: '🔔 SMM PRO Mobile Alert',
+        message: 'Notification panel & vibration test successful!',
         link: '/notifications',
         sound: true,
         vibrate: true,
       });
-      toast.success('Test notification sent to your device notification panel!');
+
+      // 2. Trigger backend push test
+      const r = await post<any>('/push/test').catch(() => ({ ok: false, devices: 0 }));
+      if (r?.devices > 0 && r?.sentCount > 0) {
+        toast.success(`✅ ${r.sentCount} રજીસ્ટર્ડ ડિવાઇસ પર ટેસ્ટ પુશ મોકલાયો! ફોનની નોટિફિકેશન પેનલ ચેક કરો.`);
+      } else if (r?.devices === 0) {
+        toast.info('લોકલ ટેસ્ટ મોકલાયો છે. આ ફોનને બેકએન્ડ પર કાયમી લિંક કરવા Settings માં જઈને "Enable notifications" આપો.');
+      } else {
+        toast.success('ટેસ્ટ નોટિફિકેશન મોકલાયું! ફોન પેનલ ચેક કરો.');
+      }
     } catch {
-      toast.error('Failed to trigger test notification.');
+      toast.error('ટેસ્ટ નોટિફિકેશન મોકલવામાં નિષ્ફળતા.');
     } finally {
       setTesting(false);
     }
@@ -144,7 +160,7 @@ export function TestNotificationButton() {
       className="inline-flex items-center gap-1.5 rounded-xl border border-line bg-surface-2 px-3 py-1.5 text-[12.5px] font-semibold text-ink hover:bg-surface-3 transition-colors active:scale-95"
     >
       <Send size={13} className="text-primary" />
-      {testing ? 'Sending…' : 'Test Device Alert'}
+      {testing ? 'ટેસ્ટિંગ…' : 'ટેસ્ટ નોટિફિકેશન (Sound & Vibrate)'}
     </button>
   );
 }
