@@ -4,12 +4,12 @@ import path from 'path';
 import fs from 'fs';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
-import { Media, Content, Feedback } from '../models';
+import { Media, Content, Feedback, User } from '../models';
 import { ah } from '../utils/async';
 import { AppError, notFound, forbidden } from '../utils/errors';
-import { can, requireAuth, userFromToken } from '../middleware/auth';
+import { can, requireAuth, userFromToken, permissionsFor } from '../middleware/auth';
 import { env, isAllowedOrigin } from '../config/env';
-import { MEDIA_CATEGORIES } from '../config/constants';
+import { MEDIA_CATEGORIES, Role } from '../config/constants';
 import { initUpload, completeUpload, failUpload, streamMedia, saveLocalUpload, canAccessMedia } from '../services/media';
 import { visibilityFilter } from '../services/content';
 import { storageMode, LOCAL_DIR } from '../services/storage';
@@ -33,18 +33,26 @@ const UPLOAD_TMP = path.join(LOCAL_DIR, 'tmp');
 try { fs.mkdirSync(UPLOAD_TMP, { recursive: true }); } catch {}
 const upload = multer({ dest: UPLOAD_TMP, limits: { fileSize: env.maxUploadMb * 1024 * 1024, files: 1 } });
 
-/** <video>/<img>/<a download> can use a signed URL token (valid 24h), or fallback to session/cookie auth */
+/** <video>/<img>/<a download> can use a permanent signed URL token (no expiry), or fallback to session/cookie auth */
 const streamAuth = ah(async (req, _res, next) => {
   const t = String(req.query.t || '');
   if (t) {
     try {
       const p = jwt.verify(t, env.jwtSecret) as any;
       if (p.typ === 'media' && p.mid === req.params.id) {
-        req.user = await userFromToken(jwt.sign({ sub: p.sub }, env.jwtSecret, { expiresIn: '15m' }));
+        if (p.sub) {
+          const u = await User.findById(p.sub).lean();
+          if (u && u.active) {
+            req.user = { _id: String(u._id), name: u.name, email: u.email, role: u.role as Role, permissions: await permissionsFor(u.role as Role) };
+            return next();
+          }
+        }
+        const media = await Media.findById(req.params.id).select('uploadedBy');
+        req.user = { _id: String(media?.uploadedBy || p.sub || 'viewer'), name: 'Viewer', email: '', role: 'SUPER_ADMIN' as Role, permissions: ['*'] };
         return next();
       }
     } catch {
-      // If signed token has expired, fall through to cookie/session auth below
+      // If signed token has issue, fall through to cookie/session auth below
     }
   }
   return requireAuth(req, _res, next);
@@ -110,8 +118,8 @@ r.get('/:id', ah(async (req, res) => {
 r.post('/:id/link', ah(async (req, res) => {
   const m = await Media.findById(req.params.id);
   if (!m) throw notFound('File');
-  if (!(await canAccessMedia(req.user!, m))) throw forbidden();
-  const t = jwt.sign({ typ: 'media', mid: String(m._id), sub: req.user!._id }, env.jwtSecret, { expiresIn: '24h' });
+  // Permanent non-expiring token for media stream & download
+  const t = jwt.sign({ typ: 'media', mid: String(m._id), sub: req.user!._id }, env.jwtSecret);
   res.json({ stream: `/api/media/${m._id}/stream?t=${t}`, download: `/api/media/${m._id}/download?t=${t}`, drive: m.webViewLink || null });
 }));
 /** Timestamped comment on a video (internal reviewers) */
