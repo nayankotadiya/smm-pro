@@ -4,16 +4,18 @@ const FALLBACK_PUBLIC = 'BM4oiMoCIfSAONuA_s5AEEKP4vvxl7dr0YMDPHV9arv8YNZ2S0mYm81
 const FALLBACK_PRIVATE = '2GonNNyeE68ox1xr3AIxSnyzQ3fDWriSS2VioLGBvZE';
 
 export function getVapidPublicKey() {
-  return env.vapid.publicKey || '';
+  return env.vapid.publicKey || FALLBACK_PUBLIC;
 }
 
 let ready = false;
 
 export function pushConfigured() {
-  if (!env.vapid.publicKey || !env.vapid.privateKey) return false;
+  const pub = env.vapid.publicKey || FALLBACK_PUBLIC;
+  const priv = env.vapid.privateKey || FALLBACK_PRIVATE;
+  if (!pub || !priv) return false;
   if (!ready) {
     try {
-      webpush.setVapidDetails(env.vapid.subject, env.vapid.publicKey, env.vapid.privateKey);
+      webpush.setVapidDetails(env.vapid.subject || 'mailto:admin@example.com', pub, priv);
       ready = true;
     } catch (e) {
       console.error('[push] Failed to set VAPID details', e);
