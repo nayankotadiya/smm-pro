@@ -422,11 +422,18 @@ export function UploadButton({ label, category, contentId, clientId, accept, var
     files.forEach((file) => startUpload({ file, category, contentId, clientId, onDone: (m) => { qc.invalidateQueries({ queryKey: ['content-detail'] }); qc.invalidateQueries({ queryKey: ['media'] }); onDone?.(m); } }).catch(() => undefined));
   };
   const isTouch = typeof window !== 'undefined' && matchMedia('(pointer: coarse)').matches;
+  const computedAccept = accept || (
+    ['RAW', 'EDIT', 'FINAL'].includes(category)
+      ? 'video/*,.mp4,.mov,.mkv,.avi,.webm,.m4v,.wmv,.mts,.m2ts'
+      : ['THUMBNAIL', 'IMAGE'].includes(category)
+      ? 'image/*,.png,.jpg,.jpeg,.webp,.heic,.heif,.gif,.svg'
+      : undefined
+  );
   return (
     <span className="inline-flex gap-1.5">
-      <input ref={ref} type="file" hidden accept={accept} onChange={pick} />
+      <input ref={ref} type="file" hidden accept={computedAccept} onChange={pick} />
       <Button variant={variant} size={size} onClick={() => ref.current?.click()} icon={icon ?? <Upload size={15} />}>{label}</Button>
-      {camera && isTouch && <><input ref={cam} type="file" hidden accept={accept} capture="environment" onChange={pick} /><Button size={size} onClick={() => cam.current?.click()} icon={<Camera size={15} />}>Camera</Button></>}
+      {camera && isTouch && <><input ref={cam} type="file" hidden accept={computedAccept} capture="environment" onChange={pick} /><Button size={size} onClick={() => cam.current?.click()} icon={<Camera size={15} />}>Camera</Button></>}
     </span>
   );
 }

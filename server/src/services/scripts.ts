@@ -8,7 +8,7 @@ import { emitDomain } from './events';
 import { closeTasks } from './tasks';
 import { emitOrg } from './realtime';
 
-const FIELDS = ['hook', 'scenes', 'dialogue', 'visualDirection', 'broll', 'cta', 'captionNotes', 'music', 'duration', 'changes'];
+const FIELDS = ['hook', 'scenes', 'dialogue', 'body', 'visualDirection', 'broll', 'cta', 'captionNotes', 'music', 'duration', 'changes'];
 
 /** Never overwrites: every save of an approved/submitted version creates a new version. Drafts can be edited in place. */
 export async function saveVersion(scriptId: string, data: any, u: AuthUser, forceNew = false) {
@@ -16,7 +16,12 @@ export async function saveVersion(scriptId: string, data: any, u: AuthUser, forc
   if (!script) throw notFound('Script');
   const content = await Content.findById(script.contentId);
   const latest = await ScriptVersion.findOne({ scriptId }).sort({ version: -1 });
+  const scriptText = typeof data.script === 'string' ? data.script : (typeof data.body === 'string' ? data.body : (typeof data.dialogue === 'string' ? data.dialogue : ''));
   const pick = Object.fromEntries(FIELDS.filter((f) => data[f] !== undefined).map((f) => [f, data[f]]));
+  if (scriptText !== undefined && scriptText !== '') {
+    pick.dialogue = scriptText;
+    pick.body = scriptText;
+  }
   let v;
   if (latest && latest.status === 'DRAFT' && !forceNew) {
     Object.assign(latest, pick); v = await latest.save();
@@ -40,7 +45,9 @@ export async function submitScript(scriptId: string, u: AuthUser) {
   if (!v) throw badRequest('Write the script before submitting');
   if (v.status === 'SUBMITTED') throw badRequest('This version is already in review');
   if (v.status !== 'DRAFT') throw badRequest('Create a new version before resubmitting');
-  if (!v.hook && !(v.scenes || []).length && !v.dialogue) throw badRequest('Script is empty');
+  const scriptContent = (v.body || v.dialogue || v.hook || '').trim();
+  const hasScenes = (v.scenes || []).some((s: any) => s.dialogue || s.visual);
+  if (!scriptContent && !hasScenes) throw badRequest('Script is empty');
   v.status = 'SUBMITTED'; v.approvalState = 'PENDING'; await v.save();
   script.status = 'IN_REVIEW'; await script.save();
   const content = (await Content.findById(script.contentId))!;

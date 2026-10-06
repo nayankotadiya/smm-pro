@@ -1517,10 +1517,10 @@ export function ChatThread({ roomId, embedded }: { roomId: string; embedded?: bo
 
           {/* Hidden file inputs */}
           <input ref={fileRef} type="file" hidden multiple onChange={(e) => { attach(e.target.files); e.target.value = ''; }} />
-          <input ref={imgRef} type="file" hidden multiple accept="image/*" onChange={(e) => { attach(e.target.files); e.target.value = ''; }} />
-          <input ref={vidRef} type="file" hidden multiple accept="video/*" onChange={(e) => { attach(e.target.files); e.target.value = ''; }} />
-          <input ref={audRef} type="file" hidden multiple accept="audio/*" onChange={(e) => { attach(e.target.files); e.target.value = ''; }} />
-          <input ref={docRef} type="file" hidden multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar" onChange={(e) => { attach(e.target.files); e.target.value = ''; }} />
+          <input ref={imgRef} type="file" hidden multiple accept="image/*,.png,.jpg,.jpeg,.webp,.heic,.heif,.gif,.svg" onChange={(e) => { attach(e.target.files); e.target.value = ''; }} />
+          <input ref={vidRef} type="file" hidden multiple accept="video/*,.mp4,.mov,.mkv,.avi,.webm,.m4v,.wmv,.mts,.m2ts" onChange={(e) => { attach(e.target.files); e.target.value = ''; }} />
+          <input ref={audRef} type="file" hidden multiple accept="audio/*,.mp3,.wav,.ogg,.m4a,.aac,.flac" onChange={(e) => { attach(e.target.files); e.target.value = ''; }} />
+          <input ref={docRef} type="file" hidden multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z" onChange={(e) => { attach(e.target.files); e.target.value = ''; }} />
           <input ref={camRef} type="file" hidden accept="image/*,video/*" capture="environment" onChange={(e) => { attach(e.target.files); e.target.value = ''; }} />
 
           {/* Attach / media picker */}

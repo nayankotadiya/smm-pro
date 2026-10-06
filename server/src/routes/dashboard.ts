@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { Types } from 'mongoose';
 import { ah } from '../utils/async';
 import { requirePerm, can } from '../middleware/auth';
 import * as d from '../services/dashboard';
@@ -49,8 +50,7 @@ r.get('/chat-preview', ah(async (req, res) => {
   const uid = req.user!._id;
   const rooms = await ChatRoom.find({ participants: uid, lastMessageAt: { $ne: null } }).sort({ lastMessageAt: -1 }).limit(5).populate('participants', 'name').lean();
   if (!rooms.length) return res.json([]);
-  const mongoose = await import('mongoose');
-  const userOid = new mongoose.Types.ObjectId(uid);
+  const userOid = new Types.ObjectId(uid);
   const roomIds = rooms.map((x) => x._id);
   const unreadRows = await Message.aggregate([
     { $match: { roomId: { $in: roomIds }, readBy: { $ne: userOid }, senderId: { $ne: userOid }, deletedAt: null, kind: 'USER' } },

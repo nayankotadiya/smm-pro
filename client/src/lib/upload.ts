@@ -5,6 +5,68 @@ import { setActivity } from './socket';
 
 export interface UploadOpts { file: File; category: string; contentId?: string; clientId?: string; onDone?: (media: any) => void; silent?: boolean }
 
+const CLIENT_EXT_MIME: Record<string, string> = {
+  // Video
+  mp4: 'video/mp4',
+  m4v: 'video/mp4',
+  mov: 'video/quicktime',
+  mkv: 'video/x-matroska',
+  webm: 'video/webm',
+  avi: 'video/x-msvideo',
+  wmv: 'video/x-ms-wmv',
+  flv: 'video/x-flv',
+  mts: 'video/mp2t',
+  m2ts: 'video/mp2t',
+  ts: 'video/mp2t',
+  '3gp': 'video/3gpp',
+  ogv: 'video/ogg',
+
+  // Image
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  heic: 'image/heic',
+  heif: 'image/heif',
+  svg: 'image/svg+xml',
+  bmp: 'image/bmp',
+  ico: 'image/x-icon',
+  tiff: 'image/tiff',
+  tif: 'image/tiff',
+
+  // Audio
+  mp3: 'audio/mpeg',
+  wav: 'audio/wav',
+  ogg: 'audio/ogg',
+  m4a: 'audio/mp4',
+  aac: 'audio/aac',
+  flac: 'audio/flac',
+
+  // Docs
+  pdf: 'application/pdf',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ppt: 'application/vnd.ms-powerpoint',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  txt: 'text/plain',
+  csv: 'text/csv',
+  zip: 'application/zip',
+  rar: 'application/x-rar-compressed',
+  '7z': 'application/x-7z-compressed',
+};
+
+export function inferClientMimeType(fileName: string, declaredType?: string): string {
+  const ext = fileName.split('.').pop()?.toLowerCase() || '';
+  const inferred = CLIENT_EXT_MIME[ext];
+  if (!declaredType || declaredType === 'application/octet-stream' || declaredType === 'binary/octet-stream') {
+    return inferred || declaredType || 'application/octet-stream';
+  }
+  return declaredType;
+}
+
 /**
  * Two-step upload with real progress:
  *  1) API validates, auto-names the file and returns a resumable Google Drive URL (bytes go browser -> Drive directly)
@@ -19,13 +81,21 @@ export function startUpload(o: UploadOpts): Promise<any> {
   const run = async (): Promise<any> => {
     ui.setUpload({ id, fileName: o.file.name, progress: 0, status: 'uploading', cancel: () => ctrl.abort() });
     try {
-      const init = await post('/media/upload', { contentId: o.contentId, clientId: o.clientId, category: o.category, fileName: o.file.name, mimeType: o.file.type || 'application/octet-stream', size: o.file.size });
+      const mime = inferClientMimeType(o.file.name, o.file.type);
+      const init = await post('/media/upload', {
+        contentId: o.contentId && o.contentId !== 'null' && o.contentId !== 'undefined' ? o.contentId : undefined,
+        clientId: o.clientId && o.clientId !== 'null' && o.clientId !== 'undefined' ? o.clientId : undefined,
+        category: o.category,
+        fileName: o.file.name,
+        mimeType: mime,
+        size: o.file.size
+      });
       mediaId = init.mediaId;
       const set = (progress: number, status: any = 'uploading') => useUI.getState().setUpload({ id, fileName: init.fileName, progress, status, cancel: () => ctrl.abort() });
       set(0); setActivity(`Uploading ${init.fileName}`);
       let media: any;
       if (init.mode === 'DRIVE') {
-        const r = await axios.put(init.uploadUrl, o.file, { signal: ctrl.signal, headers: { 'Content-Type': o.file.type || 'application/octet-stream' }, onUploadProgress: (e) => set(Math.min(99, Math.round((e.loaded / (e.total || o.file.size)) * 100))) });
+        const r = await axios.put(init.uploadUrl, o.file, { signal: ctrl.signal, headers: { 'Content-Type': mime }, onUploadProgress: (e) => set(Math.min(99, Math.round((e.loaded / (e.total || o.file.size)) * 100))) });
         set(100, 'processing');
         media = await post(`/media/${init.mediaId}/complete`, { driveFileId: r.data.id });
       } else {
@@ -46,6 +116,7 @@ export function startUpload(o: UploadOpts): Promise<any> {
       const msg = cancelled ? 'Upload cancelled' : errMsg(e, 'Upload failed. Retry.');
       useUI.getState().setUpload({ id, fileName: o.file.name, progress: 0, status: cancelled ? 'cancelled' : 'error', error: msg, retry: () => { void startUpload(o); useUI.getState().removeUpload(id); } });
       if (cancelled) setTimeout(() => useUI.getState().removeUpload(id), 3000);
+      if (!o.silent && !cancelled) toast.error(msg);
       throw e;
     }
   };

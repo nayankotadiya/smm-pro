@@ -51,17 +51,30 @@ r.get('/counts', ah(async (_req, res) => {
   });
 }));
 
+function approvalBaseUrl(req: any): string | undefined {
+  const origin = req.get('origin') || req.get('referer');
+  if (origin) {
+    try {
+      const u = new URL(origin);
+      if (u.host && !u.host.includes('onrender.com') && !u.host.includes(':4000')) {
+        return `${u.protocol}//${u.host}/approval`;
+      }
+    } catch {}
+  }
+  return undefined;
+}
+
 r.post('/send', requirePerm('approvals.send'), ah(async (req, res) => {
   const b = z.object({ contentId: z.string(), kind: z.enum(['SCRIPT', 'FINAL']), phone: z.string().max(20).optional(), recipientName: z.string().max(80).optional(), sendWhatsApp: z.boolean().optional() }).parse(req.body);
-  const { approval, url } = await sendClientReview(req.user!, b);
+  const { approval, url } = await sendClientReview(req.user!, b, approvalBaseUrl(req));
   res.status(201).json({ approval, url });
 }));
 r.post('/:id/review', ah(async (req, res) => {
   const b = z.object({ decision: z.enum(['APPROVE', 'CHANGES']), note: z.string().max(2000).optional(), comments: z.array(comment).max(50).optional() }).parse(req.body);
   res.json(await reviewInternal(req.params.id, b.decision, b.note, req.user!, b.comments));
 }));
-r.post('/:id/resend', requirePerm('approvals.send'), ah(async (req, res) => { const { approval, url } = await resend(req.user!, req.params.id); res.json({ approval, url }); }));
-r.get('/:id/link', requirePerm('approvals.send'), ah(async (req, res) => { res.json(await activeLink(req.params.id)); }));
+r.post('/:id/resend', requirePerm('approvals.send'), ah(async (req, res) => { const { approval, url } = await resend(req.user!, req.params.id, approvalBaseUrl(req)); res.json({ approval, url }); }));
+r.get('/:id/link', requirePerm('approvals.send'), ah(async (req, res) => { res.json(await activeLink(req.params.id, approvalBaseUrl(req))); }));
 r.post('/:id/cancel', requirePerm('approvals.send'), ah(async (req, res) => { res.json(await cancel(req.user!, req.params.id)); }));
 r.get('/daily-gate', ah(async (req, res) => {
   const date = typeof req.query.date === 'string' ? req.query.date : undefined;

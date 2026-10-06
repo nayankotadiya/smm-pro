@@ -12,6 +12,8 @@ import { useRealtime } from '@/hooks/useRealtime';
 import { usePresence } from '@/hooks/useMotion';
 import { get } from '@/lib/api';
 import { setActivity } from '@/lib/socket';
+import { MobileBottomNav } from '@/components/MobileNav';
+import { DeviceNotificationBanner } from '@/components/NotificationBanner';
 
 export default function AppLayout() {
   useRealtime();
@@ -167,12 +169,14 @@ export default function AppLayout() {
               <div className="h-full animate-fade-in"><Outlet /></div>
             ) : (
               <div key={pageKey} className="mx-auto w-full max-w-[1440px] animate-page px-4 py-5 pb-24 sm:px-6 sm:py-6 sm:pb-10">
+                <DeviceNotificationBanner />
                 <Outlet />
               </div>
             )}
           </main>
         </div>
       </div>
+      <MobileBottomNav />
       <UploadTray /><Toasts />
     </div>
   );

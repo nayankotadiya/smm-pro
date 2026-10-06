@@ -64,7 +64,7 @@ const scriptVersionSchema = new Schema({
   contentId: { type: ObjectId, ref: 'Content', index: true },
   version: { type: Number, required: true },
   label: String, // V1, V2, Final
-  hook: String, scenes: [sceneSchema], dialogue: String, visualDirection: String, broll: String,
+  hook: String, scenes: [sceneSchema], dialogue: String, body: String, visualDirection: String, broll: String,
   cta: String, captionNotes: String, music: String, duration: String,
   changes: String,
   status: { type: String, enum: ['DRAFT', 'SUBMITTED', 'CHANGES_REQUESTED', 'APPROVED'], default: 'DRAFT' },

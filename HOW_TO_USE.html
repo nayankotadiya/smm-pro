@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SMM PRO — Visual User Guide & Operating Manual</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --primary-soft: #eff6ff;
+      --secondary: #0ea5e9;
+      --accent: #f59e0b;
+      --success: #10b981;
+      --danger: #ef4444;
+      --ink: #0f172a;
+      --ink-2: #334155;
+      --ink-3: #64748b;
+      --surface: #ffffff;
+      --surface-2: #f8fafc;
+      --surface-3: #f1f5f9;
+      --border: #e2e8f0;
+      --radius: 12px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: var(--ink);
+      background: #0f172a;
+      line-height: 1.6;
+      font-size: 14px;
+      -webkit-font-smoothing: antialiased;
+      padding: 20px 0;
+    }
+
+    .document-wrapper {
+      max-width: 960px;
+      margin: 0 auto;
+      background: var(--surface);
+      border-radius: 16px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+      overflow: hidden;
+    }
+
+    .content-area {
+      padding: 60px 70px;
+    }
+
+    @page {
+      size: A4;
+      margin: 14mm 12mm 14mm 12mm;
+    }
+
+    @media print {
+      body {
+        background: #fff;
+        padding: 0;
+      }
+      .document-wrapper {
+        box-shadow: none;
+        border-radius: 0;
+        max-width: 100%;
+      }
+      .content-area {
+        padding: 0;
+      }
+      .no-print {
+        display: none !important;
+      }
+      .page-break {
+        page-break-before: always;
+      }
+    }
+
+    /* Print toolbar */
+    .print-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #1e293b;
+      color: #fff;
+      padding: 14px 28px;
+      border-bottom: 1px solid #334155;
+    }
+    .print-btn {
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      padding: 8px 18px;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.2s;
+    }
+    .print-btn:hover {
+      background: var(--primary-dark);
+    }
+
+    /* Cover Page */
+    .cover-header {
+      background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
+      color: #fff;
+      padding: 70px 70px 60px 70px;
+      position: relative;
+    }
+    .badge-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(8px);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: #93c5fd;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    .cover-title {
+      font-size: 36px;
+      font-weight: 800;
+      margin-top: 20px;
+      line-height: 1.15;
+      letter-spacing: -0.5px;
+    }
+    .cover-sub {
+      font-size: 17px;
+      color: #cbd5e1;
+      margin-top: 14px;
+      max-width: 680px;
+      font-weight: 400;
+    }
+    .quick-meta {
+      display: flex;
+      gap: 24px;
+      margin-top: 30px;
+      font-size: 13px;
+      color: #94a3b8;
+    }
+    .quick-meta span strong {
+      color: #fff;
+    }
+
+    /* Headings */
+    h1 {
+      font-size: 24px;
+      font-weight: 800;
+      color: var(--ink);
+      margin: 40px 0 16px 0;
+      letter-spacing: -0.3px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 2px solid var(--surface-3);
+      padding-bottom: 10px;
+    }
+    h2 {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--ink);
+      margin: 24px 0 10px 0;
+    }
+    p {
+      margin-bottom: 14px;
+      color: var(--ink-2);
+      font-size: 13.5px;
+    }
+
+    /* Screenshot Browser Frame */
+    .browser-frame {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      margin: 22px 0 30px 0;
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.08);
+      background: var(--surface-2);
+    }
+    .browser-header {
+      background: #f1f5f9;
+      border-bottom: 1px solid var(--border);
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .browser-dots {
+      display: flex;
+      gap: 6px;
+    }
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+    .dot.red { background: #ef4444; }
+    .dot.yellow { background: #f59e0b; }
+    .dot.green { background: #10b981; }
+    .browser-address {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 3px 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--ink-3);
+      flex: 1;
+      max-width: 420px;
+    }
+    .browser-img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    /* Steps List */
+    .step-item {
+      display: flex;
+      gap: 16px;
+      margin: 16px 0;
+      align-items: flex-start;
+    }
+    .step-num {
+      width: 28px;
+      height: 28px;
+      background: var(--primary);
+      color: #fff;
+      font-weight: 700;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .step-text h4 {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--ink);
+      margin-bottom: 4px;
+    }
+    .step-text p {
+      margin: 0;
+      font-size: 13px;
+    }
+
+    /* Info Callouts */
+    .callout {
+      padding: 16px 20px;
+      border-radius: var(--radius);
+      margin: 20px 0;
+      border-left: 4px solid var(--primary);
+      background: var(--surface-2);
+      font-size: 13px;
+    }
+    .callout.tip {
+      border-color: var(--success);
+      background: #f0fdf4;
+      color: #166534;
+    }
+    .callout.warning {
+      border-color: var(--accent);
+      background: #fffbeb;
+      color: #92400e;
+    }
+    .callout.info {
+      border-color: var(--primary);
+      background: var(--primary-soft);
+      color: #1e40af;
+    }
+
+    /* Feature Card Grids */
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      margin: 20px 0;
+    }
+    .feature-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      background: var(--surface-2);
+    }
+    .feature-card h4 {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--ink);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .feature-card p {
+      margin: 0;
+      font-size: 12.5px;
+      color: var(--ink-2);
+    }
+
+    /* Badges */
+    .badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+    }
+    .badge-blue { background: #dbeafe; color: #1e40af; }
+    .badge-green { background: #d1fae5; color: #065f46; }
+    .badge-purple { background: #ede9fe; color: #5b21b6; }
+    .badge-amber { background: #fef3c7; color: #92400e; }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 18px 0;
+      font-size: 13px;
+    }
+    th {
+      background: var(--surface-3);
+      color: var(--ink);
+      font-weight: 700;
+      text-align: left;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+    }
+    td {
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      color: var(--ink-2);
+    }
+    tr:nth-child(even) td {
+      background: var(--surface-2);
+    }
+
+    footer {
+      margin-top: 50px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--ink-3);
+      display: flex;
+      justify-content: space-between;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="document-wrapper">
+
+    <div class="print-bar no-print">
+      <div>
+        <strong>📖 SMM PRO Visual Operating Manual</strong>
+        <span style="opacity: 0.7; font-size: 12px; margin-left: 10px;">High-Resolution Illustrated Guide</span>
+      </div>
+      <button class="print-btn" onclick="window.print()">
+        🖨️ Export / Print to PDF
+      </button>
+    </div>
+
+    <!-- HEADER HERO -->
+    <div class="cover-header">
+      <div class="badge-pill">⚡ Visual User Guide & Walkthrough</div>
+      <h1 class="cover-title" style="border:none; color:#fff; margin-top:16px;">
+        How to Use SMM PRO
+      </h1>
+      <div class="cover-sub">
+        A step-by-step illustrated manual for navigating clients, writing viral scripts, streamlining video editing, and getting client approvals in record time.
+      </div>
+      <div class="quick-meta">
+        <span>🌐 <strong>App URL:</strong> smm-pro-nayankotadiya.vercel.app</span>
+        <span>🔒 <strong>Access:</strong> Agency Portal</span>
+        <span>📅 <strong>Updated:</strong> October 2026</span>
+      </div>
+    </div>
+
+    <div class="content-area">
+
+      <!-- SECTION 1: LOGGING IN -->
+      <h1>1. Getting Started: Access & Authentication</h1>
+      <p>
+        SMM PRO is a private agency platform. Every team member signs in using their assigned company email and secure password.
+      </p>
+
+      <div class="browser-frame">
+        <div class="browser-header">
+          <div class="browser-dots"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div>
+          <div class="browser-address">https://smm-pro-nayankotadiya.vercel.app/login</div>
+        </div>
+        <img src="assets/docs/01_login.png" alt="SMM PRO Sign In Screen" class="browser-img">
+      </div>
+
+      <div class="step-item">
+        <div class="step-num">1</div>
+        <div class="step-text">
+          <h4>Open the Web Portal</h4>
+          <p>Navigate to <strong>smm-pro-nayankotadiya.vercel.app</strong> in your browser (desktop or mobile phone).</p>
+        </div>
+      </div>
+
+      <div class="step-item">
+        <div class="step-num">2</div>
+        <div class="step-text">
+          <h4>Enter Your Credentials</h4>
+          <p>Type your company email address and secure password provided by your agency administrator.</p>
+        </div>
+      </div>
+
+      <div class="step-item">
+        <div class="step-num">3</div>
+        <div class="step-text">
+          <h4>Two-Factor Authentication (If Enabled)</h4>
+          <p>If you have enabled 2FA, enter the 6-digit verification code from your Google Authenticator or Microsoft Authenticator app.</p>
+        </div>
+      </div>
+
+      <div class="callout tip">
+        <strong>Forgot Your Password?</strong> Click the <em>"Forgot password?"</em> link on the login card. If email notifications are configured, a secure 1-hour password reset link will be sent to your inbox. Administrators can also reset any team password from the Users tab.
+      </div>
+
+      <!-- SECTION 2: THE DASHBOARD -->
+      <div class="page-break"></div>
+      <h1>2. The Agency Dashboard & Command Center</h1>
+      <p>
+        Upon sign-in, you are greeted by the Command Center. The dashboard dynamically personalizes metrics based on your role (Managers see company-wide throughput; Writers & Editors see assigned deadlines).
+      </p>
+
+      <div class="browser-frame">
+        <div class="browser-header">
+          <div class="browser-dots"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div>
+          <div class="browser-address">https://smm-pro-nayankotadiya.vercel.app/dashboard</div>
+        </div>
+        <img src="assets/docs/02_dashboard.png" alt="SMM PRO Command Center Dashboard" class="browser-img">
+      </div>
+
+      <div class="feature-grid">
+        <div class="feature-card">
+          <h4>📊 Realtime Production Metrics</h4>
+          <p>Instantly track active content pieces, scripts under review, pending shooting sessions, and reels awaiting client sign-off.</p>
+        </div>
+        <div class="feature-card">
+          <h4>⚡ Personal Task List</h4>
+          <p>Your pending tasks appear right at the top. Click any task to jump directly into the script editor or media review room.</p>
+        </div>
+        <div class="feature-card">
+          <h4>🟢 Live Team Presence</h4>
+          <p>See who is actively online, away, or in Do Not Disturb (DND) mode across your production team in real time.</p>
+        </div>
+        <div class="feature-card">
+          <h4>📅 Deadline Calendar</h4>
+          <p>View upcoming social media publishing deadlines, video delivery milestones, and festival campaigns at a glance.</p>
+        </div>
+      </div>
+
+      <!-- SECTION 3: CLIENT MANAGEMENT -->
+      <div class="page-break"></div>
+      <h1>3. Managing Clients & Brand Guidelines</h1>
+      <p>
+        Centralize client assets, brand guidelines, contacts, and communication history in one unified directory.
+      </p>
+
+      <div class="browser-frame">
+        <div class="browser-header">
+          <div class="browser-dots"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div>
+          <div class="browser-address">https://smm-pro-nayankotadiya.vercel.app/clients</div>
+        </div>
+        <img src="assets/docs/03_clients.png" alt="SMM PRO Clients Directory" class="browser-img">
+      </div>
+
+      <div class="step-item">
+        <div class="step-num">1</div>
+        <div class="step-text">
+          <h4>Adding a New Client</h4>
+          <p>Click <strong>"New client"</strong>. Enter business name, contact person, WhatsApp phone number, and social media handles.</p>
+        </div>
+      </div>
+
+      <div class="step-item">
+        <div class="step-num">2</div>
+        <div class="step-text">
+          <h4>Setting Brand Guidelines</h4>
+          <p>Configure brand colors, fonts, tone of voice (e.g. <em>"Playful and energetic"</em> or <em>"Luxury and elegant"</em>), and USP. Writers will see these guidelines while drafting scripts.</p>
+        </div>
+      </div>
+
+      <div class="step-item">
+        <div class="step-num">3</div>
+        <div class="step-text">
+          <h4>Assigning Default Teams</h4>
+          <p>Assign a dedicated Writer, Shooter, Editor, and SMM for each client. Every new piece of content automatically assigns to this dream team.</p>
+        </div>
+      </div>
+
+      <!-- SECTION 4: CONTENT PIPELINE & SCRIPTING -->
+      <div class="page-break"></div>
+      <h1>4. Content Pipeline & Script Writing</h1>
+      <p>
+        Track reels, carousels, and stories from ideation to final approval. SMM PRO prevents accidental overwrites with versioned script drafts (V1, V2, V3).
+      </p>
+
+      <div class="browser-frame">
+        <div class="browser-header">
+          <div class="browser-dots"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div>
+          <div class="browser-address">https://smm-pro-nayankotadiya.vercel.app/content</div>
+        </div>
+        <img src="assets/docs/04_content.png" alt="SMM PRO Content Pipeline" class="browser-img">
+      </div>
+
+      <h2>How Scriptwriting Works:</h2>
+      <div class="step-item">
+        <div class="step-num">1</div>
+        <div class="step-text">
+          <h4>Drafting the Script</h4>
+          <p>The writer enters the <strong>Opening Hook (0-3s)</strong>, followed by scene cards with split Dialogue and Visual Directions, ending with a Call-To-Action (CTA).</p>
+        </div>
+      </div>
+
+      <div class="step-item">
+        <div class="step-num">2</div>
+        <div class="step-text">
+          <h4>Internal Review</h4>
+          <p>Click <strong>"Submit for Review"</strong>. The Content Manager or SMM receives an instant notification to review the draft.</p>
+        </div>
+      </div>
+
+      <div class="step-item">
+        <div class="step-num">3</div>
+        <div class="step-text">
+          <h4>Handling Change Requests</h4>
+          <p>If changes are requested, the writer creates Version 2 (V2). Version 1 is permanently archived for history, preventing lost revisions.</p>
+        </div>
+      </div>
+
+      <!-- SECTION 5: APPROVALS & CLIENT REVIEWS -->
+      <div class="page-break"></div>
+      <h1>5. Client Approvals & Video Sign-Off</h1>
+      <p>
+        Eliminate back-and-forth email chains. SMM PRO generates one-click review links that clients can open on their phone without creating an account.
+      </p>
+
+      <div class="browser-frame">
+        <div class="browser-header">
+          <div class="browser-dots"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div>
+          <div class="browser-address">https://smm-pro-nayankotadiya.vercel.app/approvals</div>
+        </div>
+        <img src="assets/docs/05_approvals.png" alt="SMM PRO Approvals and Video Review" class="browser-img">
+      </div>
+
+      <h2>The Approval Experience:</h2>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <h4>🔗 One-Click Client Review Links</h4>
+          <p>Click <strong>"Share Link"</strong> to copy the client portal URL. Send it over WhatsApp, SMS, or Email. The client views the script or streams the video immediately.</p>
+        </div>
+        <div class="feature-card">
+          <h4>⏱️ Timestamped Video Feedback</h4>
+          <p>Clients and reviewers can pause the video at any exact second (e.g. <code>0:14</code>) and type specific change requests. The editor sees a marker on the timeline.</p>
+        </div>
+        <div class="feature-card">
+          <h4>🟢 Automated Shooting & Editing Tasks</h4>
+          <p>When the client clicks <strong>"Approve"</strong> on a script, the shooter automatically gets a Shoot Task! When raw footage is uploaded, the editor automatically gets an Edit Task!</p>
+        </div>
+        <div class="feature-card">
+          <h4>☁️ Google Drive Direct Uploads</h4>
+          <p>Large 4K files stream directly to Google Drive via chunked resumable sessions. Editors never experience server upload timeouts.</p>
+        </div>
+      </div>
+
+      <!-- SECTION 6: SETTINGS & TEAM MANAGEMENT -->
+      <div class="page-break"></div>
+      <h1>6. Settings, Team Roles & Permissions</h1>
+      <p>
+        Super Administrators can customize team roles, manage users, and connect third-party cloud services.
+      </p>
+
+      <div class="browser-frame">
+        <div class="browser-header">
+          <div class="browser-dots"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div>
+          <div class="browser-address">https://smm-pro-nayankotadiya.vercel.app/settings</div>
+        </div>
+        <img src="assets/docs/06_settings.png" alt="SMM PRO Settings & Integrations" class="browser-img">
+      </div>
+
+      <h2>Settings Breakdown:</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Tab</th>
+            <th>Features & Configuration</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Profile</strong></td>
+            <td>Update your name, personal email, phone number, and enable Two-Factor Authentication (2FA).</td>
+          </tr>
+          <tr>
+            <td><strong>Notifications</strong></td>
+            <td>Choose which notifications you receive via In-App badges, Web Push, and Email.</td>
+          </tr>
+          <tr>
+            <td><strong>Users</strong></td>
+            <td>Add new team members, assign job titles, and deactivate accounts when employees leave.</td>
+          </tr>
+          <tr>
+            <td><strong>Roles</strong></td>
+            <td>Fine-tune permissions across 10 distinct roles (Scriptwriters, Video Editors, SMMs, Managers).</td>
+          </tr>
+          <tr>
+            <td><strong>Integrations</strong></td>
+            <td>Monitor Google Drive Cloud Storage, Email SMTP services, and AiSensy WhatsApp campaigns.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- SUMMARY CHEATSHEET -->
+      <div class="page-break"></div>
+      <h1>7. Quick Production Cheatsheet</h1>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Production Stage</th>
+            <th>Who Does It?</th>
+            <th>Action in SMM PRO</th>
+            <th>Next Automatic Trigger</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>1. Briefing</strong></td>
+            <td>Manager / SMM</td>
+            <td>Create Content item & set deadline</td>
+            <td>Writer notified with Script Task</td>
+          </tr>
+          <tr>
+            <td><strong>2. Scripting</strong></td>
+            <td>Script Writer</td>
+            <td>Draft hook, scenes & submit V1</td>
+            <td>Manager notified to review script</td>
+          </tr>
+          <tr>
+            <td><strong>3. Client Review</strong></td>
+            <td>SMM / Client</td>
+            <td>Share review link via WhatsApp</td>
+            <td>Client approves or requests edits</td>
+          </tr>
+          <tr>
+            <td><strong>4. Shoot</strong></td>
+            <td>Shooter</td>
+            <td>Upload raw takes to Media tab</td>
+            <td>Editor notified with Editing Task</td>
+          </tr>
+          <tr>
+            <td><strong>5. Edit</strong></td>
+            <td>Video Editor</td>
+            <td>Upload V1 edit & thumbnail</td>
+            <td>SMM notified for internal QC</td>
+          </tr>
+          <tr>
+            <td><strong>6. Final Approval</strong></td>
+            <td>Client</td>
+            <td>Reviews final video on review link</td>
+            <td>SMM notified with Scheduling Task</td>
+          </tr>
+          <tr>
+            <td><strong>7. Published</strong></td>
+            <td>SMM</td>
+            <td>Schedule reel & mark Published</td>
+            <td>Content moves to 100% Complete!</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout tip">
+        <strong>Need Help or Support?</strong> Check your connection status in <strong>Settings → Integrations</strong>. The system status monitor keeps your backend active 24/7 with zero downtime.
+      </div>
+
+      <!-- FOOTER -->
+      <footer>
+        <span>SMM PRO Visual Operating Manual • Confidential</span>
+        <span>Version 1.0 • Built for High-Performance Social Media Teams</span>
+      </footer>
+
+    </div>
+
+  </div>
+
+</body>
+</html>

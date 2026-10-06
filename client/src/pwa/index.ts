@@ -2,7 +2,9 @@ import { get, post } from '@/lib/api';
 
 /** Service worker: app shell + push. Registered only in production builds so dev HMR is unaffected. */
 export function registerSW() {
-  if (!('serviceWorker' in navigator) || !import.meta.env.PROD) return;
+  if (!('serviceWorker' in navigator)) return;
+  const isLocal = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+  if (!import.meta.env.PROD && !isLocal) return;
   window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch((e) => console.warn('SW registration failed', e)); });
 }
 
@@ -33,8 +35,8 @@ const b64 = (s: string) => { const pad = '='.repeat((4 - (s.length % 4)) % 4); c
 function device() { const ua = navigator.userAgent; const platform = /android/i.test(ua) ? 'Android' : isIOS() ? 'iOS' : /mac/i.test(ua) ? 'macOS' : /win/i.test(ua) ? 'Windows' : 'Other'; const browser = /edg\//i.test(ua) ? 'Edge' : /firefox/i.test(ua) ? 'Firefox' : /chrome|crios/i.test(ua) ? 'Chrome' : /safari/i.test(ua) ? 'Safari' : 'Browser'; return { platform, browser, deviceType: /mobi|android|iphone|ipad/i.test(ua) ? 'mobile' : 'desktop' }; }
 
 export async function enablePush(): Promise<PushState> {
-  const cfg = await get('/push/config');
-  if (!cfg.enabled) return 'server-off';
+  const cfg = await get('/push/config').catch(() => ({ enabled: false }));
+  if (!cfg.enabled || !cfg.publicKey) return 'server-off';
   const perm = await Notification.requestPermission();
   if (perm !== 'granted') return perm === 'denied' ? 'denied' : 'off';
   const reg = (await navigator.serviceWorker.getRegistration()) || (await navigator.serviceWorker.register('/sw.js'));

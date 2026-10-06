@@ -29,17 +29,58 @@ self.addEventListener('fetch', (e) => {
 });
 
 self.addEventListener('push', (e) => {
-  let d = {}; try { d = e.data ? e.data.json() : {}; } catch { d = { title: 'SMM PRO', body: e.data ? e.data.text() : '' }; }
-  e.waitUntil(self.registration.showNotification(d.title || 'SMM PRO', { body: d.body || '', tag: d.tag, data: { url: d.url || '/' }, icon: '/icons/icon-192.png', badge: '/icons/icon-192.png' }));
+  let d = {};
+  try {
+    d = e.data ? e.data.json() : {};
+  } catch {
+    d = { title: 'SMM PRO', body: e.data ? e.data.text() : '' };
+  }
+  const title = d.title || 'SMM PRO';
+  const options = {
+    body: d.body || 'You have a new update in SMM PRO',
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    tag: d.tag || ('smm-' + Date.now()),
+    renotify: true,
+    vibrate: [200, 100, 200, 100, 200],
+    data: { url: d.url || '/' },
+    actions: [
+      { action: 'open', title: 'Open' },
+      { action: 'dismiss', title: 'Dismiss' }
+    ]
+  };
+  e.waitUntil(self.registration.showNotification(title, options));
 });
 
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
+  if (e.action === 'dismiss') return;
+
   const url = (e.notification.data && e.notification.data.url) || '/';
-  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
-    for (const c of list) { if ('focus' in c) { c.postMessage({ type: 'navigate', url }); return c.focus(); } }
-    return self.clients.openWindow(url);
-  }));
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const c of list) {
+        if ('focus' in c) {
+          c.postMessage({ type: 'navigate', url });
+          return c.focus();
+        }
+      }
+      return self.clients.openWindow(url);
+    })
+  );
 });
 
-self.addEventListener('message', (e) => { if (e.data === 'logout') caches.delete(VERSION); });
+self.addEventListener('message', (e) => {
+  if (e.data === 'logout') {
+    caches.delete(VERSION);
+  } else if (e.data?.type === 'SHOW_NOTIFICATION') {
+    const { title, options } = e.data;
+    self.registration.showNotification(title || 'SMM PRO', {
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      vibrate: [200, 100, 200],
+      renotify: true,
+      ...options,
+    });
+  }
+});

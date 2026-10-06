@@ -75,4 +75,18 @@ export const CATEGORY_CONTENT_FOLDER: Record<string, string> = {
 export const NOTIFICATION_CATEGORIES = ['TASK', 'APPROVAL', 'CHAT', 'REMINDER', 'DEADLINE', 'FILES', 'WORKFLOW', 'SYSTEM'] as const;
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
 
-export const ALLOWED_MIME_PREFIX = ['video/', 'image/', 'audio/', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats', 'application/vnd.ms-', 'text/plain', 'text/csv', 'application/zip'];
+export const ALLOWED_MIME_PREFIX = [
+  'video/',
+  'image/',
+  'audio/',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats',
+  'application/vnd.ms-',
+  'text/plain',
+  'text/csv',
+  'application/zip',
+  'application/x-matroska',
+  'application/x-rar',
+  'application/x-7z',
+];

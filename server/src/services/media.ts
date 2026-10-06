@@ -23,23 +23,117 @@ import { emitOrg } from './realtime';
 const fmtSize = (b: number) => (b > 1e9 ? `${(b / 1e9).toFixed(2)} GB` : `${Math.max(1, Math.round(b / 1e6))} MB`);
 export const mimeAllowed = (m: string) => ALLOWED_MIME_PREFIX.some((p) => m.startsWith(p));
 
+export const EXT_MIME_MAP: Record<string, string> = {
+  // Video
+  mp4: 'video/mp4',
+  m4v: 'video/mp4',
+  mov: 'video/quicktime',
+  mkv: 'video/x-matroska',
+  webm: 'video/webm',
+  avi: 'video/x-msvideo',
+  wmv: 'video/x-ms-wmv',
+  flv: 'video/x-flv',
+  mts: 'video/mp2t',
+  m2ts: 'video/mp2t',
+  ts: 'video/mp2t',
+  '3gp': 'video/3gpp',
+  ogv: 'video/ogg',
+
+  // Image
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  heic: 'image/heic',
+  heif: 'image/heif',
+  svg: 'image/svg+xml',
+  bmp: 'image/bmp',
+  ico: 'image/x-icon',
+  tiff: 'image/tiff',
+  tif: 'image/tiff',
+
+  // Audio
+  mp3: 'audio/mpeg',
+  wav: 'audio/wav',
+  ogg: 'audio/ogg',
+  m4a: 'audio/mp4',
+  aac: 'audio/aac',
+  flac: 'audio/flac',
+
+  // Documents & archives
+  pdf: 'application/pdf',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ppt: 'application/vnd.ms-powerpoint',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  txt: 'text/plain',
+  csv: 'text/csv',
+  zip: 'application/zip',
+  rar: 'application/x-rar-compressed',
+  '7z': 'application/x-7z-compressed',
+};
+
+export const isVideoMime = (m: string) =>
+  m.startsWith('video/') || m === 'application/x-matroska' || m === 'application/mkv';
+
+export const isImageMime = (m: string) =>
+  m.startsWith('image/');
+
+export function inferMimeType(fileName: string, declaredMime?: string | null): string {
+  const ext = fileName.split('.').pop()?.toLowerCase() || '';
+  const inferred = EXT_MIME_MAP[ext];
+  if (!declaredMime || declaredMime === 'application/octet-stream' || declaredMime === 'binary/octet-stream' || !mimeAllowed(declaredMime)) {
+    return inferred || declaredMime || 'application/octet-stream';
+  }
+  return declaredMime;
+}
+
+export function safeMoveFile(src: string, dest: string) {
+  try {
+    fs.renameSync(src, dest);
+  } catch (err: any) {
+    fs.copyFileSync(src, dest);
+    try {
+      fs.unlinkSync(src);
+    } catch {
+      // safe to ignore unlink lock on temporary file
+    }
+  }
+}
+
 const DOCS = ['DOCUMENT', 'REFERENCE', 'IMAGE', 'AUDIO', 'CHAT'];
 /** What each production role may upload. Roles not listed (managers, leads, SMM, admins) are unrestricted. */
-const ROLE_CATEGORIES: Record<string, string[]> = { SCRIPT_WRITER: DOCS, SUPPORT: [...DOCS, 'BRAND_ASSET'], SHOOTER: ['RAW', 'REFERENCE', 'IMAGE', 'CHAT'], EDITOR: ['EDIT', 'FINAL', 'THUMBNAIL', 'CHAT', 'IMAGE', 'AUDIO'], DESIGNER: ['THUMBNAIL', 'IMAGE', 'CHAT', 'BRAND_ASSET'] };
+const ROLE_CATEGORIES: Record<string, string[]> = {
+  SCRIPT_WRITER: DOCS,
+  SUPPORT: [...DOCS, 'BRAND_ASSET'],
+  SHOOTER: ['RAW', 'REFERENCE', 'IMAGE', 'CHAT'],
+  EDITOR: ['EDIT', 'FINAL', 'THUMBNAIL', 'CHAT', 'IMAGE', 'AUDIO', 'REFERENCE'],
+  DESIGNER: ['THUMBNAIL', 'IMAGE', 'CHAT', 'BRAND_ASSET', 'REFERENCE']
+};
 
 export async function initUpload(u: AuthUser, b: { contentId?: string; clientId?: string; category: MediaCategory; fileName: string; mimeType: string; size: number }, origin: string) {
   if (!can(u, 'media.upload') && b.category !== 'CHAT') throw forbidden('You cannot upload files');
   const rc = ROLE_CATEGORIES[u.role];
   if (rc && !rc.includes(b.category)) throw forbidden(`Your role cannot upload ${b.category.toLowerCase()} files`);
+
+  b.mimeType = inferMimeType(b.fileName, b.mimeType);
+
   if (!mimeAllowed(b.mimeType || '')) throw badRequest('This file type is not allowed');
   if (b.size > env.maxUploadMb * 1024 * 1024) throw badRequest(`File exceeds ${env.maxUploadMb} MB limit`);
-  if (['RAW', 'EDIT', 'FINAL'].includes(b.category) && !b.mimeType.startsWith('video/')) throw badRequest('Please upload a video file');
+  if (['RAW', 'EDIT', 'FINAL'].includes(b.category) && !isVideoMime(b.mimeType)) throw badRequest('Please upload a video file');
+  if (['THUMBNAIL'].includes(b.category) && !isImageMime(b.mimeType)) throw badRequest('Please upload an image file');
+
   let content: any = null;
-  if (b.contentId) {
-    content = await Content.findOne({ $and: [{ _id: b.contentId }, visibilityFilter(u)] });
+  const contentIdClean = b.contentId && b.contentId !== 'null' && b.contentId !== 'undefined' && b.contentId.trim() ? b.contentId.trim() : undefined;
+  if (contentIdClean) {
+    content = await Content.findOne({ $and: [{ _id: contentIdClean }, visibilityFilter(u)] });
     if (!content) throw forbidden('This content is not assigned to you');
   }
-  const clientId = content?.clientId || b.clientId;
+  const rawClientId = content?.clientId || (b.clientId && b.clientId !== 'null' && b.clientId !== 'undefined' && b.clientId.trim() ? b.clientId.trim() : undefined);
+  const clientId = rawClientId ? rawClientId : undefined;
   let versionNumber = 1; let fileName = b.fileName; let version: string | undefined;
   if (content && VERSIONED.includes(b.category)) {
     const last = await Media.findOne({ contentId: content._id, category: b.category, status: { $ne: 'FAILED' } }).sort({ versionNumber: -1 }).lean();
@@ -82,7 +176,7 @@ export async function completeUpload(u: AuthUser, mediaId: string, driveFileId?:
     const head = await gd.readHead(driveFileId, 4100).catch(() => null);
     const ft = head ? await FileType.fromBuffer(head) : undefined;
     const mustBeVideo = ['RAW', 'EDIT', 'FINAL'].includes(media.category);
-    if ((ft && !mimeAllowed(ft.mime)) || (mustBeVideo && ft && !ft.mime.startsWith('video/')) || (mustBeVideo && !ft)) {
+    if ((ft && !mimeAllowed(ft.mime)) || (mustBeVideo && ft && !isVideoMime(ft.mime))) {
       await gd.trashFile(driveFileId).catch(() => undefined);
       media.status = 'FAILED'; media.error = 'File content does not match an allowed type'; await media.save();
       throw badRequest(mustBeVideo ? 'The uploaded file is not a valid video' : 'File content does not match an allowed type');
@@ -212,7 +306,9 @@ export async function pipeMedia(media: any, res: Response, range?: string) {
   if (!res.getHeader('Content-Type')) res.setHeader('Content-Type', media.mimeType || 'application/octet-stream');
   res.setHeader('Accept-Ranges', 'bytes');
   if (media.storage === 'LOCAL') {
-    const p = media.localPath!; const size = fs.statSync(p).size;
+    const p = media.localPath;
+    if (!p || !fs.existsSync(p)) throw notFound('File on disk');
+    const size = fs.statSync(p).size;
     const m = range && /bytes=(\d*)-(\d*)/.exec(range);
     if (m) {
       const start = m[1] ? Number(m[1]) : 0; const end = m[2] ? Math.min(Number(m[2]), size - 1) : size - 1;
@@ -231,13 +327,24 @@ export async function pipeMedia(media: any, res: Response, range?: string) {
 
 export async function saveLocalUpload(u: AuthUser, id: string, file: MulterFile) {
   const media = await Media.findById(id);
-  if (!media || String(media.uploadedBy) !== u._id || media.storage !== 'LOCAL' || media.status !== 'UPLOADING') throw forbidden();
+  if (!media || String(media.uploadedBy) !== u._id || media.storage !== 'LOCAL' || media.status !== 'UPLOADING') {
+    try { fs.unlinkSync(file.path); } catch {}
+    throw forbidden();
+  }
   // Magic-byte sniffing: don't trust the browser MIME
   const ft = await FileType.fromFile(file.path).catch(() => undefined);
   const textLike = /^text\//.test(media.mimeType || '');
-  if (!textLike && ft && !mimeAllowed(ft.mime)) { fs.unlinkSync(file.path); throw badRequest('File content does not match an allowed type'); }
-  if (['RAW', 'EDIT', 'FINAL'].includes(media.category) && ft && !ft.mime.startsWith('video/')) { fs.unlinkSync(file.path); throw badRequest('File is not a valid video'); }
-  const dest = localPathFor(media.fileName); fs.renameSync(file.path, dest);
-  await Media.updateOne({ _id: id }, { localPath: dest, size: file.size, mimeType: ft?.mime || media.mimeType });
+  if (!textLike && ft && !mimeAllowed(ft.mime)) {
+    try { fs.unlinkSync(file.path); } catch {}
+    throw badRequest('File content does not match an allowed type');
+  }
+  if (['RAW', 'EDIT', 'FINAL'].includes(media.category) && ft && !isVideoMime(ft.mime)) {
+    try { fs.unlinkSync(file.path); } catch {}
+    throw badRequest('File is not a valid video');
+  }
+  const dest = localPathFor(media.fileName);
+  safeMoveFile(file.path, dest);
+  const finalMime = ft?.mime || inferMimeType(media.fileName, media.mimeType);
+  await Media.updateOne({ _id: id }, { localPath: dest, size: file.size, mimeType: finalMime });
   return completeUpload(u, id);
 }

@@ -74,6 +74,26 @@ export function DiffDisplay({ tokens }: { tokens: { type: 'same' | 'added' | 're
   );
 }
 
+function getScriptText(s: any): string {
+  if (!s) return '';
+  if (s.body) return s.body;
+  if (s.dialogue) return s.dialogue;
+  const parts: string[] = [];
+  if (s.hook) parts.push(`Hook:\n${s.hook}`);
+  if (s.scenes?.length) {
+    s.scenes.forEach((sc: any, i: number) => {
+      const sp: string[] = [];
+      if (sc.title) sp.push(`--- ${sc.title} ---`);
+      else sp.push(`--- Scene ${i + 1} ---`);
+      if (sc.dialogue) sp.push(sc.dialogue);
+      if (sc.visual) sp.push(`[Visual: ${sc.visual}]`);
+      parts.push(sp.join('\n'));
+    });
+  }
+  if (s.cta) parts.push(`CTA: ${s.cta}`);
+  return parts.join('\n\n');
+}
+
 export function ScriptDiffModal({
   open,
   onClose,
@@ -101,11 +121,11 @@ export function ScriptDiffModal({
     label: `${v.label} (by ${v.createdBy?.name || 'Writer'})`,
   }));
 
-  const hookDiff = diffTokens(scriptA?.hook || '', scriptB?.hook || '');
-  const addedCount = hookDiff.filter((t) => t.type === 'added').length;
-  const removedCount = hookDiff.filter((t) => t.type === 'removed').length;
-
-  const maxScenes = Math.max(scriptA?.scenes?.length || 0, scriptB?.scenes?.length || 0);
+  const textA = getScriptText(scriptA);
+  const textB = getScriptText(scriptB);
+  const scriptDiff = diffTokens(textA, textB);
+  const addedCount = scriptDiff.filter((t) => t.type === 'added').length;
+  const removedCount = scriptDiff.filter((t) => t.type === 'removed').length;
 
   return (
     <Modal
@@ -205,10 +225,10 @@ export function ScriptDiffModal({
           </div>
         )}
 
-        {/* Hook Diff */}
+        {/* Script Diff */}
         <div className="rounded-2xl border border-line/60 bg-surface p-4">
           <div className="mb-2 flex items-center justify-between border-b border-line/50 pb-2">
-            <span className="font-bold text-[14px] text-ink">Hook (First 3 Seconds)</span>
+            <span className="font-bold text-[14px] text-ink">Script Comparison</span>
             <div className="flex gap-2">
               <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[11px] font-bold text-emerald-300">
                 +{addedCount} additions
@@ -220,99 +240,21 @@ export function ScriptDiffModal({
           </div>
 
           {mode === 'unified' ? (
-            <div className="rounded-xl bg-surface-2/60 p-3.5 border border-line/40">
-              <DiffDisplay tokens={hookDiff} />
+            <div className="rounded-xl bg-surface-2/60 p-4 border border-line/40 max-h-[55vh] overflow-y-auto">
+              <DiffDisplay tokens={scriptDiff} />
             </div>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl bg-surface-2/60 p-3 border border-line/40">
-                <div className="mb-1 text-[11px] font-bold text-ink-3 uppercase">{scriptA.label} (Original)</div>
-                <div className="text-[13px] text-ink">{scriptA.hook || '—'}</div>
+            <div className="grid gap-3 sm:grid-cols-2 max-h-[55vh] overflow-y-auto">
+              <div className="rounded-xl bg-surface-2/60 p-4 border border-line/40 whitespace-pre-wrap font-sans text-[13px] leading-relaxed">
+                <div className="mb-2 text-[11px] font-bold text-ink-3 uppercase border-b border-line/40 pb-1">{scriptA.label} (Original)</div>
+                <div className="text-ink">{textA || '—'}</div>
               </div>
-              <div className="rounded-xl bg-primary-soft/30 p-3 border border-primary/30">
-                <div className="mb-1 text-[11px] font-bold text-primary-ink uppercase">{scriptB.label} (Revised)</div>
-                <div className="text-[13px] text-ink">{scriptB.hook || '—'}</div>
+              <div className="rounded-xl bg-primary-soft/30 p-4 border border-primary/30 whitespace-pre-wrap font-sans text-[13px] leading-relaxed">
+                <div className="mb-2 text-[11px] font-bold text-primary-ink uppercase border-b border-primary/30 pb-1">{scriptB.label} (Revised)</div>
+                <div className="text-ink">{textB || '—'}</div>
               </div>
             </div>
           )}
-        </div>
-
-        {/* Scenes Diff */}
-        <div className="space-y-3">
-          <div className="font-bold text-[14px] text-ink">Scenes Comparison</div>
-
-          {Array.from({ length: maxScenes }).map((_, idx) => {
-            const scnA = scriptA?.scenes?.[idx];
-            const scnB = scriptB?.scenes?.[idx];
-
-            const diaDiff = diffTokens(scnA?.dialogue || '', scnB?.dialogue || '');
-            const visDiff = diffTokens(scnA?.visual || '', scnB?.visual || '');
-
-            return (
-              <div
-                key={idx}
-                className="rounded-2xl border border-line/60 bg-surface p-4 transition-all"
-              >
-                <div className="mb-3 flex items-center justify-between border-b border-line/50 pb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/20 text-[10px] font-bold text-primary-ink">
-                      {idx + 1}
-                    </span>
-                    <span className="font-bold text-[13px] text-ink">
-                      {scnB?.title || scnA?.title || `Scene ${idx + 1}`}
-                    </span>
-                  </div>
-                  {!scnA && <Badge t="green">Added in {scriptB.label}</Badge>}
-                  {!scnB && <Badge t="red">Removed in {scriptB.label}</Badge>}
-                </div>
-
-                {mode === 'unified' ? (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-xl bg-surface-2/50 p-3 border border-line/40">
-                      <div className="mb-1.5 text-meta font-bold text-ink-2">Dialogue / Voiceover</div>
-                      <DiffDisplay tokens={diaDiff} />
-                    </div>
-                    <div className="rounded-xl bg-surface-2/50 p-3 border border-line/40">
-                      <div className="mb-1.5 text-meta font-bold text-ink-2">Visual Action</div>
-                      <DiffDisplay tokens={visDiff} />
-                    </div>
-                  </div>
-                ) : (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-xl bg-surface-2/60 p-3 border border-line/40">
-                      <div className="mb-1 text-[11px] font-bold text-ink-3 uppercase">{scriptA.label}</div>
-                      <div className="text-[12px] text-ink-2 mb-1"><b>Dialogue:</b> {scnA?.dialogue || '—'}</div>
-                      <div className="text-[12px] text-ink-2"><b>Visual:</b> {scnA?.visual || '—'}</div>
-                    </div>
-                    <div className="rounded-xl bg-primary-soft/30 p-3 border border-primary/30">
-                      <div className="mb-1 text-[11px] font-bold text-primary-ink uppercase">{scriptB.label}</div>
-                      <div className="text-[12px] text-ink mb-1"><b>Dialogue:</b> {scnB?.dialogue || '—'}</div>
-                      <div className="text-[12px] text-ink"><b>Visual:</b> {scnB?.visual || '—'}</div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Direction, CTA, Duration comparison */}
-        <div className="rounded-2xl border border-line/60 bg-surface p-4">
-          <div className="mb-2 font-bold text-[14px] text-ink">Details &amp; Direction</div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-xl bg-surface-2/40 p-2.5">
-              <div className="text-meta font-bold text-ink-3">CTA</div>
-              <div className="text-[13px] text-ink font-semibold">{scriptB.cta || scriptA.cta || '—'}</div>
-            </div>
-            <div className="rounded-xl bg-surface-2/40 p-2.5">
-              <div className="text-meta font-bold text-ink-3">Music</div>
-              <div className="text-[13px] text-ink font-semibold">{scriptB.music || scriptA.music || '—'}</div>
-            </div>
-            <div className="rounded-xl bg-surface-2/40 p-2.5">
-              <div className="text-meta font-bold text-ink-3">Estimated Duration</div>
-              <div className="text-[13px] text-ink font-semibold">{scriptB.duration || scriptA.duration || '—'}</div>
-            </div>
-          </div>
         </div>
       </div>
     </Modal>

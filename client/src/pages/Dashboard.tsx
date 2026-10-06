@@ -152,9 +152,9 @@ function PendingReviewsDetail({ dateFrom, dateTo, mine: _mine }: { dateFrom: str
       pad={false}
       action={<More to="/approvals" />}
     >
-      <div className="flex border-b border-line/60 bg-surface-2/25">
+      <div className="flex border-b border-line/60 bg-surface-2/25 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
         {subTabs.map(([key, lbl, Icon, count]) => (
-          <button key={key} onClick={() => setTab(key as any)} className={clsx('flex items-center gap-1.5 px-4 py-2.5 text-[13px] font-bold border-b-2 transition-all duration-200', tab === key ? 'border-primary text-primary-ink' : 'border-transparent text-ink-2 hover:text-ink')}>
+          <button key={key} onClick={() => setTab(key as any)} className={clsx('flex items-center gap-1.5 whitespace-nowrap px-4 py-2.5 text-[13px] font-bold border-b-2 transition-all duration-200', tab === key ? 'border-primary text-primary-ink' : 'border-transparent text-ink-2 hover:text-ink')}>
             <Icon size={13} />{lbl}{count > 0 && <span className={clsx('rounded-full px-1.5 text-[11px] font-bold leading-5', tab === key ? 'bg-primary-soft text-primary-ink' : 'bg-surface-3 text-ink-2')}>{count}</span>}
           </button>
         ))}
@@ -164,45 +164,123 @@ function PendingReviewsDetail({ dateFrom, dateTo, mine: _mine }: { dateFrom: str
           if (tab === 'script') {
             const rows: any[] = d?.scriptReviews || [];
             if (!rows.length) return <Empty title="No pending script reviews" />;
-            return <Table head={['Content', 'Client', 'Reviewer', 'Submitted by', 'Version', 'Waiting']} minWidth={680}>
-              {rows.map((a) => <tr key={a._id} className="hover:bg-surface-2 transition-colors cursor-pointer" onClick={() => nav(`/content/${a.contentId?._id}?tab=script`)}>
-                <td className="td"><div className="font-semibold text-ink">{a.contentId?.title || '—'}</div><div className="font-mono text-meta font-medium text-ink-3">{a.contentId?.contentId}</div></td>
-                <td className="td text-ink-2 font-medium">{a.contentId?.clientId?.name || '—'}</td>
-                <td className="td font-medium text-ink">{a.reviewerId?.name || <span className="text-ink-3">Unassigned</span>}</td>
-                <td className="td text-ink-2 font-medium">{a.createdBy?.name || '—'}</td>
-                <td className="td tabular font-medium text-ink">{a.version || '—'}</td>
-                <td className="td tabular font-medium text-ink-2">{fmtAge(Math.round((Date.now() - new Date(a.createdAt).getTime()) / 36e5))}</td>
-              </tr>)}
-            </Table>;
+            return (
+              <>
+                <ul className="divide-y divide-line/60 md:hidden">
+                  {rows.map((a) => (
+                    <li key={a._id} className="p-3.5 hover:bg-surface-2 transition-colors cursor-pointer" onClick={() => nav(`/content/${a.contentId?._id}?tab=script`)}>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-semibold text-ink truncate">{a.contentId?.title || '—'}</span>
+                        <span className="text-meta tabular text-ink-3 shrink-0">{fmtAge(Math.round((Date.now() - new Date(a.createdAt).getTime()) / 36e5))}</span>
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-ink-2">
+                        <span className="font-mono text-ink-3">{a.contentId?.contentId}</span>
+                        <span>•</span>
+                        <span>{a.contentId?.clientId?.name || '—'}</span>
+                        <span>•</span>
+                        <span>v{a.version || '1'}</span>
+                      </div>
+                      <div className="mt-1 text-[12px] text-ink-3">Reviewer: <span className="text-ink font-medium">{a.reviewerId?.name || 'Unassigned'}</span></div>
+                    </li>
+                  ))}
+                </ul>
+                <div className="hidden md:block">
+                  <Table head={['Content', 'Client', 'Reviewer', 'Submitted by', 'Version', 'Waiting']} minWidth={680}>
+                    {rows.map((a) => <tr key={a._id} className="hover:bg-surface-2 transition-colors cursor-pointer" onClick={() => nav(`/content/${a.contentId?._id}?tab=script`)}>
+                      <td className="td"><div className="font-semibold text-ink">{a.contentId?.title || '—'}</div><div className="font-mono text-meta font-medium text-ink-3">{a.contentId?.contentId}</div></td>
+                      <td className="td text-ink-2 font-medium">{a.contentId?.clientId?.name || '—'}</td>
+                      <td className="td font-medium text-ink">{a.reviewerId?.name || <span className="text-ink-3">Unassigned</span>}</td>
+                      <td className="td text-ink-2 font-medium">{a.createdBy?.name || '—'}</td>
+                      <td className="td tabular font-medium text-ink">{a.version || '—'}</td>
+                      <td className="td tabular font-medium text-ink-2">{fmtAge(Math.round((Date.now() - new Date(a.createdAt).getTime()) / 36e5))}</td>
+                    </tr>)}
+                  </Table>
+                </div>
+              </>
+            );
           }
           if (tab === 'video') {
             const rows: any[] = d?.videoReviews || [];
             if (!rows.length) return <Empty title="No pending video reviews" />;
-            return <Table head={['Content', 'Client', 'Type', 'Reviewer', 'Submitted by', 'Version', 'Waiting']} minWidth={740}>
-              {rows.map((a) => <tr key={a._id} className="hover:bg-surface-2 transition-colors cursor-pointer" onClick={() => nav(`/content/${a.contentId?._id}?tab=editing`)}>
-                <td className="td"><div className="font-semibold text-ink">{a.contentId?.title || '—'}</div><div className="font-mono text-meta font-medium text-ink-3">{a.contentId?.contentId}</div></td>
-                <td className="td text-ink-2 font-medium">{a.contentId?.clientId?.name || '—'}</td>
-                <td className="td"><Badge t={a.type === 'FINAL' ? 'red' : 'amber'}>{label(a.type)}</Badge></td>
-                <td className="td font-medium text-ink">{a.reviewerId?.name || <span className="text-ink-3">Unassigned</span>}</td>
-                <td className="td text-ink-2 font-medium">{a.createdBy?.name || '—'}</td>
-                <td className="td tabular font-medium text-ink">{a.version || '—'}</td>
-                <td className="td tabular font-medium text-ink-2">{fmtAge(Math.round((Date.now() - new Date(a.createdAt).getTime()) / 36e5))}</td>
-              </tr>)}
-            </Table>;
+            return (
+              <>
+                <ul className="divide-y divide-line/60 md:hidden">
+                  {rows.map((a) => (
+                    <li key={a._id} className="p-3.5 hover:bg-surface-2 transition-colors cursor-pointer" onClick={() => nav(`/content/${a.contentId?._id}?tab=editing`)}>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-semibold text-ink truncate">{a.contentId?.title || '—'}</span>
+                        <Badge t={a.type === 'FINAL' ? 'red' : 'amber'}>{label(a.type)}</Badge>
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-ink-2">
+                        <span className="font-mono text-ink-3">{a.contentId?.contentId}</span>
+                        <span>•</span>
+                        <span>{a.contentId?.clientId?.name || '—'}</span>
+                        <span>•</span>
+                        <span>v{a.version || '1'}</span>
+                      </div>
+                      <div className="mt-1 flex items-center justify-between text-[12px] text-ink-3">
+                        <span>Reviewer: <span className="text-ink font-medium">{a.reviewerId?.name || 'Unassigned'}</span></span>
+                        <span className="tabular">{fmtAge(Math.round((Date.now() - new Date(a.createdAt).getTime()) / 36e5))}</span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <div className="hidden md:block">
+                  <Table head={['Content', 'Client', 'Type', 'Reviewer', 'Submitted by', 'Version', 'Waiting']} minWidth={740}>
+                    {rows.map((a) => <tr key={a._id} className="hover:bg-surface-2 transition-colors cursor-pointer" onClick={() => nav(`/content/${a.contentId?._id}?tab=editing`)}>
+                      <td className="td"><div className="font-semibold text-ink">{a.contentId?.title || '—'}</div><div className="font-mono text-meta font-medium text-ink-3">{a.contentId?.contentId}</div></td>
+                      <td className="td text-ink-2 font-medium">{a.contentId?.clientId?.name || '—'}</td>
+                      <td className="td"><Badge t={a.type === 'FINAL' ? 'red' : 'amber'}>{label(a.type)}</Badge></td>
+                      <td className="td font-medium text-ink">{a.reviewerId?.name || <span className="text-ink-3">Unassigned</span>}</td>
+                      <td className="td text-ink-2 font-medium">{a.createdBy?.name || '—'}</td>
+                      <td className="td tabular font-medium text-ink">{a.version || '—'}</td>
+                      <td className="td tabular font-medium text-ink-2">{fmtAge(Math.round((Date.now() - new Date(a.createdAt).getTime()) / 36e5))}</td>
+                    </tr>)}
+                  </Table>
+                </div>
+              </>
+            );
           }
           const rows: any[] = d?.clientReviews || [];
           if (!rows.length) return <Empty title="No pending client reviews" />;
-          return <Table head={['Content', 'Client', 'Type', 'Sent to', 'Status', 'Sent', 'Waiting']} minWidth={700}>
-            {rows.map((a) => <tr key={a._id} className="hover:bg-surface-2 transition-colors cursor-pointer" onClick={() => nav('/approvals?tab=client')}>
-              <td className="td"><div className="font-semibold text-ink">{a.contentId?.title || '—'}</div><div className="font-mono text-meta font-medium text-ink-3">{a.contentId?.contentId}</div></td>
-              <td className="td text-ink-2 font-medium">{a.contentId?.clientId?.name || '—'}</td>
-              <td className="td"><Badge>{label(a.type)}</Badge></td>
-              <td className="td font-medium text-ink">{a.recipientName || a.reviewerId?.name || '—'}</td>
-              <td className="td"><Badge status={a.status} /></td>
-              <td className="td tabular text-meta text-ink-2">{a.sentAt ? fmtDateTime(a.sentAt) : '—'}</td>
-              <td className="td tabular font-medium text-ink-2">{fmtAge(Math.round((Date.now() - new Date(a.sentAt || a.createdAt).getTime()) / 36e5))}</td>
-            </tr>)}
-          </Table>;
+          return (
+            <>
+              <ul className="divide-y divide-line/60 md:hidden">
+                {rows.map((a) => (
+                  <li key={a._id} className="p-3.5 hover:bg-surface-2 transition-colors cursor-pointer" onClick={() => nav('/approvals?tab=client')}>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-ink truncate">{a.contentId?.title || '—'}</span>
+                      <Badge status={a.status} />
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-ink-2">
+                      <span className="font-mono text-ink-3">{a.contentId?.contentId}</span>
+                      <span>•</span>
+                      <span>{a.contentId?.clientId?.name || '—'}</span>
+                      <span>•</span>
+                      <Badge>{label(a.type)}</Badge>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between text-[12px] text-ink-3">
+                      <span>Sent to: <span className="text-ink font-medium">{a.recipientName || a.reviewerId?.name || '—'}</span></span>
+                      <span className="tabular">{fmtAge(Math.round((Date.now() - new Date(a.sentAt || a.createdAt).getTime()) / 36e5))}</span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <div className="hidden md:block">
+                <Table head={['Content', 'Client', 'Type', 'Sent to', 'Status', 'Sent', 'Waiting']} minWidth={700}>
+                  {rows.map((a) => <tr key={a._id} className="hover:bg-surface-2 transition-colors cursor-pointer" onClick={() => nav('/approvals?tab=client')}>
+                    <td className="td"><div className="font-semibold text-ink">{a.contentId?.title || '—'}</div><div className="font-mono text-meta font-medium text-ink-3">{a.contentId?.contentId}</div></td>
+                    <td className="td text-ink-2 font-medium">{a.contentId?.clientId?.name || '—'}</td>
+                    <td className="td"><Badge>{label(a.type)}</Badge></td>
+                    <td className="td font-medium text-ink">{a.recipientName || a.reviewerId?.name || '—'}</td>
+                    <td className="td"><Badge status={a.status} /></td>
+                    <td className="td tabular text-meta text-ink-2">{a.sentAt ? fmtDateTime(a.sentAt) : '—'}</td>
+                    <td className="td tabular font-medium text-ink-2">{fmtAge(Math.round((Date.now() - new Date(a.sentAt || a.createdAt).getTime()) / 36e5))}</td>
+                  </tr>)}
+                </Table>
+              </div>
+            </>
+          );
         }}
       </Async>
     </Card>
@@ -223,7 +301,7 @@ function WaitingFor() {
     <Card title="Waiting for">
       <Async q={q}>
         {(d: any) => (
-          <div className="stagger grid grid-cols-2 gap-2.5 sm:grid-cols-4 lg:grid-cols-7">
+          <div className="stagger grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7">
             {items.map(([k, l, to]) => {
               const count = d[k] || 0;
               const hasItems = count > 0;

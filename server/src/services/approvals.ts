@@ -111,7 +111,7 @@ export async function reviewInternal(id: string, decision: 'APPROVE' | 'CHANGES'
 export const fmtTs = (s: number) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
 /** Create a client approval (script or final), a secure one-time link, and send it via AiSensy when configured. */
-export async function sendClientReview(u: AuthUser, b: { contentId: string; kind: 'SCRIPT' | 'FINAL'; phone?: string; recipientName?: string; sendWhatsApp?: boolean }) {
+export async function sendClientReview(u: AuthUser, b: { contentId: string; kind: 'SCRIPT' | 'FINAL'; phone?: string; recipientName?: string; sendWhatsApp?: boolean }, customBaseUrl?: string) {
   const content = await Content.findById(b.contentId);
   if (!content) throw notFound('Content');
   const client = (await Client.findById(content.clientId))!;
@@ -139,7 +139,8 @@ export async function sendClientReview(u: AuthUser, b: { contentId: string; kind
     recipientPhone: b.phone || client.phone, recipientName: b.recipientName || client.contactPerson || client.name,
     reviewerId: content.assignedReviewer, createdBy: u._id, history: [{ status: 'DRAFT', by: u._id }],
   });
-  const url = `${env.publicApprovalUrl}/${token}`;
+  const baseUrl = (customBaseUrl || env.publicApprovalUrl).replace(/\/$/, '');
+  const url = `${baseUrl}/${token}`;
   await deliver(a, content, client, url, u, b.sendWhatsApp !== false);
   await moveToStage(content, type === 'CLIENT_SCRIPT' ? 'CLIENT_REVIEW' : 'CLIENT_FINAL_APPROVAL', u._id, `${u.name} sent ${version} for client review`);
   await logActivity({ actorId: u._id, action: 'approval.client.sent', message: `${u.name} sent ${content.contentId} ${version} for client review${a.source === 'AISENSY' ? ' via WhatsApp' : ''}`, entityType: 'approval', entityId: a._id, contentId: content._id, clientId: client._id });
@@ -197,19 +198,20 @@ async function deliver(a: any, content: any, client: any, url: string, u: AuthUs
   await a.save();
 }
 
-export async function resend(u: AuthUser, id: string) {
+export async function resend(u: AuthUser, id: string, customBaseUrl?: string) {
   const a = await Approval.findById(id);
   if (!a || !['CLIENT_SCRIPT', 'CLIENT_FINAL'].includes(a.type)) throw notFound('Client approval');
   if (['APPROVED', 'CHANGES_REQUESTED', 'CANCELLED'].includes(a.status)) throw badRequest('This review is closed; send a new one');
   // rotate token so old links stop working
-  return sendClientReview(u, { contentId: String(a.contentId), kind: a.type === 'CLIENT_SCRIPT' ? 'SCRIPT' : 'FINAL', phone: a.recipientPhone || undefined, recipientName: a.recipientName || undefined });
+  return sendClientReview(u, { contentId: String(a.contentId), kind: a.type === 'CLIENT_SCRIPT' ? 'SCRIPT' : 'FINAL', phone: a.recipientPhone || undefined, recipientName: a.recipientName || undefined }, customBaseUrl);
 }
 /** Returns the still-active public link for an open client approval (staff only). */
-export async function activeLink(id: string) {
+export async function activeLink(id: string, customBaseUrl?: string) {
   const a = await Approval.findById(id).select('+tokenEnc');
   if (!a) throw notFound('Approval');
   if (!a.tokenEnc || !OPEN.includes(a.status) || (a.expiresAt && a.expiresAt < new Date())) throw badRequest('This link is no longer active. Use Resend to create a new one.');
-  return { url: `${env.publicApprovalUrl}/${decrypt(a.tokenEnc, env.jwtSecret)}`, expiresAt: a.expiresAt };
+  const baseUrl = (customBaseUrl || env.publicApprovalUrl).replace(/\/$/, '');
+  return { url: `${baseUrl}/${decrypt(a.tokenEnc, env.jwtSecret)}`, expiresAt: a.expiresAt };
 }
 export async function cancel(u: AuthUser, id: string) {
   const a = await Approval.findById(id);
@@ -239,7 +241,7 @@ export async function publicView(token: string) {
   let script: any = null;
   if (a.scriptVersionId) {
     const v = await ScriptVersion.findById(a.scriptVersionId).lean();
-    script = v && { hook: v.hook, scenes: v.scenes, dialogue: v.dialogue, cta: v.cta, captionNotes: v.captionNotes, duration: v.duration, music: v.music };
+    script = v && { hook: v.hook, scenes: v.scenes, dialogue: v.dialogue, body: v.body || v.dialogue, cta: v.cta, captionNotes: v.captionNotes, duration: v.duration, music: v.music };
   }
   const media = a.mediaId ? await Media.findById(a.mediaId).select('mimeType fileName').lean() : null;
   const thumb = await Media.findOne({ contentId: a.contentId, category: 'THUMBNAIL', status: { $in: ['READY', 'APPROVED', 'REVIEW_REQUIRED'] } }).sort({ versionNumber: -1 }).select('_id').lean();

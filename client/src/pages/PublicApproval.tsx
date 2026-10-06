@@ -75,13 +75,14 @@ export default function PublicApproval() {
       {d.hasVideo && <video ref={video} controls playsInline preload="metadata" poster={d.hasThumbnail ? `${DIRECT_URL}/api/public/approval/${token}/thumbnail` : undefined} src={`${DIRECT_URL}/api/public/approval/${token}/video`} onTimeUpdate={(e) => setNow(e.currentTarget.currentTime)} className="mb-4 max-h-[70dvh] w-full rounded-xl bg-black shadow-lift" />}
       {!d.hasVideo && d.hasThumbnail && <img src={`${DIRECT_URL}/api/public/approval/${token}/thumbnail`} alt="" className="mb-4 w-full rounded-lg" />}
 
-      {isScript && d.script && <section className="card mb-4 divide-y divide-line">
-        {d.script.hook && <div className="p-4"><div className="text-meta font-medium text-ink-2">Hook</div><p className="mt-1 whitespace-pre-wrap font-medium text-ink">{d.script.hook}</p></div>}
-        {(d.script.scenes || []).filter((s: any) => s.dialogue || s.visual).map((s: any, i: number) => <div key={i} className="p-4"><div className="text-meta font-medium text-ink-2">{s.title || `Scene ${i + 1}`}</div>{s.dialogue && <p className="mt-1 whitespace-pre-wrap font-medium text-ink">{s.dialogue}</p>}{s.visual && <p className="mt-1 text-[13px] font-medium text-ink-2">Visual: {s.visual}</p>}</div>)}
-        {d.script.dialogue && <div className="p-4"><div className="text-meta font-medium text-ink-2">Dialogue</div><p className="mt-1 whitespace-pre-wrap font-medium text-ink">{d.script.dialogue}</p></div>}
-        {d.script.cta && <div className="p-4"><div className="text-meta font-medium text-ink-2">Call to action</div><p className="mt-1 font-medium text-ink">{d.script.cta}</p></div>}
-        {(d.script.duration || d.script.music) && <div className="p-4 text-[13px] font-medium text-ink-2">{[d.script.duration && `Duration: ${d.script.duration}`, d.script.music && `Music: ${d.script.music}`].filter(Boolean).join(' · ')}</div>}
-      </section>}
+      {isScript && d.script && (
+        <section className="card mb-4 p-5">
+          <div className="mb-2 text-meta font-semibold uppercase tracking-wider text-ink-2">Script</div>
+          <div className="rounded-xl border border-line/60 bg-surface-2/40 p-4 font-normal text-[15px] leading-relaxed text-ink whitespace-pre-wrap">
+            {d.script.body || d.script.dialogue || [d.script.hook, ...(d.script.scenes || []).filter((s: any) => s.dialogue || s.visual).map((s: any, i: number) => [s.title ? `--- ${s.title} ---` : `--- Scene ${i + 1} ---`, s.dialogue, s.visual ? `[Visual: ${s.visual}]` : ''].filter(Boolean).join('\n')), d.script.cta ? `CTA: ${d.script.cta}` : ''].filter(Boolean).join('\n\n')}
+          </div>
+        </section>
+      )}
 
       {(d.caption || d.hashtags || d.description) && <section className="card mb-4 space-y-3 p-4">
         {d.description && <div><div className="text-meta font-medium text-ink-2">Description</div><p className="mt-1 whitespace-pre-wrap font-medium text-ink">{d.description}</p></div>}

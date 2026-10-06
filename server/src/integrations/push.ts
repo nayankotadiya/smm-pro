@@ -1,9 +1,25 @@
 import webpush from 'web-push';
 import { env } from '../config/env';
+const FALLBACK_PUBLIC = 'BM4oiMoCIfSAONuA_s5AEEKP4vvxl7dr0YMDPHV9arv8YNZ2S0mYm81ib04YYgH2J1vI4DvlQUQYDYqWAurIetk';
+const FALLBACK_PRIVATE = '2GonNNyeE68ox1xr3AIxSnyzQ3fDWriSS2VioLGBvZE';
+
+export function getVapidPublicKey() {
+  return env.vapid.publicKey || '';
+}
+
 let ready = false;
+
 export function pushConfigured() {
   if (!env.vapid.publicKey || !env.vapid.privateKey) return false;
-  if (!ready) { webpush.setVapidDetails(env.vapid.subject, env.vapid.publicKey, env.vapid.privateKey); ready = true; }
+  if (!ready) {
+    try {
+      webpush.setVapidDetails(env.vapid.subject, env.vapid.publicKey, env.vapid.privateKey);
+      ready = true;
+    } catch (e) {
+      console.error('[push] Failed to set VAPID details', e);
+      return false;
+    }
+  }
   return true;
 }
 export async function sendPush(sub: any, payload: { title: string; body: string; url: string; tag?: string }): Promise<'SENT' | 'FAILED' | 'GONE' | 'DISABLED'> {

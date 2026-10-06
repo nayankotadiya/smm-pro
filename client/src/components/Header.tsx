@@ -76,7 +76,7 @@ const GROUPS: { key: string; title: string; to: (x: any) => string; text: (x: an
   { key: 'content', title: 'Content', to: (x) => `/content/${x._id}`, text: (x) => x.title, sub: (x) => `${x.contentId} · ${x.clientId?.name || ''}` },
   { key: 'clients', title: 'Clients', to: (x) => `/clients/${x._id}`, text: (x) => x.name, sub: (x) => x.businessName || '' },
   { key: 'campaigns', title: 'Campaigns', to: (x) => `/clients/${x.clientId?._id}?tab=campaigns`, text: (x) => x.name, sub: (x) => x.clientId?.name || '' },
-  { key: 'scripts', title: 'Scripts', to: (x) => `/content/${x.contentId?._id}?tab=script`, text: (x) => `${x.contentId?.title} — ${x.label}`, sub: (x) => x.hook || '' },
+  { key: 'scripts', title: 'Scripts', to: (x) => `/content/${x.contentId?._id}?tab=script`, text: (x) => `${x.contentId?.title} — ${x.label}`, sub: (x) => x.dialogue || x.body || x.hook || '' },
   { key: 'tasks', title: 'Tasks', to: (x) => `/tasks/${x._id}`, text: (x) => x.title },
   { key: 'files', title: 'Files', to: (x) => (x.contentId ? `/content/${x.contentId}?tab=files` : '/media'), text: (x) => x.fileName, sub: (x) => roleLabel(x.category) },
   { key: 'messages', title: 'Messages', to: (x) => `/chat/${x.roomId}`, text: (x) => x.message, sub: (x) => `${x.senderId?.name || ''} · ${ago(x.createdAt)}` },

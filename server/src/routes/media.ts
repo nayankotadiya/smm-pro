@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
-import os from 'os';
+import path from 'path';
+import fs from 'fs';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { Media, Content, Feedback } from '../models';
@@ -11,13 +12,16 @@ import { env } from '../config/env';
 import { MEDIA_CATEGORIES } from '../config/constants';
 import { initUpload, completeUpload, failUpload, streamMedia, saveLocalUpload, canAccessMedia } from '../services/media';
 import { visibilityFilter } from '../services/content';
-import { storageMode } from '../services/storage';
+import { storageMode, LOCAL_DIR } from '../services/storage';
 import { escapeRx } from './clients';
 
 const r = Router();
 /** Drive only allows the resumable upload from the origin the session was created for */
 const originOf = (req: any) => { const o = String(req.get('origin') || '').replace(/\/$/, ''); return env.appOrigins.includes(o) ? o : env.appOrigins[0]; };
-const upload = multer({ dest: os.tmpdir(), limits: { fileSize: env.maxUploadMb * 1024 * 1024, files: 1 } });
+
+const UPLOAD_TMP = path.join(LOCAL_DIR, 'tmp');
+try { fs.mkdirSync(UPLOAD_TMP, { recursive: true }); } catch {}
+const upload = multer({ dest: UPLOAD_TMP, limits: { fileSize: env.maxUploadMb * 1024 * 1024, files: 1 } });
 
 /** <video>/<img>/<a download> cannot send Authorization headers, so we issue a 5-minute, single-file URL token. */
 const streamAuth = ah(async (req, _res, next) => {
@@ -51,10 +55,21 @@ r.get('/', ah(async (req, res) => {
 
 r.get('/config', (_req, res) => { res.json({ storage: storageMode(), maxUploadMb: env.maxUploadMb }); });
 
-/** Step 1: validate, auto-name, create record, return direct-to-Drive resumable URL (or local endpoint in dev) */
 r.post('/upload', ah(async (req, res) => {
-  const b = z.object({ contentId: z.string().optional().nullable(), clientId: z.string().optional().nullable(), category: z.enum(MEDIA_CATEGORIES), fileName: z.string().min(1).max(255), mimeType: z.string().min(3).max(120), size: z.number().int().positive() }).parse(req.body);
-  res.status(201).json(await initUpload(req.user!, b as any, originOf(req)));
+  const b = z.object({
+    contentId: z.string().optional().nullable(),
+    clientId: z.string().optional().nullable(),
+    category: z.enum(MEDIA_CATEGORIES),
+    fileName: z.string().min(1).max(255),
+    mimeType: z.string().max(120).optional().default('application/octet-stream'),
+    size: z.number().int().positive()
+  }).parse(req.body);
+  const sanitized = {
+    ...b,
+    contentId: b.contentId && b.contentId !== 'null' && b.contentId !== 'undefined' && b.contentId.trim() ? b.contentId.trim() : undefined,
+    clientId: b.clientId && b.clientId !== 'null' && b.clientId !== 'undefined' && b.clientId.trim() ? b.clientId.trim() : undefined,
+  };
+  res.status(201).json(await initUpload(req.user!, sanitized as any, originOf(req)));
 }));
 r.post('/:id/local-upload', upload.single('file'), ah(async (req, res) => {
   if (!req.file) throw new AppError(400, 'No file received', 'UPLOAD');

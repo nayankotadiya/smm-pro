@@ -4,7 +4,7 @@ import { Notification, PushSubscription } from '../models';
 import { ah } from '../utils/async';
 import { emitToUser } from '../services/realtime';
 import { env } from '../config/env';
-import { pushConfigured, sendPush } from '../integrations/push';
+import { pushConfigured, sendPush, getVapidPublicKey } from '../integrations/push';
 import { escapeRx } from './clients';
 
 const r = Router();
@@ -35,7 +35,7 @@ r.delete('/:id', ah(async (req, res) => { await Notification.deleteOne({ _id: re
 export default r;
 
 export const push = Router();
-push.get('/config', (_req, res) => { res.json({ enabled: pushConfigured(), publicKey: env.vapid.publicKey || null }); });
+push.get('/config', (_req, res) => { res.json({ enabled: pushConfigured(), publicKey: getVapidPublicKey() }); });
 push.post('/subscribe', ah(async (req, res) => {
   const b = z.object({ endpoint: z.string().url().max(1000), keys: z.object({ p256dh: z.string().max(300), auth: z.string().max(300) }), deviceType: z.string().max(30).optional(), platform: z.string().max(40).optional(), browser: z.string().max(40).optional() }).parse(req.body);
   await PushSubscription.findOneAndUpdate({ endpoint: b.endpoint }, { ...b, userId: req.user!._id, lastUsedAt: new Date(), failures: 0 }, { upsert: true });

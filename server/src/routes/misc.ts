@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
+import mongoose from 'mongoose';
 import { User, RoleModel, Client, Content, Campaign, ScriptVersion, Task, Media, Message, ChatRoom, Approval, ActivityLog, Shoot, Reminder, ScheduledPost, Presence, Integration, WebhookEvent } from '../models';
 import { ah } from '../utils/async';
 import { badRequest, forbidden, notFound } from '../utils/errors';
@@ -31,7 +32,7 @@ r.get('/search', ah(async (req, res) => {
     can(u, 'clients.read') ? Client.find({ $or: [{ name: rx }, { businessName: rx }, { contactPerson: rx }] }).limit(L).select('name businessName status').lean() : [],
     Content.find({ $and: [vis, { $or: [{ title: rx }, { contentId: rx }] }] }).limit(L).select('contentId title stage').populate('clientId', 'name').lean(),
     can(u, 'clients.read') ? Campaign.find({ name: rx }).limit(L).populate('clientId', 'name').lean() : [],
-    ScriptVersion.find({ contentId: { $in: visIds }, $or: [{ hook: rx }, { dialogue: rx }, { cta: rx }, { 'scenes.dialogue': rx }] }).limit(L).select('label hook contentId scriptId').populate('contentId', 'contentId title').lean(),
+    ScriptVersion.find({ contentId: { $in: visIds }, $or: [{ hook: rx }, { dialogue: rx }, { body: rx }, { cta: rx }, { 'scenes.dialogue': rx }] }).limit(L).select('label hook dialogue body contentId scriptId').populate('contentId', 'contentId title').lean(),
     Task.find({ $and: [taskScope, { $or: [{ title: rx }, { description: rx }] }] }).limit(L).select('title status dueAt').lean(),
     Media.find({ $and: [can(u, 'media.read.all') ? {} : { contentId: { $in: visIds } }, { fileName: rx }, { status: { $nin: ['UPLOADING', 'FAILED'] } }] }).limit(L).select('fileName category contentId size').lean(),
     Message.find({ roomId: { $in: myRooms }, message: rx, deletedAt: null }).sort({ createdAt: -1 }).limit(L).select('message roomId createdAt').populate('senderId', 'name').lean(),
@@ -265,14 +266,13 @@ r.post('/integrations/aisensy/send', requirePerm('integrations.manage'), ah(asyn
   catch (e: any) { throw badRequest(`AiSensy rejected the message: ${String(e.response?.data?.message || e.message).slice(0, 200)}`); }
 }));
 
-r.get('/system-health', requirePerm('users.manage', 'roles.manage'), ah(async (_req, res) => {
-  const mongoose = await import('mongoose');
+r.get('/system-health', requirePerm('users.manage', 'roles.manage', 'integrations.manage', 'dashboard.org'), ah(async (_req, res) => {
   const t0 = Date.now();
   let dbPingMs = -1;
   let dbOk = false;
   try {
-    if (mongoose.connection.db) {
-      await mongoose.connection.db.admin().ping();
+    if (mongoose.connection.readyState === 1 && mongoose.connection.db) {
+      await mongoose.connection.db.command({ ping: 1 });
       dbPingMs = Date.now() - t0;
       dbOk = true;
     }
@@ -281,14 +281,37 @@ r.get('/system-health', requirePerm('users.manage', 'roles.manage'), ah(async (_
   }
 
   const mem = process.memoryUsage();
-  const [userCount, clientCount, contentCount, mediaCount, taskCount, approvalCount] = await Promise.all([
-    User.countDocuments(),
-    Client.countDocuments(),
-    Content.countDocuments(),
-    Media.countDocuments(),
-    Task.countDocuments(),
-    Approval.countDocuments(),
-  ]);
+  let counts = {
+    users: 0,
+    clients: 0,
+    content: 0,
+    media: 0,
+    tasks: 0,
+    approvals: 0,
+  };
+
+  try {
+    if (mongoose.connection.readyState === 1) {
+      const [userCount, clientCount, contentCount, mediaCount, taskCount, approvalCount] = await Promise.all([
+        User.countDocuments().catch(() => 0),
+        Client.countDocuments().catch(() => 0),
+        Content.countDocuments().catch(() => 0),
+        Media.countDocuments().catch(() => 0),
+        Task.countDocuments().catch(() => 0),
+        Approval.countDocuments().catch(() => 0),
+      ]);
+      counts = {
+        users: userCount,
+        clients: clientCount,
+        content: contentCount,
+        media: mediaCount,
+        tasks: taskCount,
+        approvals: approvalCount,
+      };
+    }
+  } catch (e: any) {
+    dbOk = false;
+  }
 
   res.json({
     status: dbOk ? 'HEALTHY' : 'DEGRADED',
@@ -303,20 +326,13 @@ r.get('/system-health', requirePerm('users.manage', 'roles.manage'), ah(async (_
       heapTotalMb: Math.round(mem.heapTotal / 1024 / 1024),
     },
     database: {
-      connected: dbOk,
+      connected: dbOk || mongoose.connection.readyState === 1,
       readyState: mongoose.connection.readyState,
       pingMs: dbPingMs,
-      name: mongoose.connection.name,
+      name: mongoose.connection.name || 'smmpro',
       poolSize: Number(process.env.DB_MAX_POOL_SIZE || 50),
     },
-    counts: {
-      users: userCount,
-      clients: clientCount,
-      content: contentCount,
-      media: mediaCount,
-      tasks: taskCount,
-      approvals: approvalCount,
-    },
+    counts,
   });
 }));
 

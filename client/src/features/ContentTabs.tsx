@@ -15,7 +15,26 @@ const useInv = () => { const qc = useQueryClient(); return () => { ['content-det
 const err = (e: unknown) => toast.error(errMsg(e));
 
 // ---------------------------------------------------------------- Script
-const EMPTY = { hook: '', scenes: [{ title: 'Scene 1', dialogue: '', visual: '' }, { title: 'Scene 2', dialogue: '', visual: '' }, { title: 'Scene 3', dialogue: '', visual: '' }], dialogue: '', visualDirection: '', broll: '', cta: '', captionNotes: '', music: '', duration: '', changes: '' };
+function getScriptText(cur: any): string {
+  if (!cur) return '';
+  if (cur.body) return cur.body;
+  if (cur.dialogue) return cur.dialogue;
+  const parts: string[] = [];
+  if (cur.hook) parts.push(`Hook:\n${cur.hook}`);
+  if (cur.scenes?.length) {
+    cur.scenes.forEach((s: any, i: number) => {
+      const sp: string[] = [];
+      if (s.title) sp.push(`--- ${s.title} ---`);
+      else sp.push(`--- Scene ${i + 1} ---`);
+      if (s.dialogue) sp.push(s.dialogue);
+      if (s.visual) sp.push(`[Visual: ${s.visual}]`);
+      parts.push(sp.join('\n'));
+    });
+  }
+  if (cur.cta) parts.push(`CTA: ${cur.cta}`);
+  return parts.join('\n\n');
+}
+
 export function ScriptTab({ d }: { d: any }) {
   const can = useCan(); const inv = useInv(); const me = useAuth((s) => s.user)!;
   const versions: any[] = d.versions; const latest = versions[0];
@@ -24,15 +43,43 @@ export function ScriptTab({ d }: { d: any }) {
   useEffect(() => { setSel(latest?.version || 0); }, [latest?.version]);
   const cur = versions.find((v) => v.version === sel) || latest;
   const editable = can('scripts.write') && (!latest || (cur?.version === latest.version && latest.status === 'DRAFT'));
-  const [v, setV] = useState<any>(EMPTY); const [dirty, setDirty] = useState(false);
-  useEffect(() => { setV(cur ? { ...EMPTY, ...Object.fromEntries(Object.keys(EMPTY).map((k) => [k, cur[k] ?? (EMPTY as any)[k]])), scenes: cur.scenes?.length ? cur.scenes : EMPTY.scenes } : EMPTY); setDirty(false); }, [cur?._id, cur?.updatedAt]); // eslint-disable-line
-  const set = (k: string, val: any) => { setV((s: any) => ({ ...s, [k]: val })); setDirty(true); };
-  const scene = (i: number, k: string, val: string) => set('scenes', v.scenes.map((s: any, n: number) => (n === i ? { ...s, [k]: val } : s)));
-  const save = useMutation({ mutationFn: (forceNew: boolean) => post(`/scripts/${d.script._id}/version`, { ...v, forceNew }), onSuccess: (r) => { toast.success(`Script ${r.label} saved.`); setDirty(false); inv(); }, onError: err });
-  const submit = useMutation({ mutationFn: async () => { if (dirty) await post(`/scripts/${d.script._id}/version`, v); return post(`/scripts/${d.script._id}/submit`); }, onSuccess: () => { toast.success('Script submitted for review.'); inv(); }, onError: err });
+  const [scriptText, setScriptText] = useState('');
+  const [changes, setChanges] = useState('');
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    setScriptText(getScriptText(cur));
+    setChanges(cur?.changes || '');
+    setDirty(false);
+  }, [cur?._id, cur?.updatedAt]);
+
+  const save = useMutation({
+    mutationFn: (forceNew: boolean) => post(`/scripts/${d.script._id}/version`, { dialogue: scriptText, body: scriptText, changes, forceNew }),
+    onSuccess: (r) => { toast.success(`Script ${r.label} saved.`); setDirty(false); inv(); },
+    onError: err,
+  });
+
+  const submit = useMutation({
+    mutationFn: async () => {
+      if (dirty) await post(`/scripts/${d.script._id}/version`, { dialogue: scriptText, body: scriptText, changes });
+      return post(`/scripts/${d.script._id}/submit`);
+    },
+    onSuccess: () => { toast.success('Script submitted for review.'); inv(); },
+    onError: err,
+  });
+
   const pending = d.approvals.find((a: any) => a.type === 'INTERNAL_SCRIPT' && a.status === 'PENDING');
   const canReview = pending && (can('scripts.review') || can('approvals.review') || pending.reviewerId?._id === me._id);
   const ro = !editable;
+
+  const wordCount = useMemo(() => {
+    const trimmed = scriptText.trim();
+    return trimmed ? trimmed.split(/\s+/).length : 0;
+  }, [scriptText]);
+
+  const charCount = scriptText.length;
+  const estSeconds = Math.round(wordCount / 2.5);
+
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_260px]">
       <div className="space-y-4">
@@ -41,36 +88,48 @@ export function ScriptTab({ d }: { d: any }) {
         <Card title={<span className="flex items-center gap-2">{cur ? `Script ${cur.label}` : 'New script'}{cur && <Badge status={cur.status} />}{ro && cur && <span className="text-meta font-normal text-ink-3">Read only</span>}</span>}
           action={can('scripts.write') && <div className="flex flex-wrap gap-2">
             {editable && <Button size="sm" onClick={() => save.mutate(false)} loading={save.isPending} disabled={!dirty && !!latest}>Save draft</Button>}
-            {editable && <Button size="sm" variant="primary" icon={<Send size={14} />} onClick={() => submit.mutate()} loading={submit.isPending}>Submit for review</Button>}
+            {editable && <Button size="sm" variant="primary" icon={<Send size={14} />} onClick={() => submit.mutate()} loading={submit.isPending} disabled={!scriptText.trim()}>Submit for review</Button>}
             {latest && latest.status !== 'DRAFT' && latest.status !== 'SUBMITTED' && cur?.version === latest.version && <Button size="sm" variant="primary" icon={<Plus size={14} />} onClick={() => save.mutate(true)} loading={save.isPending}>Create V{latest.version + 1}</Button>}
           </div>}>
           <div className="space-y-4">
-            <Field label="Hook"><Textarea rows={2} value={v.hook} disabled={ro} onChange={(e) => set('hook', e.target.value)} placeholder="The first three seconds" /></Field>
-            {v.scenes.map((s: any, i: number) => (
-              <div key={i} className="rounded-2xl border border-line/75 bg-surface-2/40 p-4 backdrop-blur-md transition-all duration-200 hover:border-line-strong hover:bg-surface-2/60">
-                <div className="mb-3 flex items-center justify-between border-b border-line/50 pb-2.5">
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/20 text-[10px] font-bold text-primary-ink">{i + 1}</span>
-                    <input value={s.title || `Scene ${i + 1}`} disabled={ro} onChange={(e) => scene(i, 'title', e.target.value)} className="w-48 border-0 bg-transparent p-0 text-[13px] font-bold text-ink focus:outline-none" aria-label="Scene title" />
-                  </div>
-                  {!ro && v.scenes.length > 1 && <button aria-label="Remove scene" className="rounded-lg p-1 text-ink-3 transition-colors hover:bg-danger-soft hover:text-danger-ink" onClick={() => set('scenes', v.scenes.filter((_: any, n: number) => n !== i))}><Trash2 size={15} /></button>}
+            <div>
+              <Textarea
+                rows={16}
+                value={scriptText}
+                disabled={ro}
+                onChange={(e) => {
+                  setScriptText(e.target.value);
+                  setDirty(true);
+                }}
+                placeholder="Write your complete script here... (dialogue, voiceover, hooks, cues, and notes)"
+                className="min-h-[380px] w-full resize-y font-normal text-[14.5px] leading-relaxed"
+              />
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2 px-1 text-meta text-ink-3">
+                <div className="flex items-center gap-2.5">
+                  <span>{wordCount} {wordCount === 1 ? 'word' : 'words'}</span>
+                  <span>·</span>
+                  <span>{charCount} characters</span>
+                  <span>·</span>
+                  <span>~{estSeconds}s voiceover {estSeconds >= 60 ? `(${Math.floor(estSeconds / 60)}m ${estSeconds % 60}s)` : ''}</span>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Dialogue / voiceover"><Textarea value={s.dialogue || ''} disabled={ro} onChange={(e) => scene(i, 'dialogue', e.target.value)} /></Field>
-                  <Field label="Visual"><Textarea value={s.visual || ''} disabled={ro} onChange={(e) => scene(i, 'visual', e.target.value)} /></Field>
-                </div>
+                {dirty && <span className="font-semibold text-warning-ink">● Unsaved changes</span>}
               </div>
-            ))}
-            {!ro && <Button size="sm" icon={<Plus size={14} />} onClick={() => set('scenes', [...v.scenes, { title: `Scene ${v.scenes.length + 1}`, dialogue: '', visual: '' }])}>Add scene</Button>}
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Visual direction"><Textarea value={v.visualDirection} disabled={ro} onChange={(e) => set('visualDirection', e.target.value)} /></Field>
-              <Field label="B-roll"><Textarea value={v.broll} disabled={ro} onChange={(e) => set('broll', e.target.value)} /></Field>
-              <Field label="CTA"><Input value={v.cta} disabled={ro} onChange={(e) => set('cta', e.target.value)} /></Field>
-              <Field label="Music"><Input value={v.music} disabled={ro} onChange={(e) => set('music', e.target.value)} /></Field>
-              <Field label="Duration"><Input value={v.duration} disabled={ro} onChange={(e) => set('duration', e.target.value)} placeholder="30s" /></Field>
-              <Field label="Caption notes"><Input value={v.captionNotes} disabled={ro} onChange={(e) => set('captionNotes', e.target.value)} /></Field>
-              {editable && latest && latest.version > 1 && <div className="sm:col-span-2"><Field label="What changed in this version"><Input value={v.changes} onChange={(e) => set('changes', e.target.value)} /></Field></div>}
             </div>
+
+            {editable && latest && latest.version > 1 && (
+              <div className="border-t border-line/60 pt-3">
+                <Field label="What changed in this version (optional)" hint="Notes to let reviewers quickly see what you updated">
+                  <Input
+                    value={changes}
+                    onChange={(e) => {
+                      setChanges(e.target.value);
+                      setDirty(true);
+                    }}
+                    placeholder="e.g. Revised intro hook, trimmed dialogue"
+                  />
+                </Field>
+              </div>
+            )}
           </div>
         </Card>
       </div>
@@ -277,7 +336,19 @@ export function EditingTab({ d }: { d: any }) {
 const OPEN_CLIENT = ['DRAFT', 'SENT', 'DELIVERED', 'OPENED', 'WAITING_FOR_CLIENT'];
 export function useClientReviewActions() {
   const inv = useInv();
-  const copy = async (url: string) => { try { await navigator.clipboard.writeText(url); toast.success('Review link copied.'); } catch { window.prompt('Copy this link', url); } };
+  const normalizeUrl = (raw: string) => {
+    if (!raw) return raw;
+    try {
+      const u = new URL(raw, window.location.origin);
+      return `${window.location.origin}${u.pathname}${u.search}`;
+    } catch {
+      return raw;
+    }
+  };
+  const copy = async (url: string) => {
+    const finalUrl = normalizeUrl(url);
+    try { await navigator.clipboard.writeText(finalUrl); toast.success('Review link copied.'); } catch { window.prompt('Copy this link', finalUrl); }
+  };
   const send = useMutation({ mutationFn: (b: any) => post('/approvals/send', b), onSuccess: (r) => { toast.success(r.approval.source === 'AISENSY' ? 'Client review sent on WhatsApp.' : 'Review link created. Share it with the client.'); if (r.approval.source !== 'AISENSY') void copy(r.url); inv(); }, onError: err });
   const resend = useMutation({ mutationFn: (id: string) => post(`/approvals/${id}/resend`), onSuccess: (r) => { toast.success('New review link sent. The old link no longer works.'); if (r.approval.source !== 'AISENSY') void copy(r.url); inv(); }, onError: err });
   const cancel = useMutation({ mutationFn: (id: string) => post(`/approvals/${id}/cancel`), onSuccess: () => { toast.success('Review cancelled.'); inv(); }, onError: err });

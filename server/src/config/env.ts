@@ -17,7 +17,14 @@ export const env = {
   appOrigins: (process.env.APP_URL || 'http://localhost:5173').split(',').map((x) => x.trim().replace(/\/$/, '')),
   cookieSameSite: (process.env.COOKIE_SAMESITE || 'lax') as 'lax' | 'none' | 'strict',
   cookieDomain: process.env.COOKIE_DOMAIN || undefined,
-  publicApprovalUrl: (process.env.PUBLIC_APPROVAL_URL || `${(process.env.APP_URL || 'http://localhost:5173').split(',')[0].trim().replace(/\/$/, '')}/approval`).replace(/\/$/, ''),
+  publicApprovalUrl: (() => {
+    const p = process.env.PUBLIC_APPROVAL_URL?.trim();
+    if (p && !p.includes('//smm-pro.vercel.app')) return p.replace(/\/$/, '');
+    const a = (process.env.APP_URL || '').split(',')[0].trim().replace(/\/$/, '');
+    if (a && !a.includes('//smm-pro.vercel.app')) return `${a}/approval`;
+    if ((p && p.includes('//smm-pro.vercel.app')) || (a && a.includes('//smm-pro.vercel.app'))) return 'https://smm-pro-nayankotadiya.vercel.app/approval';
+    return 'http://localhost:5173/approval';
+  })(),
   mongoUri: process.env.MONGODB_URI || '',
   jwtSecret: req('JWT_SECRET', process.env.NODE_ENV === 'production' ? undefined : 'dev-access-secret'),
   jwtRefreshSecret: req('JWT_REFRESH_SECRET', process.env.NODE_ENV === 'production' ? undefined : 'dev-refresh-secret'),

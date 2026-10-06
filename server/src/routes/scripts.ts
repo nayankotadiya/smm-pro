@@ -9,7 +9,21 @@ import { saveVersion, submitScript } from '../services/scripts';
 
 const r = Router();
 const scene = z.object({ title: z.string().max(120).optional(), dialogue: z.string().max(5000).optional(), visual: z.string().max(5000).optional(), broll: z.string().max(2000).optional() });
-const vBody = z.object({ hook: z.string().max(2000).optional(), scenes: z.array(scene).max(30).optional(), dialogue: z.string().max(10000).optional(), visualDirection: z.string().max(5000).optional(), broll: z.string().max(5000).optional(), cta: z.string().max(1000).optional(), captionNotes: z.string().max(3000).optional(), music: z.string().max(500).optional(), duration: z.string().max(50).optional(), changes: z.string().max(2000).optional(), forceNew: z.boolean().optional() });
+const vBody = z.object({
+  hook: z.string().max(2000).optional(),
+  scenes: z.array(scene).max(30).optional(),
+  dialogue: z.string().max(50000).optional(),
+  body: z.string().max(50000).optional(),
+  script: z.string().max(50000).optional(),
+  visualDirection: z.string().max(5000).optional(),
+  broll: z.string().max(5000).optional(),
+  cta: z.string().max(1000).optional(),
+  captionNotes: z.string().max(3000).optional(),
+  music: z.string().max(500).optional(),
+  duration: z.string().max(50).optional(),
+  changes: z.string().max(2000).optional(),
+  forceNew: z.boolean().optional(),
+});
 
 async function guard(req: any, scriptId: string) {
   const s = await Script.findById(scriptId);

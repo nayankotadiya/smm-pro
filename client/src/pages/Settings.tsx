@@ -7,6 +7,7 @@ import { useAuth, useCan } from '@/store/auth';
 import { toast } from '@/store/ui';
 import { Async, Badge, Button, Card, Field, Input, Modal, PageHeader, Select, Table, Tabs } from '@/components/ui';
 import { canInstall, disablePush, enablePush, isIOS, isStandalone, onInstallChange, promptInstall, pushState, PushState } from '@/pwa';
+import { showDeviceNotification } from '@/lib/notifications';
 import { ago, fmtSize, label, roleLabel } from '@/lib/format';
 import { ThemePicker } from '@/components/Header';
 import { useTheme } from '@/store/theme';
@@ -244,7 +245,20 @@ function NotificationSettings() {
   const devices = useQuery({ queryKey: ['push-devices'], queryFn: () => get<any[]>('/push/devices') });
   const on = async () => { setBusy(true); try { const s = await enablePush(); setPs(s); if (s === 'on') { toast.success('Push notifications enabled on this device.'); save.mutate({ push: true }); qc.invalidateQueries({ queryKey: ['push-devices'] }); } else if (s === 'denied') toast.error('Notifications are blocked for this site in your browser settings.'); } catch (e) { toast.error(errMsg(e, 'Could not enable push on this device.')); } setBusy(false); };
   const off = async () => { setBusy(true); await disablePush(); setPs(await pushState()); qc.invalidateQueries({ queryKey: ['push-devices'] }); setBusy(false); toast.success('Push disabled on this device.'); };
-  const test = async () => { try { const r = await post('/push/test'); toast.info(r.devices ? `Test sent to ${r.devices} device${r.devices > 1 ? 's' : ''}.` : 'No devices are subscribed.'); } catch (e) { toast.error(errMsg(e)); } };
+  const test = async () => {
+    try {
+      showDeviceNotification({
+        title: '🔔 SMM PRO',
+        message: 'Push & device notifications are working on this device.',
+        sound: true,
+        vibrate: true,
+      });
+      const r = await post('/push/test');
+      toast.info(r.devices ? `Test sent to ${r.devices} device${r.devices > 1 ? 's' : ''}. Check your notification panel.` : 'Notification triggered on this device.');
+    } catch (e) {
+      toast.error(errMsg(e));
+    }
+  };
   return (
     <div className="grid max-w-4xl gap-5 lg:grid-cols-2">
       <div className="space-y-5">
@@ -354,8 +368,9 @@ function Integrations() {
 
 function SystemHealthCard() {
   const can = useCan();
-  const q = useQuery({ queryKey: ['system-health'], queryFn: () => get<any>('/system-health'), refetchInterval: 30000, enabled: can('users.manage') });
-  if (!can('users.manage')) return null;
+  const allowed = can('users.manage') || can('integrations.manage') || can('roles.manage');
+  const q = useQuery({ queryKey: ['system-health'], queryFn: () => get<any>('/system-health'), refetchInterval: 30000, enabled: allowed });
+  if (!allowed) return null;
 
   return (
     <Card title="System & Database Health" className="lg:col-span-2">
@@ -365,24 +380,24 @@ function SystemHealthCard() {
             <div className="rounded border border-line bg-surface-2 p-3">
               <div className="text-meta text-ink-2">Status</div>
               <div className="mt-1 flex items-center gap-2 font-bold text-ink">
-                <Badge t={h.status === 'HEALTHY' ? 'green' : 'amber'}>{h.status}</Badge>
+                <Badge t={h?.status === 'HEALTHY' ? 'green' : 'amber'}>{h?.status || 'UNKNOWN'}</Badge>
               </div>
-              <div className="mt-1 text-meta text-ink-3">Uptime: {Math.floor(h.uptimeSeconds / 3600)}h {Math.floor((h.uptimeSeconds % 3600) / 60)}m</div>
+              <div className="mt-1 text-meta text-ink-3">Uptime: {Math.floor((h?.uptimeSeconds || 0) / 3600)}h {Math.floor(((h?.uptimeSeconds || 0) % 3600) / 60)}m</div>
             </div>
             <div className="rounded border border-line bg-surface-2 p-3">
               <div className="text-meta text-ink-2">Database</div>
-              <div className="mt-1 font-bold text-ink">{h.database.name || 'smmpro'}</div>
-              <div className="mt-1 text-meta text-ink-3">Ping: {h.database.pingMs >= 0 ? `${h.database.pingMs}ms` : 'Active'} · Pool: {h.database.poolSize}</div>
+              <div className="mt-1 font-bold text-ink">{h?.database?.name || 'smmpro'}</div>
+              <div className="mt-1 text-meta text-ink-3">Ping: {h?.database?.pingMs != null && h?.database?.pingMs >= 0 ? `${h.database.pingMs}ms` : 'Active'} · Pool: {h?.database?.poolSize ?? 50}</div>
             </div>
             <div className="rounded border border-line bg-surface-2 p-3">
               <div className="text-meta text-ink-2">Memory (RSS / Heap)</div>
-              <div className="mt-1 font-bold text-ink">{h.memory.rssMb} MB</div>
-              <div className="mt-1 text-meta text-ink-3">Heap: {h.memory.heapUsedMb} / {h.memory.heapTotalMb} MB</div>
+              <div className="mt-1 font-bold text-ink">{h?.memory?.rssMb ?? 0} MB</div>
+              <div className="mt-1 text-meta text-ink-3">Heap: {h?.memory?.heapUsedMb ?? 0} / {h?.memory?.heapTotalMb ?? 0} MB</div>
             </div>
             <div className="rounded border border-line bg-surface-2 p-3">
               <div className="text-meta text-ink-2">Total Records</div>
-              <div className="mt-1 font-bold text-ink">{h.counts.content} Content · {h.counts.users} Users</div>
-              <div className="mt-1 text-meta text-ink-3">{h.counts.tasks} Tasks · {h.counts.media} Files</div>
+              <div className="mt-1 font-bold text-ink">{h?.counts?.content ?? 0} Content · {h?.counts?.users ?? 0} Users</div>
+              <div className="mt-1 text-meta text-ink-3">{h?.counts?.tasks ?? 0} Tasks · {h?.counts?.media ?? 0} Files</div>
             </div>
           </div>
         )}

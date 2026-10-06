@@ -261,4 +261,18 @@ describe('Dashboards, search, calendar, reports', () => {
     expect((await as('nayan').get('/api/team')).body.length).toBe(7);
     expect(await User.countDocuments({ role: 'CLIENT' as any })).toBe(0);
   });
+
+  it('supports single script text box editing, submission, and public review retrieval', async () => {
+    const singleScriptText = 'Hook: Stop scrolling right now.\n\nHere is why Zemora Jewels stands out this festive season.\nCrafted with 100% pure hallmarked gold.\n\nShop online today — link in bio!';
+    const v = await as('pooja').post(`/api/scripts/${content.scriptId}/version`, { dialogue: singleScriptText, body: singleScriptText, forceNew: true });
+    expect(v.status).toBe(201);
+    expect(v.body.dialogue).toBe(singleScriptText);
+    expect(v.body.body).toBe(singleScriptText);
+
+    const sub = await as('pooja').post(`/api/scripts/${content.scriptId}/submit`);
+    expect(sub.status).toBe(200);
+
+    const ap = await Approval.findOne({ contentId: content._id, type: 'INTERNAL_SCRIPT', status: 'PENDING' });
+    expect(ap).toBeTruthy();
+  });
 });

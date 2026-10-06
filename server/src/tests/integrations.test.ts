@@ -27,9 +27,13 @@ describe('AiSensy integration', () => {
 
 describe('Push and Drive are honest about configuration', () => {
   it('push reports DISABLED rather than pretending to deliver', async () => {
+    const { env } = await import('../config/env');
+    const oldPub = env.vapid.publicKey; const oldPriv = env.vapid.privateKey;
+    env.vapid.publicKey = ''; env.vapid.privateKey = '';
     const { sendPush, pushConfigured } = await import('../integrations/push');
     expect(pushConfigured()).toBe(false);
     expect(await sendPush({ endpoint: 'https://example.com', keys: {} }, { title: 't', body: 'b', url: '/' })).toBe('DISABLED');
+    env.vapid.publicKey = oldPub; env.vapid.privateKey = oldPriv;
   });
   it('drive is off without credentials and storage falls back to local', async () => {
     const { driveConfigured } = await import('../integrations/drive');
@@ -44,5 +48,23 @@ describe('Crypto helpers', () => {
     const t = randomToken(32); expect(t.length).toBeGreaterThanOrEqual(43);
     const e = encrypt(t, 's1'); expect(e).not.toContain(t); expect(decrypt(e, 's1')).toBe(t);
     expect(() => decrypt(e, 's2')).toThrow(); expect(sha256(t)).toHaveLength(64);
+  });
+});
+
+describe('Media MIME inference and safe storage', () => {
+  it('infers video and image mime types from filenames when browser passes octet-stream or empty', async () => {
+    const { inferMimeType, isVideoMime, isImageMime } = await import('../services/media');
+    expect(inferMimeType('scene.mp4', 'application/octet-stream')).toBe('video/mp4');
+    expect(inferMimeType('take1.mov', '')).toBe('video/quicktime');
+    expect(inferMimeType('master.mkv', 'binary/octet-stream')).toBe('video/x-matroska');
+    expect(inferMimeType('thumb.png', 'application/octet-stream')).toBe('image/png');
+    expect(inferMimeType('photo.webp', '')).toBe('image/webp');
+    expect(inferMimeType('photo.heic', '')).toBe('image/heic');
+
+    expect(isVideoMime('video/mp4')).toBe(true);
+    expect(isVideoMime('video/quicktime')).toBe(true);
+    expect(isVideoMime('application/x-matroska')).toBe(true);
+    expect(isImageMime('image/png')).toBe(true);
+    expect(isImageMime('image/jpeg')).toBe(true);
   });
 });

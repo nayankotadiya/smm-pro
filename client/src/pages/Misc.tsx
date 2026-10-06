@@ -13,6 +13,7 @@ import { NotificationRow, useNotificationActions } from '@/components/Header';
 import { ago, fmtDateTime, fmtSize, label, roleLabel } from '@/lib/format';
 import { useTeam } from '@/hooks/useData';
 import { PresenceLabel } from './Dashboard';
+import { TestNotificationButton } from '@/components/NotificationBanner';
 
 // ------------------------------------------------------------ Reminders
 export function Reminders() {
@@ -163,7 +164,16 @@ export function Notifications() {
   const q = useQuery({ queryKey: ['notifications', 'center', params], queryFn: () => get('/notifications', params) });
   return (
     <>
-      <PageHeader title="Notifications" sub={q.data ? `${q.data.unread} unread` : undefined} actions={<Button onClick={() => a.readAll.mutate()} disabled={!q.data?.unread}>Mark all as read</Button>} />
+      <PageHeader
+        title="Notifications"
+        sub={q.data ? `${q.data.unread} unread` : undefined}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <TestNotificationButton />
+            <Button onClick={() => a.readAll.mutate()} disabled={!q.data?.unread}>Mark all as read</Button>
+          </div>
+        }
+      />
       <Tabs value={tab as any} onChange={setTab} tabs={NTABS.map(([key, l]) => ({ key, label: l }))} />
       <div className="mb-3 flex flex-wrap gap-2"><Input className="sm:max-w-xs" placeholder="Search notifications" value={term} onChange={(e) => setTerm(e.target.value)} /><Select aria-label="Date" className="!w-auto" value={range} onChange={(e) => setRange(e.target.value)}><option value="">Any time</option><option value="today">Today</option><option value="yesterday">Yesterday</option><option value="week">This week</option></Select></div>
       <Card pad={false}><Async q={q}>{(d: any) => !d.items.length ? <Empty title="No notifications" /> : <ul className="divide-y divide-line">{d.items.map((n: any) => <NotificationRow key={n._id} n={n} onOpen={() => a.open(n)} onRead={() => a.read.mutate(n._id)} onDelete={() => a.remove.mutate(n._id)} />)}</ul>}</Async></Card>
