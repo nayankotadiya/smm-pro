@@ -92,3 +92,24 @@ export async function createContent(data: any, u: AuthUser) {
 }
 
 export async function userName(id: any) { return id ? (await User.findById(id).select('name').lean())?.name || 'Someone' : 'System'; }
+
+export function sanitizeSuperAdminUsers(doc: any, isSuperAdmin: boolean): any {
+  if (!doc || isSuperAdmin) return doc;
+  const mask = (u: any) => {
+    if (!u) return u;
+    if (typeof u === 'object' && u.role === 'SUPER_ADMIN') {
+      return {
+        ...u,
+        name: 'System Admin',
+        email: undefined,
+        phone: undefined,
+      };
+    }
+    return u;
+  };
+  const fields = ['currentOwner', 'nextOwner', 'assignedWriter', 'assignedShooter', 'assignedEditor', 'assignedSMM', 'assignedReviewer', 'createdBy', 'reviewerId', 'shooterId', 'editorId', 'assignedTo'];
+  for (const f of fields) {
+    if (doc[f]) doc[f] = mask(doc[f]);
+  }
+  return doc;
+}

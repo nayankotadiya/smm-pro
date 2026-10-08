@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
-import { Bell, Search, CheckCheck, X, ClipboardList, ShieldCheck, MessageSquare, AlarmClock, Clock, FileVideo, GitBranch, Settings2, LogOut, MinusCircle, User, Sun, Moon, Monitor, Plus, Calendar, Camera, Scissors, FileText, Sparkles, Building2, Users, CornerDownLeft, Zap } from 'lucide-react';
+import { Bell, Search, CheckCheck, X, ClipboardList, ShieldCheck, MessageSquare, AlarmClock, Clock, FileVideo, GitBranch, Settings2, LogOut, MinusCircle, User, Sun, Moon, Monitor, Plus, Calendar, Camera, Scissors, FileText, Sparkles, Building2, Users, CornerDownLeft, Zap, Send } from 'lucide-react';
 import { get, post, patch, del } from '@/lib/api';
 import { ago, roleLabel } from '@/lib/format';
 import { Avatar, Empty, IconButton, Spinner, PresenceDot } from './ui';
@@ -48,9 +48,13 @@ export function NotificationRow({ n, onOpen, onRead, onDelete }: { n: any; onOpe
 }
 
 import { TestNotificationButton } from './NotificationBanner';
+import { CustomNotificationModal } from './CustomNotificationModal';
 
 export function NotificationBell() {
   const [open, setOpen] = useState(false); const ref = useRef<HTMLDivElement>(null);
+  const [customModalOpen, setCustomModalOpen] = useState(false);
+  const me = useAuth((s) => s.user);
+  const canSendCustom = me?.role === 'SUPER_ADMIN' || me?.role === 'ADMIN' || me?.role === 'MANAGER';
   useOutside(ref, () => setOpen(false), open);
   const q = useQuery({ queryKey: ['notifications', 'bell'], queryFn: () => get('/notifications', { limit: 8 }) });
   const a = useNotificationActions();
@@ -68,11 +72,23 @@ export function NotificationBell() {
           {q.isLoading ? <div className="flex justify-center p-6"><Spinner /></div> : !q.data?.items.length ? <Empty title="You're all caught up" /> :
             <ul className="stagger max-h-[60dvh] divide-y divide-line/60 overflow-y-auto">{q.data.items.map((n: any) => <NotificationRow key={n._id} n={n} onOpen={() => { a.open(n); setOpen(false); }} onRead={() => a.read.mutate(n._id)} />)}</ul>}
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line/60 bg-surface-2/60 px-4 py-2.5">
-            <TestNotificationButton />
+            <div className="flex items-center gap-2">
+              <TestNotificationButton />
+              {canSendCustom && (
+                <button
+                  type="button"
+                  onClick={() => { setOpen(false); setCustomModalOpen(true); }}
+                  className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11.5px] font-semibold text-primary hover:underline transition-colors"
+                >
+                  <Send size={11} /> Send Alert
+                </button>
+              )}
+            </div>
             <Link to="/notifications" onClick={() => setOpen(false)} className="text-[12.5px] font-bold text-primary-ink transition-colors hover:underline">Open center →</Link>
           </div>
         </div>
       )}
+      {canSendCustom && <CustomNotificationModal open={customModalOpen} onClose={() => setCustomModalOpen(false)} />}
     </div>
   );
 }

@@ -33,7 +33,10 @@ r.post('/rooms', ah(async (req, res) => {
   const uid = req.user!._id;
   if (b.type === 'DIRECT') {
     if (!b.userId || b.userId === uid) throw badRequest('Choose a team member');
-    if (!(await User.exists({ _id: b.userId, active: true }))) throw notFound('User');
+    const targetUser = await User.findById(b.userId).select('role active').lean();
+    if (!targetUser || !targetUser.active || (targetUser.role === 'SUPER_ADMIN' && req.user!.role !== 'SUPER_ADMIN')) {
+      throw notFound('User');
+    }
     const key = [uid, b.userId].sort().join(':');
     const rm = await dupRetry(() => ChatRoom.findOneAndUpdate({ directKey: key }, { $setOnInsert: { type: 'DIRECT', directKey: key, participants: [uid, b.userId], createdBy: uid } }, { upsert: true, new: true }));
     return res.json(rm);

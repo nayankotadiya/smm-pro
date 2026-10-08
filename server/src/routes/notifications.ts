@@ -1,11 +1,15 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { Notification, PushSubscription } from '../models';
+import { Notification, PushSubscription, User } from '../models';
 import { ah } from '../utils/async';
 import { emitToUser } from '../services/realtime';
 import { env } from '../config/env';
 import { pushConfigured, sendPush, getVapidPublicKey } from '../integrations/push';
 import { escapeRx } from './clients';
+import { forbidden, badRequest } from '../utils/errors';
+import { ROLES, NOTIFICATION_CATEGORIES } from '../config/constants';
+import { notify } from '../services/notify';
+import { logActivity } from '../services/activity';
 
 const r = Router();
 r.get('/', ah(async (req, res) => {
@@ -32,6 +36,60 @@ r.post('/read-all', ah(async (req, res) => {
   res.json({ ok: true });
 }));
 r.delete('/:id', ah(async (req, res) => { await Notification.deleteOne({ _id: req.params.id, userId: req.user!._id, critical: false }); res.json({ ok: true }); }));
+
+// ---------------- Custom notification send box (SUPER_ADMIN, ADMIN, MANAGER only) ----------------
+r.post('/custom', ah(async (req, res) => {
+  if (!['SUPER_ADMIN', 'ADMIN', 'MANAGER'].includes(req.user!.role)) {
+    throw forbidden('Only Admin, Manager, and Super Admin can send custom notifications');
+  }
+
+  const b = z.object({
+    targetType: z.enum(['ALL', 'ROLE', 'USERS']),
+    role: z.enum(ROLES).optional(),
+    userIds: z.array(z.string()).optional(),
+    title: z.string().min(1).max(120),
+    message: z.string().min(1).max(1000),
+    category: z.enum(NOTIFICATION_CATEGORIES).default('SYSTEM'),
+    critical: z.boolean().default(false),
+    link: z.string().max(300).optional().nullable(),
+  }).parse(req.body);
+
+  let recipientIds: string[] = [];
+  if (b.targetType === 'ALL') {
+    const users = await User.find({ active: true }).select('_id').lean();
+    recipientIds = users.map((u) => String(u._id));
+  } else if (b.targetType === 'ROLE') {
+    if (!b.role) throw badRequest('Target role is required');
+    const users = await User.find({ role: b.role, active: true }).select('_id').lean();
+    recipientIds = users.map((u) => String(u._id));
+  } else if (b.targetType === 'USERS') {
+    if (!b.userIds?.length) throw badRequest('Select at least one user');
+    recipientIds = b.userIds;
+  }
+
+  recipientIds = [...new Set(recipientIds.filter(Boolean))];
+
+  const exclude = b.targetType === 'ALL' ? req.user!._id : undefined;
+  const created = await notify(recipientIds, {
+    type: 'custom.alert',
+    category: b.category,
+    title: b.title,
+    message: b.message,
+    link: b.link || undefined,
+    critical: b.critical,
+  }, { excludeUserId: exclude });
+
+  await logActivity({
+    actorId: req.user!._id,
+    action: 'notification.custom_sent',
+    message: `${req.user!.name} sent custom notification "${b.title}" to ${created.length} recipient(s)`,
+    entityType: 'notification',
+    ip: req.ip,
+  });
+
+  res.json({ ok: true, recipientCount: recipientIds.length, deliveredCount: created.length });
+}));
+
 export default r;
 
 export const push = Router();

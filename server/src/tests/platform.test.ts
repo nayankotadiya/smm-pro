@@ -275,4 +275,61 @@ describe('Dashboards, search, calendar, reports', () => {
     const ap = await Approval.findOne({ contentId: content._id, type: 'INTERNAL_SCRIPT', status: 'PENDING' });
     expect(ap).toBeTruthy();
   });
+
+  it('custom notification send box is restricted to manager, admin, and super admin', async () => {
+    // Editor cannot send custom notification (403)
+    const editorTry = await as('rahul').post('/api/notifications/custom', {
+      targetType: 'ALL',
+      title: 'Should fail',
+      message: 'Unauthorized attempt',
+    });
+    expect(editorTry.status).toBe(403);
+
+    // Manager (Ishita) CAN send to role EDITOR
+    const beforeRahul = await Notification.countDocuments({ userId: users.rahul.id });
+    const mgrSend = await as('ishita').post('/api/notifications/custom', {
+      targetType: 'ROLE',
+      role: 'EDITOR',
+      title: '🚨 Urgent Reel Edit',
+      message: 'Client requested rush delivery before 2 PM today.',
+      category: 'WORKFLOW',
+      critical: true,
+    });
+    expect(mgrSend.status).toBe(200);
+    expect(mgrSend.body.ok).toBe(true);
+
+    const afterRahul = await Notification.countDocuments({ userId: users.rahul.id });
+    expect(afterRahul).toBeGreaterThan(beforeRahul);
+    const note = await Notification.findOne({ userId: users.rahul.id, title: '🚨 Urgent Reel Edit' });
+    expect(note).toBeTruthy();
+    expect(note?.critical).toBe(true);
+  });
+
+  it('super admin details are hidden from non-super-admins across team, search, presence and chat', async () => {
+    // Super admin sees all 7 team members
+    const superList = await as('nayan').get('/api/team');
+    expect(superList.body.length).toBe(7);
+    expect(superList.body.some((u: any) => u.role === 'SUPER_ADMIN')).toBe(true);
+
+    // Non-super-admin (Editor / Rahul) only sees 6 team members; Super Admin is completely hidden
+    const editorList = await as('rahul').get('/api/team');
+    expect(editorList.body.length).toBe(6);
+    expect(editorList.body.some((u: any) => u.role === 'SUPER_ADMIN')).toBe(false);
+    expect(editorList.body.some((u: any) => u.email === 'nayan@t.local')).toBe(false);
+
+    // Direct lookup of super admin by non-super-admin returns 404
+    const directLookup = await as('rahul').get(`/api/team/${users.nayan.id}`);
+    expect(directLookup.status).toBe(404);
+
+    // Team presence for non-super-admin hides super admin
+    const presenceList = await as('rahul').get('/api/dashboard/team-presence');
+    expect(presenceList.body.some((u: any) => u.role === 'SUPER_ADMIN')).toBe(false);
+
+    // Direct chat creation with super admin by non-super-admin is blocked (404)
+    const directChatTry = await as('rahul').post('/api/chat/rooms', {
+      type: 'DIRECT',
+      userId: users.nayan.id,
+    });
+    expect(directChatTry.status).toBe(404);
+  });
 });

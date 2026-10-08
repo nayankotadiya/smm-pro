@@ -35,8 +35,12 @@ r.get('/activity', ah(async (req, res) => {
   if (!can(req.user, 'dashboard.org')) { const vis = await Content.find(visibilityFilter(req.user!)).select('_id').lean(); filter = { contentId: { $in: vis.map((v) => v._id) } }; }
   res.json(await d.activity(Number(req.query.limit) || 20, filter));
 }));
-r.get('/team-presence', ah(async (_req, res) => {
-  const users = await User.find({ active: true }).select('name role').lean();
+r.get('/team-presence', ah(async (req, res) => {
+  const isSuperAdmin = req.user?.role === 'SUPER_ADMIN';
+  const users = await User.find({
+    active: true,
+    ...(isSuperAdmin ? {} : { role: { $ne: 'SUPER_ADMIN' } }),
+  }).select('name role').lean();
   const pres = await Presence.find({}).lean();
   res.json(users.map((u) => { const p = pres.find((x) => String(x.userId) === String(u._id)); return { userId: u._id, name: u.name, role: u.role, status: p?.status || 'OFFLINE', lastActive: p?.lastActive, lastSeen: p?.lastSeen, currentActivity: p?.status === 'OFFLINE' ? undefined : p?.currentActivity }; }));
 }));

@@ -8,7 +8,7 @@ import { createTask } from '../services/tasks';
 import { logActivity } from '../services/activity';
 import { notify } from '../services/notify';
 import { emitOrg, emitToUser } from '../services/realtime';
-import { moveToStage } from '../services/content';
+import { moveToStage, sanitizeSuperAdminUsers } from '../services/content';
 
 const r = Router();
 const body = z.object({ title: z.string().min(1).max(200), description: z.string().max(4000).optional().nullable(), clientId: z.string().optional().nullable(), contentId: z.string().optional().nullable(), assignedTo: z.string().optional().nullable(), priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(), dueAt: z.coerce.date().optional().nullable() });
@@ -25,7 +25,9 @@ r.get('/', ah(async (req, res) => {
   if (p.priority) q.priority = p.priority;
   if (p.overdue === '1') { q.dueAt = { $lt: new Date() }; q.status = { $ne: 'COMPLETED' }; }
   if (p.source) q.source = p.source;
-  res.json(await Task.find(q).sort({ status: 1, dueAt: 1, createdAt: -1 }).limit(300).populate('clientId', 'name').populate('contentId', 'contentId title progress stage').populate('assignedTo createdBy', 'name role').lean());
+  const isSuper = req.user?.role === 'SUPER_ADMIN';
+  const tasks = await Task.find(q).sort({ status: 1, dueAt: 1, createdAt: -1 }).limit(300).populate('clientId', 'name').populate('contentId', 'contentId title progress stage').populate('assignedTo createdBy', 'name role').lean();
+  res.json(isSuper ? tasks : tasks.map((t) => sanitizeSuperAdminUsers(t, false)));
 }));
 r.post('/', ah(async (req, res) => {
   const b = body.parse(req.body);
@@ -36,7 +38,8 @@ r.get('/:id', ah(async (req, res) => {
   const t = await Task.findById(req.params.id).populate('clientId', 'name').populate('contentId', 'contentId title progress stage').populate('assignedTo createdBy', 'name role').populate({ path: 'sourceMessageId', select: 'message roomId senderId', populate: { path: 'senderId', select: 'name' } }).lean();
   if (!t) throw notFound('Task');
   if (!can(req.user, 'tasks.read.all') && String((t.assignedTo as any)?._id) !== req.user!._id && String((t.createdBy as any)?._id) !== req.user!._id) throw forbidden();
-  res.json(t);
+  const isSuper = req.user?.role === 'SUPER_ADMIN';
+  res.json(isSuper ? t : sanitizeSuperAdminUsers(t, false));
 }));
 r.patch('/:id', ah(async (req, res) => {
   const b = body.partial().extend({ status: z.enum(['TODO', 'IN_PROGRESS', 'REVIEW', 'COMPLETED', 'BLOCKED']).optional(), blockedReason: z.string().max(500).optional() }).parse(req.body);

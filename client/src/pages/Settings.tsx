@@ -442,7 +442,7 @@ function Roles() {
   return (
     <Async q={q}>{() => (
       <div className="grid gap-5 lg:grid-cols-[220px_1fr]">
-        <Card pad={false}><ul>{ROLES.map((r) => <li key={r}><button onClick={() => setRole(r)} className={`block w-full px-4 py-2.5 text-left transition-colors duration-150 ${r === role ? 'bg-primary-soft font-medium text-primary-ink' : 'hover:bg-surface-2'}`}>{roleLabel(r)}</button></li>)}</ul></Card>
+        <Card pad={false}><ul>{ROLES.filter((r) => r !== 'SUPER_ADMIN' || me.role === 'SUPER_ADMIN').map((r) => <li key={r}><button onClick={() => setRole(r)} className={`block w-full px-4 py-2.5 text-left transition-colors duration-150 ${r === role ? 'bg-primary-soft font-medium text-primary-ink' : 'hover:bg-surface-2'}`}>{roleLabel(r)}</button></li>)}</ul></Card>
         <Card title={`${roleLabel(role)} can…`} action={!locked && <Button size="sm" variant="primary" disabled={!dirty} loading={m.isPending} onClick={() => m.mutate()}>Save</Button>}>
           {locked && <p className="mb-3 rounded bg-surface-2 px-3 py-2 text-[13px] text-ink-2">{role === 'SUPER_ADMIN' ? 'Super admins always have full access.' : 'Only a super admin can change admin permissions.'}</p>}
           <div className="grid gap-5 sm:grid-cols-2">{PERM_GROUPS.map(([g, list]) => <div key={g}><div className="mb-1 text-meta font-semibold uppercase tracking-wide text-ink-2">{g}</div>{list.map((p) => <label key={p} className="flex min-h-[32px] items-center gap-2"><input type="checkbox" disabled={locked} checked={perms.includes(p)} onChange={(e) => setPerms((s) => (e.target.checked ? [...s, p] : s.filter((x) => x !== p)))} />{PERM_LABEL[p]}</label>)}</div>)}</div>

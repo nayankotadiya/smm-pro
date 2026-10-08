@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
-import { Plus, CheckCircle2, Circle, Trash2, ArrowRight, MessageSquare, Repeat, Sparkles } from 'lucide-react';
+import { Plus, CheckCircle2, Circle, Trash2, ArrowRight, MessageSquare, Repeat, Sparkles, Send } from 'lucide-react';
 import { get, post, patch, del, errMsg } from '@/lib/api';
 import { useAuth, useCan } from '@/store/auth';
 import { useUI, toast } from '@/store/ui';
@@ -15,6 +15,7 @@ import { useTeam } from '@/hooks/useData';
 import { PresenceLabel } from './Dashboard';
 import { TestNotificationButton } from '@/components/NotificationBanner';
 import { ClientReportModal } from '@/components/ClientReportModal';
+import { CustomNotificationModal } from '@/components/CustomNotificationModal';
 
 // ------------------------------------------------------------ Reminders
 export function Reminders() {
@@ -179,7 +180,13 @@ function DayBars({ rows }: { rows: { _id: string; n: number }[] }) {
 // ------------------------------------------------------------ Notifications
 const NTABS = [['all', 'All'], ['unread', 'Unread'], ['TASK', 'Tasks'], ['APPROVAL', 'Approvals'], ['CHAT', 'Chat'], ['REMINDER', 'Reminders'], ['SYSTEM', 'System'], ['FILES', 'Files']] as const;
 export function Notifications() {
-  const [tab, setTab] = useState<string>('all'); const [range, setRange] = useState(''); const [term, setTerm] = useState(''); const a = useNotificationActions();
+  const { user } = useAuth();
+  const [tab, setTab] = useState<string>('all');
+  const [range, setRange] = useState('');
+  const [term, setTerm] = useState('');
+  const [customOpen, setCustomOpen] = useState(false);
+  const a = useNotificationActions();
+  const canSendCustom = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN' || user?.role === 'MANAGER';
   const params: any = { limit: 100, ...(tab === 'unread' ? { unread: 1 } : tab === 'SYSTEM' ? { category: 'SYSTEM,WORKFLOW,DEADLINE' } : tab !== 'all' ? { category: tab } : {}), ...(range ? { range } : {}), ...(term ? { q: term } : {}) };
   const q = useQuery({ queryKey: ['notifications', 'center', params], queryFn: () => get('/notifications', params) });
   return (
@@ -189,6 +196,15 @@ export function Notifications() {
         sub={q.data ? `${q.data.unread} unread` : undefined}
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            {canSendCustom && (
+              <Button
+                variant="primary"
+                icon={<Send size={14} />}
+                onClick={() => setCustomOpen(true)}
+              >
+                Send Notification
+              </Button>
+            )}
             <TestNotificationButton />
             <Button onClick={() => a.readAll.mutate()} disabled={!q.data?.unread}>Mark all as read</Button>
           </div>
@@ -197,6 +213,7 @@ export function Notifications() {
       <Tabs value={tab as any} onChange={setTab} tabs={NTABS.map(([key, l]) => ({ key, label: l }))} />
       <div className="mb-3 flex flex-wrap gap-2"><Input className="sm:max-w-xs" placeholder="Search notifications" value={term} onChange={(e) => setTerm(e.target.value)} /><Select aria-label="Date" className="!w-auto" value={range} onChange={(e) => setRange(e.target.value)}><option value="">Any time</option><option value="today">Today</option><option value="yesterday">Yesterday</option><option value="week">This week</option></Select></div>
       <Card pad={false}><Async q={q}>{(d: any) => !d.items.length ? <Empty title="No notifications" /> : <ul className="divide-y divide-line">{d.items.map((n: any) => <NotificationRow key={n._id} n={n} onOpen={() => a.open(n)} onRead={() => a.read.mutate(n._id)} onDelete={() => a.remove.mutate(n._id)} />)}</ul>}</Async></Card>
+      {canSendCustom && <CustomNotificationModal open={customOpen} onClose={() => setCustomOpen(false)} />}
     </>
   );
 }

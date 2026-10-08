@@ -4,7 +4,7 @@ import { Content, Script, ScriptVersion, Shoot, Media, Approval, Task, Feedback,
 import { ah } from '../utils/async';
 import { badRequest, forbidden, notFound } from '../utils/errors';
 import { requirePerm, can } from '../middleware/auth';
-import { createContent, getVisibleContent, visibilityFilter, applyStage, setLastAction, broadcastContent, moveToStage } from '../services/content';
+import { createContent, getVisibleContent, visibilityFilter, applyStage, setLastAction, broadcastContent, moveToStage, sanitizeSuperAdminUsers } from '../services/content';
 import { logActivity } from '../services/activity';
 import { ensureContentRoom, postSystemEvent } from '../services/chat';
 import { notify, managerIds } from '../services/notify';
@@ -51,13 +51,21 @@ r.get('/', ah(async (req, res) => {
       .lean(),
     Content.countDocuments(where),
   ]);
-  res.json({ items, total, page, limit });
+  const isSuper = req.user?.role === 'SUPER_ADMIN';
+  res.json({
+    items: isSuper ? items : items.map((it: any) => sanitizeSuperAdminUsers(it, false)),
+    total,
+    page,
+    limit,
+  });
 }));
 
 r.post('/', requirePerm('content.write'), ah(async (req, res) => { res.status(201).json(await createContent(body.parse(req.body), req.user!)); }));
 
 r.get('/blocked', ah(async (req, res) => {
-  res.json(await Content.find({ $and: [visibilityFilter(req.user!), { status: 'BLOCKED' }] }).sort({ 'blocked.since': 1 }).populate('clientId', 'name').populate('currentOwner', 'name role').lean());
+  const isSuper = req.user?.role === 'SUPER_ADMIN';
+  const blocked = await Content.find({ $and: [visibilityFilter(req.user!), { status: 'BLOCKED' }] }).sort({ 'blocked.since': 1 }).populate('clientId', 'name').populate('currentOwner', 'name role').lean();
+  res.json(isSuper ? blocked : blocked.map((it: any) => sanitizeSuperAdminUsers(it, false)));
 }));
 r.get('/changes-requested', ah(async (req, res) => {
   const fb = await Feedback.find({ resolved: false }).sort({ createdAt: -1 }).limit(200).populate({ path: 'contentId', select: 'contentId title clientId assignedEditor assignedWriter stage status', populate: [{ path: 'clientId', select: 'name' }, { path: 'assignedEditor assignedWriter', select: 'name' }] }).populate('approvalId', 'type status').lean();
@@ -85,6 +93,10 @@ r.get('/:id', ah(async (req, res) => {
     ScheduledPost.find({ contentId: id }).sort({ createdAt: -1 }).lean(),
     Reminder.find({ contentId: id, completed: false }).sort({ remindAt: 1 }).lean(),
   ]);
+  const isSuper = req.user?.role === 'SUPER_ADMIN';
+  if (!isSuper && content) {
+    sanitizeSuperAdminUsers(content, false);
+  }
   res.json({ content, script, versions, shoot, media, approvals, tasks, feedback, activity, roomId: room._id, posts, reminders, stages: STAGES });
 }));
 

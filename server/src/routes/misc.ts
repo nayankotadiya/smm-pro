@@ -36,7 +36,7 @@ r.get('/search', ah(async (req, res) => {
     Task.find({ $and: [taskScope, { $or: [{ title: rx }, { description: rx }] }] }).limit(L).select('title status dueAt').lean(),
     Media.find({ $and: [can(u, 'media.read.all') ? {} : { contentId: { $in: visIds } }, { fileName: rx }, { status: { $nin: ['UPLOADING', 'FAILED'] } }] }).limit(L).select('fileName category contentId size').lean(),
     Message.find({ roomId: { $in: myRooms }, message: rx, deletedAt: null }).sort({ createdAt: -1 }).limit(L).select('message roomId createdAt').populate('senderId', 'name').lean(),
-    User.find({ name: rx, active: true }).limit(L).select('name role').lean(),
+    User.find({ name: rx, active: true, ...(u.role !== 'SUPER_ADMIN' ? { role: { $ne: 'SUPER_ADMIN' } } : {}) }).limit(L).select('name role').lean(),
     Approval.find({ contentId: { $in: visIds }, version: rx }).limit(L).select('version type status contentId').populate('contentId', 'contentId title').lean(),
   ]);
   res.json({ clients, content, campaigns, scripts, tasks, files, messages, team, approvals });
@@ -182,20 +182,54 @@ r.get('/activity', ah(async (req, res) => {
   if (p.actorId) q.actorId = p.actorId;
   if (p.action) q.action = new RegExp('^' + escapeRx(p.action));
   if (p.q) q.message = new RegExp(escapeRx(p.q), 'i');
-  const items = await ActivityLog.find(q).sort({ createdAt: -1 }).skip(Number(p.skip) || 0).limit(Math.min(200, Number(p.limit) || 50)).populate('contentId', 'contentId title').lean();
+  const isSuper = req.user?.role === 'SUPER_ADMIN';
+  let items = await ActivityLog.find(q).sort({ createdAt: -1 }).skip(Number(p.skip) || 0).limit(Math.min(200, Number(p.limit) || 50)).populate('contentId', 'contentId title').lean();
+  if (!isSuper) {
+    const superAdminUsers = await User.find({ role: 'SUPER_ADMIN' }).select('_id name').lean();
+    const superIds = new Set(superAdminUsers.map((u) => String(u._id)));
+    const superNames = superAdminUsers.map((u) => u.name).filter(Boolean);
+    items = items.map((x: any) => {
+      if (x.actorId && superIds.has(String(x.actorId))) {
+        let msg = x.message || '';
+        for (const name of superNames) {
+          msg = msg.replace(new RegExp(`\\b${escapeRx(name)}\\b`, 'gi'), 'System');
+        }
+        return { ...x, actorId: undefined, actorName: 'System', message: msg };
+      }
+      return x;
+    });
+  }
   res.json(can(req.user, 'audit.view') ? items : items.map(({ ip, ...x }: any) => x));
 }));
 
 // ---------------- Team / users ----------------
 r.get('/team', ah(async (req, res) => {
-  const users = await User.find({ ...(req.query.all === '1' && can(req.user, 'users.manage') ? {} : { active: true }) }).select('name email role title active phone lastLoginAt coverUserId').sort({ name: 1 }).lean();
+  const isSuperAdmin = req.user?.role === 'SUPER_ADMIN';
+  const roleFilter = isSuperAdmin ? {} : { role: { $ne: 'SUPER_ADMIN' } };
+  const users = await User.find({
+    ...(req.query.all === '1' && can(req.user, 'users.manage') ? {} : { active: true }),
+    ...roleFilter,
+  }).select('name email role title active phone lastLoginAt coverUserId').sort({ name: 1 }).lean();
   const wl = await teamWorkload();
   const pres = await Presence.find({}).lean();
-  res.json(users.map((u) => { const w = wl.find((x) => String(x.userId) === String(u._id)); const p = pres.find((x) => String(x.userId) === String(u._id)); return { ...u, email: can(req.user, 'users.manage') || String(u._id) === req.user!._id ? u.email : undefined, phone: can(req.user, 'users.manage') ? u.phone : undefined, workload: w, presence: p?.status || 'OFFLINE', lastActive: p?.lastActive, currentActivity: p?.status === 'OFFLINE' ? undefined : p?.currentActivity }; }));
+  res.json(users.map((u) => {
+    const w = wl.find((x) => String(x.userId) === String(u._id));
+    const p = pres.find((x) => String(x.userId) === String(u._id));
+    return {
+      ...u,
+      email: can(req.user, 'users.manage') || String(u._id) === req.user!._id ? u.email : undefined,
+      phone: can(req.user, 'users.manage') ? u.phone : undefined,
+      workload: w,
+      presence: p?.status || 'OFFLINE',
+      lastActive: p?.lastActive,
+      currentActivity: p?.status === 'OFFLINE' ? undefined : p?.currentActivity,
+    };
+  }));
 }));
 r.get('/team/:id', ah(async (req, res) => {
   const u = await User.findById(req.params.id).select('name role title active').lean();
   if (!u) throw notFound('Team member');
+  if (u.role === 'SUPER_ADMIN' && req.user!.role !== 'SUPER_ADMIN') throw notFound('Team member');
   const self = req.params.id === req.user!._id; const mgr = can(req.user, 'tasks.read.all');
   if (!self && !mgr) return res.json({ user: u, restricted: true });
   const id = req.params.id;
@@ -221,7 +255,8 @@ r.patch('/users/:id', requirePerm('users.manage'), ah(async (req, res) => {
   const b = userBody.partial().parse(req.body);
   const u: any = await User.findById(req.params.id);
   if (!u) throw notFound('User');
-  if ((u.role === 'SUPER_ADMIN' || b.role === 'SUPER_ADMIN') && req.user!.role !== 'SUPER_ADMIN') throw forbidden('Only a super admin can change a super admin');
+  if (u.role === 'SUPER_ADMIN' && req.user!.role !== 'SUPER_ADMIN') throw notFound('User');
+  if (b.role === 'SUPER_ADMIN' && req.user!.role !== 'SUPER_ADMIN') throw forbidden('Only a super admin can promote to super admin');
   if (req.params.id === req.user!._id && (b.active === false || (b.role && b.role !== u.role))) throw badRequest('You cannot change your own role or deactivate yourself');
   const { password, ...rest } = b;
   Object.assign(u, rest);
@@ -232,9 +267,11 @@ r.patch('/users/:id', requirePerm('users.manage'), ah(async (req, res) => {
 }));
 
 // ---------------- Roles & permissions ----------------
-r.get('/roles', requirePerm('roles.manage', 'users.manage'), ah(async (_req, res) => {
+r.get('/roles', requirePerm('roles.manage', 'users.manage'), ah(async (req, res) => {
+  const isSuperAdmin = req.user?.role === 'SUPER_ADMIN';
   const stored = await RoleModel.find({}).lean();
-  res.json({ permissions: PERMISSIONS, roles: ROLES.map((k) => ({ key: k, permissions: stored.find((s) => s.key === k)?.permissions || DEFAULT_ROLE_PERMISSIONS[k], locked: k === 'SUPER_ADMIN' })) });
+  const visibleRoles = isSuperAdmin ? ROLES : ROLES.filter((k) => k !== 'SUPER_ADMIN');
+  res.json({ permissions: PERMISSIONS, roles: visibleRoles.map((k) => ({ key: k, permissions: stored.find((s) => s.key === k)?.permissions || DEFAULT_ROLE_PERMISSIONS[k], locked: k === 'SUPER_ADMIN' })) });
 }));
 r.patch('/roles/:key', requirePerm('roles.manage'), ah(async (req, res) => {
   const key = z.enum(ROLES).parse(req.params.key);
@@ -367,5 +404,9 @@ r.post('/system/purge-demo-data', ah(async (req, res) => {
   });
 }));
 
-r.get('/meta', ah(async (_req, res) => { res.json({ stages: STAGES, roles: ROLES }); }));
+r.get('/meta', ah(async (req, res) => {
+  const isSuperAdmin = req.user?.role === 'SUPER_ADMIN';
+  const visibleRoles = isSuperAdmin ? ROLES : ROLES.filter((k) => k !== 'SUPER_ADMIN');
+  res.json({ stages: STAGES, roles: visibleRoles });
+}));
 export default r;
