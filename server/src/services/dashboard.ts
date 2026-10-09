@@ -51,7 +51,7 @@ export async function recentContent(u: AuthUser, limit = 10) {
 }
 
 export async function teamWorkload() {
-  const users = await User.find({ active: true, role: { $nin: ['SUPER_ADMIN'] } }).select('name role').lean();
+  const users = await User.find({ active: true, role: { $nin: ['SUPER_ADMIN'] } }).select('name role avatarUrl').lean();
   // three simple group-bys (kept free of $cond so it also runs on MongoDB-compatible stores)
   const g = (match: any) => Task.aggregate([{ $match: { deletedAt: null, assignedTo: { $ne: null }, ...match } }, { $group: { _id: '$assignedTo', n: { $sum: 1 } } }]);
   const [all, done, late] = await Promise.all([g({}), g({ status: 'COMPLETED' }), g({ status: { $ne: 'COMPLETED' }, dueAt: { $lt: new Date() } })]);
@@ -62,7 +62,7 @@ export async function teamWorkload() {
     const a = agg.find((x) => String(x._id) === String(usr._id)) || { assigned: 0, completed: 0, overdue: 0 };
     const pending = a.assigned - a.completed;
     const p = pres.find((x) => String(x.userId) === String(usr._id));
-    return { userId: usr._id, name: usr.name, role: usr.role, assigned: a.assigned, completed: a.completed, pending, overdue: a.overdue, workload: Math.min(100, Math.round((pending / 8) * 100)), presence: p?.status || 'OFFLINE', lastActive: p?.lastActive, currentActivity: p?.currentActivity };
+    return { userId: usr._id, name: usr.name, role: usr.role, avatarUrl: (usr as any).avatarUrl || null, assigned: a.assigned, completed: a.completed, pending, overdue: a.overdue, workload: Math.min(100, Math.round((pending / 8) * 100)), presence: p?.status || 'OFFLINE', lastActive: p?.lastActive, currentActivity: p?.currentActivity };
   });
 }
 

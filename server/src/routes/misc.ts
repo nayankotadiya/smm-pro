@@ -215,7 +215,7 @@ r.get('/team', ah(async (req, res) => {
   const users = await User.find({
     ...(req.query.all === '1' && can(req.user, 'users.manage') ? {} : { active: true }),
     ...roleFilter,
-  }).select('name email role title active phone lastLoginAt coverUserId').sort({ name: 1 }).lean();
+  }).select('name email role title active phone lastLoginAt coverUserId avatarUrl').sort({ name: 1 }).lean();
   const wl = await teamWorkload();
   const pres = await Presence.find({}).lean();
   res.json(users.map((u) => {
@@ -225,6 +225,7 @@ r.get('/team', ah(async (req, res) => {
       ...u,
       email: can(req.user, 'users.manage') || String(u._id) === req.user!._id ? u.email : undefined,
       phone: can(req.user, 'users.manage') ? u.phone : undefined,
+      avatarUrl: u.avatarUrl || null,
       workload: w,
       presence: p?.status || 'OFFLINE',
       lastActive: p?.lastActive,
@@ -233,7 +234,7 @@ r.get('/team', ah(async (req, res) => {
   }));
 }));
 r.get('/team/:id', ah(async (req, res) => {
-  const u = await User.findById(req.params.id).select('name role title active').lean();
+  const u = await User.findById(req.params.id).select('name role title active phone email avatarUrl').lean();
   if (!u) throw notFound('Team member');
   if (u.role === 'SUPER_ADMIN' && req.user!.role !== 'SUPER_ADMIN' && req.user!.role !== 'ADMIN') throw notFound('Team member');
   const self = req.params.id === req.user!._id; const mgr = can(req.user, 'tasks.read.all');
@@ -248,7 +249,7 @@ r.get('/team/:id', ah(async (req, res) => {
   ]);
   res.json({ user: u, tasks, content, activity, presence: { status: presence?.status || 'OFFLINE', lastActive: presence?.lastActive, currentActivity: presence?.currentActivity }, schedule: reminders, workload: (await teamWorkload()).find((x) => String(x.userId) === id) });
 }));
-const userBody = z.object({ name: z.string().min(1).max(80), email: z.string().email(), role: z.enum(ROLES), title: z.string().max(80).optional().nullable(), phone: z.string().max(20).optional().nullable(), password: z.string().min(8).max(100), active: z.boolean().optional(), coverUserId: z.string().optional().nullable() });
+const userBody = z.object({ name: z.string().min(1).max(80), email: z.string().email(), role: z.enum(ROLES), title: z.string().max(80).optional().nullable(), phone: z.string().max(20).optional().nullable(), avatarUrl: z.string().max(10_000_000).optional().nullable(), password: z.string().min(8).max(100), active: z.boolean().optional(), coverUserId: z.string().optional().nullable() });
 r.post('/users', requirePerm('users.manage'), ah(async (req, res) => {
   const b = userBody.parse(req.body);
   if (b.role === 'SUPER_ADMIN' && req.user!.role !== 'SUPER_ADMIN') throw forbidden('Only a super admin can create another super admin');

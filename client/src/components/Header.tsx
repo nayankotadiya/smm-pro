@@ -441,7 +441,7 @@ export function UserMenu() {
     <div className="relative" ref={ref}>
       <button onClick={() => setOpen((v) => !v)} aria-expanded={open} className={clsx('relative flex h-9 items-center gap-2 rounded-xl px-2 transition-all duration-200 hover:bg-surface-3/80', open && 'bg-surface-3')} aria-label="Account menu">
         <span className="relative">
-          <Avatar name={user.name} size={30} />
+          <Avatar name={user.name} avatarUrl={user.avatarUrl} size={30} />
           <PresenceDot userId={user._id} className="absolute -bottom-0.5 -right-0.5" />
         </span>
         <span className="hidden text-left leading-tight lg:block">

@@ -11,6 +11,7 @@ const userSchema = new Schema({
   passwordHash: { type: String, required: true, select: false },
   role: { type: String, enum: ROLES, required: true },
   title: String,
+  avatarUrl: { type: String, default: null },
   active: { type: Boolean, default: true },
   coverUserId: { type: ObjectId, ref: 'User', default: null }, // covering for someone
   notificationPrefs: {

@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Bell, BellOff, Download, Smartphone, RefreshCw, Send, Shield, Laptop, Trash2, Copy, LogOut, ExternalLink, Sparkles } from 'lucide-react';
+import { Plus, Bell, BellOff, Download, Smartphone, RefreshCw, Send, Shield, Laptop, Trash2, Copy, LogOut, ExternalLink, Sparkles, Camera } from 'lucide-react';
 import { get, post, patch, errMsg } from '@/lib/api';
 import { useAuth, useCan } from '@/store/auth';
 import { toast } from '@/store/ui';
-import { Async, Badge, Button, Card, Field, Input, Modal, PageHeader, Select, Table, Tabs } from '@/components/ui';
+import { Async, Badge, Button, Card, Field, Input, Modal, PageHeader, Select, Table, Tabs, Avatar } from '@/components/ui';
 import { canInstall, disablePush, enablePush, isIOS, isStandalone, onInstallChange, promptInstall, pushState, PushState } from '@/pwa';
 import { showDeviceNotification } from '@/lib/notifications';
 import { TestNotificationButton } from '@/components/NotificationBanner';
@@ -29,11 +29,139 @@ export default function Settings() {
   );
 }
 
+function processImageFile(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith('image/')) {
+      return reject(new Error('Please select an image file (PNG, JPG, WEBP, GIF).'));
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      return reject(new Error('Image size must be less than 5 MB.'));
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const size = Math.min(img.width, img.height);
+        const targetDim = 256;
+        canvas.width = targetDim;
+        canvas.height = targetDim;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, (img.width - size) / 2, (img.height - size) / 2, size, size, 0, 0, targetDim, targetDim);
+          resolve(canvas.toDataURL('image/jpeg', 0.88));
+        } else {
+          resolve(reader.result as string);
+        }
+      };
+      img.onerror = () => resolve(reader.result as string);
+      img.src = reader.result as string;
+    };
+    reader.onerror = () => reject(new Error('Failed to read file.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function ProfilePictureCard() {
+  const { user, setUser } = useAuth();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const saveAvatar = useMutation({
+    mutationFn: (avatarUrl: string | null) => patch('/auth/me', { avatarUrl }),
+    onSuccess: (r) => {
+      setUser(r.user);
+      toast.success(r.user.avatarUrl ? 'Profile picture updated.' : 'Profile picture removed.');
+    },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const dataUrl = await processImageFile(file);
+      saveAvatar.mutate(dataUrl);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to process image');
+    } finally {
+      setUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  return (
+    <Card title="Profile Picture" className="lg:col-span-2">
+      <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5">
+        <div className="relative group shrink-0">
+          <Avatar name={user!.name} avatarUrl={user!.avatarUrl} size={92} className="shadow-lg ring-4 ring-primary/20" />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="absolute inset-0 flex flex-col items-center justify-center rounded-full bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity text-white text-[11px] font-semibold cursor-pointer"
+            title="Change photo"
+          >
+            <Camera size={22} className="mb-0.5" />
+            <span>Change</span>
+          </button>
+        </div>
+
+        <div className="flex-1 text-center sm:text-left space-y-2">
+          <div>
+            <h3 className="text-[16px] font-bold text-ink flex items-center justify-center sm:justify-start gap-2">
+              <span>{user!.name}</span>
+              <Badge t="blue">{roleLabel(user!.role)}</Badge>
+            </h3>
+            <p className="text-[12.5px] text-ink-2 mt-0.5">
+              Upload a clear photo for your profile. Your picture is displayed across all assigned content, team chats, and activity feeds.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2.5 pt-1">
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept="image/*"
+              className="hidden"
+            />
+            <Button
+              variant="primary"
+              size="sm"
+              icon={<Camera size={14} />}
+              loading={uploading || saveAvatar.isPending}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              Upload photo
+            </Button>
+            {user!.avatarUrl && (
+              <Button
+                variant="danger"
+                size="sm"
+                icon={<Trash2 size={14} />}
+                loading={saveAvatar.isPending}
+                onClick={() => saveAvatar.mutate(null)}
+              >
+                Remove photo
+              </Button>
+            )}
+          </div>
+          <div className="text-[11px] text-ink-3">
+            Supports PNG, JPG, WEBP or GIF up to 5 MB. Automatically centered and optimized.
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 function Profile() {
   const { user, setUser } = useAuth(); const { mode, resolved } = useTheme(); const [name, setName] = useState(user!.name); const [email, setEmail] = useState(user!.email); const [phone, setPhone] = useState(user!.phone || ''); const [cur, setCur] = useState(''); const [pw, setPw] = useState('');
   const save = useMutation({ mutationFn: (b: any) => patch('/auth/me', b), onSuccess: (r) => { setUser(r.user); setCur(''); setPw(''); toast.success('Saved.'); }, onError: (e) => toast.error(errMsg(e)) });
   return (
     <div className="grid max-w-4xl gap-5 lg:grid-cols-2">
+      <ProfilePictureCard />
       <Card title="Appearance" className="lg:col-span-2"><div className="flex flex-wrap items-center justify-between gap-3"><div><div className="font-medium">Theme</div><div className="text-meta text-ink-2">{mode === 'system' ? `Following your device (currently ${resolved}).` : `Always ${mode}.`} Saved on this device.</div></div><ThemePicker size="md" /></div></Card>
       <Card title="Your details"><div className="space-y-3"><Field label="Name"><Input value={name} onChange={(e) => setName(e.target.value)} /></Field><Field label="Phone"><Input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" /></Field><Field label="Email"><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field><Field label="Role"><Input value={roleLabel(user!.role)} disabled /></Field><Button variant="primary" loading={save.isPending} onClick={() => save.mutate({ name, email, phone })}>Save</Button></div></Card>
       <Card title="Change password"><div className="space-y-3"><Field label="Current password"><Input type="password" value={cur} onChange={(e) => setCur(e.target.value)} autoComplete="current-password" /></Field><Field label="New password" hint="At least 8 characters."><Input type="password" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="new-password" /></Field><Button disabled={!cur || pw.length < 8} loading={save.isPending} onClick={() => save.mutate({ currentPassword: cur, newPassword: pw })}>Update password</Button></div></Card>
@@ -407,21 +535,166 @@ function NotificationSettings() {
 
 const ROLES = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'TEAM_LEAD', 'SCRIPT_WRITER', 'SHOOTER', 'EDITOR', 'SMM', 'DESIGNER', 'SUPPORT'];
 function Users() {
-  const qc = useQueryClient(); const me = useAuth((s) => s.user)!; const q = useQuery({ queryKey: ['team', 'all'], queryFn: () => get<any[]>('/team', { all: 1 }) }); const [edit, setEdit] = useState<any>(null);
+  const qc = useQueryClient();
+  const me = useAuth((s) => s.user)!;
+  const q = useQuery({ queryKey: ['team', 'all'], queryFn: () => get<any[]>('/team', { all: 1 }) });
+  const [edit, setEdit] = useState<any>(null);
   const [v, setV] = useState<any>({});
-  useEffect(() => { if (edit) setV({ name: edit.name || '', email: edit.email || '', role: edit.role || 'EDITOR', title: edit.title || '', phone: edit.phone || '', password: '', active: edit.active !== false, coverUserId: edit.coverUserId || '' }); }, [edit]);
-  const m = useMutation({ mutationFn: () => { const b = { ...v, coverUserId: v.coverUserId || null }; if (!b.password) delete b.password; return edit._id ? patch(`/users/${edit._id}`, b) : post('/users', b); }, onSuccess: () => { toast.success(edit._id ? 'User updated.' : 'User created.'); setEdit(null); qc.invalidateQueries({ queryKey: ['team'] }); }, onError: (e) => toast.error(errMsg(e)) });
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  useEffect(() => {
+    if (edit) {
+      setV({
+        name: edit.name || '',
+        email: edit.email || '',
+        role: edit.role || 'EDITOR',
+        title: edit.title || '',
+        phone: edit.phone || '',
+        avatarUrl: edit.avatarUrl || null,
+        password: '',
+        active: edit.active !== false,
+        coverUserId: edit.coverUserId || '',
+      });
+    }
+  }, [edit]);
+
+  const handleAvatarFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingAvatar(true);
+    try {
+      const dataUrl = await processImageFile(file);
+      setV((s: any) => ({ ...s, avatarUrl: dataUrl }));
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to process image');
+    } finally {
+      setUploadingAvatar(false);
+      e.target.value = '';
+    }
+  };
+
+  const m = useMutation({
+    mutationFn: () => {
+      const b = { ...v, coverUserId: v.coverUserId || null };
+      if (!b.password) delete b.password;
+      return edit._id ? patch(`/users/${edit._id}`, b) : post('/users', b);
+    },
+    onSuccess: () => {
+      toast.success(edit._id ? 'User updated.' : 'User created.');
+      setEdit(null);
+      qc.invalidateQueries({ queryKey: ['team'] });
+    },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+
   const set = (k: string) => (e: any) => setV((s: any) => ({ ...s, [k]: e.target.value }));
+
   return (
     <>
-      <Card title="Team accounts" pad={false} action={<Button size="sm" variant="primary" icon={<Plus size={14} />} onClick={() => setEdit({})}>Add user</Button>}>
-        <Async q={q}>{(d: any[]) => <Table head={['Name', 'Email', 'Role', 'Status', 'Last sign-in', '']} minWidth={720}>{d.map((u) => <tr key={u._id} className="group hover:bg-surface-2 transition-colors"><td className="td font-semibold text-ink group-hover:text-primary-ink transition-colors">{u.name}</td><td className="td font-medium text-ink-2">{u.email}</td><td className="td font-medium text-ink">{roleLabel(u.role)}</td><td className="td"><Badge t={u.active ? 'green' : 'neutral'}>{u.active ? 'Active' : 'Deactivated'}</Badge></td><td className="td text-meta font-medium text-ink-2">{u.lastLoginAt ? ago(u.lastLoginAt) : 'Never'}</td><td className="td text-right"><Button size="sm" onClick={() => setEdit(u)}>Edit</Button></td></tr>)}</Table>}</Async>
+      <Card
+        title="Team accounts"
+        pad={false}
+        action={<Button size="sm" variant="primary" icon={<Plus size={14} />} onClick={() => setEdit({})}>Add user</Button>}
+      >
+        <Async q={q}>
+          {(d: any[]) => (
+            <Table head={['User', 'Email', 'Role', 'Status', 'Last sign-in', '']} minWidth={720}>
+              {d.map((u) => (
+                <tr key={u._id} className="group hover:bg-surface-2 transition-colors">
+                  <td className="td font-semibold text-ink group-hover:text-primary-ink transition-colors">
+                    <div className="flex items-center gap-2.5">
+                      <Avatar name={u.name} avatarUrl={u.avatarUrl} size={30} />
+                      <div>
+                        <div className="leading-tight">{u.name}</div>
+                        {u.title && <div className="text-[11px] font-normal text-ink-3">{u.title}</div>}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="td font-medium text-ink-2">{u.email}</td>
+                  <td className="td font-medium text-ink">{roleLabel(u.role)}</td>
+                  <td className="td"><Badge t={u.active ? 'green' : 'neutral'}>{u.active ? 'Active' : 'Deactivated'}</Badge></td>
+                  <td className="td text-meta font-medium text-ink-2">{u.lastLoginAt ? ago(u.lastLoginAt) : 'Never'}</td>
+                  <td className="td text-right"><Button size="sm" onClick={() => setEdit(u)}>Edit</Button></td>
+                </tr>
+              ))}
+            </Table>
+          )}
+        </Async>
       </Card>
-      <Modal open={!!edit} onClose={() => setEdit(null)} title={edit?._id ? `Edit ${edit.name}` : 'Add user'} footer={<><Button onClick={() => setEdit(null)}>Cancel</Button><Button variant="primary" loading={m.isPending} disabled={!v.name || !v.email || (!edit?._id && (v.password || '').length < 8)} onClick={() => m.mutate()}>{edit?._id ? 'Save' : 'Create user'}</Button></>}>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Name"><Input value={v.name || ''} onChange={set('name')} /></Field><Field label="Email"><Input type="email" value={v.email || ''} onChange={set('email')} /></Field>
-          <Field label="Role"><Select value={v.role || 'EDITOR'} onChange={set('role')} disabled={edit?._id === me._id}>{ROLES.filter((r) => r !== 'SUPER_ADMIN' || me.role === 'SUPER_ADMIN').map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}</Select></Field><Field label="Job title"><Input value={v.title || ''} onChange={set('title')} /></Field>
-          <Field label="Phone"><Input value={v.phone || ''} onChange={set('phone')} /></Field><Field label={edit?._id ? 'Reset password' : 'Temporary password'} hint={edit?._id ? 'Leave blank to keep the current password.' : 'At least 8 characters. Ask them to change it after first sign-in.'}><Input type="text" value={v.password || ''} onChange={set('password')} autoComplete="off" /></Field>
+      <Modal
+        open={!!edit}
+        onClose={() => setEdit(null)}
+        title={edit?._id ? `Edit ${edit.name}` : 'Add user'}
+        footer={
+          <>
+            <Button onClick={() => setEdit(null)}>Cancel</Button>
+            <Button
+              variant="primary"
+              loading={m.isPending}
+              disabled={!v.name || !v.email || (!edit?._id && (v.password || '').length < 8)}
+              onClick={() => m.mutate()}
+            >
+              {edit?._id ? 'Save' : 'Create user'}
+            </Button>
+          </>
+        }
+      >
+        <div className="grid gap-3.5 sm:grid-cols-2">
+          {/* Profile Picture section */}
+          <div className="sm:col-span-2 flex items-center gap-4 p-3 rounded-xl border border-line bg-surface-2/60">
+            <div className="relative group shrink-0">
+              <Avatar name={v.name || 'User'} avatarUrl={v.avatarUrl} size={54} className="ring-2 ring-primary/20" />
+              <button
+                type="button"
+                onClick={() => avatarInputRef.current?.click()}
+                className="absolute inset-0 flex items-center justify-center rounded-full bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity text-white text-[10px] font-semibold cursor-pointer"
+                title="Upload picture"
+              >
+                <Camera size={16} />
+              </button>
+            </div>
+            <div className="flex-1 space-y-1">
+              <div className="text-[12px] font-semibold text-ink">Profile Picture</div>
+              <div className="text-[11px] text-ink-3">Upload a photo or avatar for this team member.</div>
+              <div className="flex items-center gap-2 pt-0.5">
+                <input
+                  type="file"
+                  ref={avatarInputRef}
+                  onChange={handleAvatarFile}
+                  accept="image/*"
+                  className="hidden"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  loading={uploadingAvatar}
+                  icon={<Camera size={13} />}
+                  onClick={() => avatarInputRef.current?.click()}
+                >
+                  {v.avatarUrl ? 'Change photo' : 'Upload photo'}
+                </Button>
+                {v.avatarUrl && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="danger"
+                    icon={<Trash2 size={13} />}
+                    onClick={() => setV((s: any) => ({ ...s, avatarUrl: null }))}
+                  >
+                    Remove
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <Field label="Name"><Input value={v.name || ''} onChange={set('name')} /></Field>
+          <Field label="Email"><Input type="email" value={v.email || ''} onChange={set('email')} /></Field>
+          <Field label="Role"><Select value={v.role || 'EDITOR'} onChange={set('role')} disabled={edit?._id === me._id}>{ROLES.filter((r) => r !== 'SUPER_ADMIN' || me.role === 'SUPER_ADMIN').map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}</Select></Field>
+          <Field label="Job title"><Input value={v.title || ''} onChange={set('title')} /></Field>
+          <Field label="Phone"><Input value={v.phone || ''} onChange={set('phone')} /></Field>
+          <Field label={edit?._id ? 'Reset password' : 'Temporary password'} hint={edit?._id ? 'Leave blank to keep the current password.' : 'At least 8 characters. Ask them to change it after first sign-in.'}><Input type="text" value={v.password || ''} onChange={set('password')} autoComplete="off" /></Field>
           {edit?._id && <div className="sm:col-span-2"><Field label="Covered by" hint="While set, this colleague also receives this person's notifications. Use it for leave or sick days."><Select value={v.coverUserId || ''} onChange={set('coverUserId')}><option value="">Nobody</option>{(q.data || []).filter((u) => u._id !== edit._id && u.active).map((u) => <option key={u._id} value={u._id}>{u.name} — {roleLabel(u.role)}</option>)}</Select></Field></div>}
           {edit?._id && edit._id !== me._id && <label className="flex items-center gap-2 sm:col-span-2"><input type="checkbox" checked={!!v.active} onChange={(e) => setV({ ...v, active: e.target.checked })} /> Account is active</label>}
         </div>

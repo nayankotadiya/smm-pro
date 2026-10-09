@@ -158,7 +158,7 @@ export default function ContentDetail() {
     }}</Async>
   );
 }
-function Person({ u }: { u: any }) { return u ? <span className="flex items-center gap-2"><Avatar name={u.name} size={24} /><span><span className="font-semibold text-ink">{u.name}</span><span className="text-ink-2"> — {roleLabel(u.role)}</span></span></span> : <span className="text-ink-3">Unassigned</span>; }
+function Person({ u }: { u: any }) { return u ? <span className="flex items-center gap-2"><Avatar name={u.name} avatarUrl={u.avatarUrl} size={24} /><span><span className="font-semibold text-ink">{u.name}</span><span className="text-ink-2"> — {roleLabel(u.role)}</span></span></span> : <span className="text-ink-3">Unassigned</span>; }
 
 function Overview({ d, onTask, onReminder, go }: { d: any; onTask: () => void; onReminder: () => void; go: (t: Tab) => void }) {
   const c = d.content; const openTasks = d.tasks.filter((t: any) => t.status !== 'COMPLETED');

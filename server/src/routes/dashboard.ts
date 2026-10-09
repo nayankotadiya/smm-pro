@@ -40,9 +40,9 @@ r.get('/team-presence', ah(async (req, res) => {
   const users = await User.find({
     active: true,
     ...(isSuperAdmin ? {} : { role: { $ne: 'SUPER_ADMIN' } }),
-  }).select('name role').lean();
+  }).select('name role avatarUrl').lean();
   const pres = await Presence.find({}).lean();
-  res.json(users.map((u) => { const p = pres.find((x) => String(x.userId) === String(u._id)); return { userId: u._id, name: u.name, role: u.role, status: p?.status || 'OFFLINE', lastActive: p?.lastActive, lastSeen: p?.lastSeen, currentActivity: p?.status === 'OFFLINE' ? undefined : p?.currentActivity }; }));
+  res.json(users.map((u) => { const p = pres.find((x) => String(x.userId) === String(u._id)); return { userId: u._id, name: u.name, role: u.role, avatarUrl: (u as any).avatarUrl || null, status: p?.status || 'OFFLINE', lastActive: p?.lastActive, lastSeen: p?.lastSeen, currentActivity: p?.status === 'OFFLINE' ? undefined : p?.currentActivity }; }));
 }));
 r.get('/storage', requirePerm('dashboard.org'), ah(async (_req, res) => { res.json(await d.storage()); }));
 r.get('/automation-activity', requirePerm('dashboard.org'), ah(async (_req, res) => { res.json(await d.automationActivity()); }));

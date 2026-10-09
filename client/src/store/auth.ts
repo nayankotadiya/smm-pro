@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export interface Me { _id: string; name: string; email: string; role: string; title?: string; phone?: string; mfaEnabled?: boolean; permissions: string[]; notificationPrefs?: any }
+export interface Me { _id: string; name: string; email: string; role: string; title?: string; phone?: string; avatarUrl?: string | null; mfaEnabled?: boolean; permissions: string[]; notificationPrefs?: any }
 interface AuthState { token: string | null; user: Me | null; ready: boolean; setSession: (t: string, u: Me, refreshToken?: string) => void; setUser: (u: Me) => void; clear: () => void; setReady: () => void }
 const savedToken = typeof window !== 'undefined' ? localStorage.getItem('smm_token') : null;
 let savedUser: Me | null = null;

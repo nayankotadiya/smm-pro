@@ -141,11 +141,51 @@ const AVATAR_GRADIENTS = [
   'from-lime-500 to-green-600',
 ];
 
-export function Avatar({ name, size = 30 }: { name?: string; size?: number }) {
+export function Avatar({
+  name,
+  avatarUrl,
+  src,
+  size = 30,
+  className,
+}: {
+  name?: string;
+  avatarUrl?: string | null;
+  src?: string | null;
+  size?: number;
+  className?: string;
+}) {
+  const [imgError, setImgError] = useState(false);
+  const imageSrc = !imgError ? (avatarUrl || src) : null;
   const idx = name ? [...name].reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR_GRADIENTS.length : 0;
+
+  if (imageSrc) {
+    return (
+      <span
+        style={{ width: size, height: size }}
+        className={clsx(
+          'relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full shadow-sm ring-1 ring-black/10 dark:ring-white/20 bg-surface-2',
+          className
+        )}
+        aria-hidden
+      >
+        <img
+          src={imageSrc}
+          alt={name || 'Avatar'}
+          className="h-full w-full object-cover rounded-full"
+          onError={() => setImgError(true)}
+          loading="lazy"
+        />
+      </span>
+    );
+  }
+
   return (
     <span
-      className={clsx('inline-flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br font-bold text-white shadow-sm ring-1 ring-inset ring-white/20', AVATAR_GRADIENTS[idx])}
+      className={clsx(
+        'inline-flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br font-bold text-white shadow-sm ring-1 ring-inset ring-white/20 select-none',
+        AVATAR_GRADIENTS[idx],
+        className
+      )}
       style={{ width: size, height: size, fontSize: size * 0.38 }}
       aria-hidden
     >

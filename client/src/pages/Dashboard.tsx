@@ -355,7 +355,7 @@ function Workload() {
               <li key={r.userId} className="p-3.5 hover:bg-surface-2 transition-colors">
                 <div className="flex items-center justify-between gap-2">
                   <Link to={`/team/${r.userId}`} className="flex items-center gap-2 font-semibold text-ink hover:text-primary-ink truncate">
-                    <Avatar name={r.name} size={28} />
+                    <Avatar name={r.name} avatarUrl={r.avatarUrl} size={28} />
                     <span className="truncate">{r.name}</span>
                   </Link>
                   <PresenceLabel userId={r.userId} />
@@ -377,7 +377,7 @@ function Workload() {
           </ul>
           <div className="hidden md:block">
             <Table head={['Member', 'Role', 'Assigned', 'Completed', 'Pending', 'Overdue', 'Workload', 'Presence']} minWidth={760}>
-              {rows.map((r) => <tr key={r.userId} className="hover:bg-surface-2 transition-colors"><td className="td"><Link to={`/team/${r.userId}`} className="flex items-center gap-2 font-semibold text-ink hover:text-primary-ink"><Avatar name={r.name} size={24} />{r.name}</Link></td><td className="td text-ink-2 font-medium">{roleLabel(r.role)}</td><td className="td tabular font-semibold text-ink">{r.assigned}</td><td className="td tabular text-ink-2">{r.completed}</td><td className="td tabular text-ink-2">{r.pending}</td><td className={clsx('td tabular font-semibold', r.overdue > 0 ? 'text-danger' : 'text-ink-3')}>{r.overdue}</td><td className="td"><div className="flex w-28 items-center gap-2"><Progress value={r.workload} tone={r.workload >= 90 ? 'red' : r.workload >= 70 ? 'amber' : 'blue'} /><span className="w-9 text-right text-meta font-medium tabular text-ink-2">{r.workload}%</span></div></td><td className="td"><PresenceLabel userId={r.userId} /></td></tr>)}
+              {rows.map((r) => <tr key={r.userId} className="hover:bg-surface-2 transition-colors"><td className="td"><Link to={`/team/${r.userId}`} className="flex items-center gap-2 font-semibold text-ink hover:text-primary-ink"><Avatar name={r.name} avatarUrl={r.avatarUrl} size={24} />{r.name}</Link></td><td className="td text-ink-2 font-medium">{roleLabel(r.role)}</td><td className="td tabular font-semibold text-ink">{r.assigned}</td><td className="td tabular text-ink-2">{r.completed}</td><td className="td tabular text-ink-2">{r.pending}</td><td className={clsx('td tabular font-semibold', r.overdue > 0 ? 'text-danger' : 'text-ink-3')}>{r.overdue}</td><td className="td"><div className="flex w-28 items-center gap-2"><Progress value={r.workload} tone={r.workload >= 90 ? 'red' : r.workload >= 70 ? 'amber' : 'blue'} /><span className="w-9 text-right text-meta font-medium tabular text-ink-2">{r.workload}%</span></div></td><td className="td"><PresenceLabel userId={r.userId} /></td></tr>)}
             </Table>
           </div>
         </>
@@ -422,7 +422,7 @@ function TeamOnline() {
   return (
     <Card title="Team online" pad={false} action={<More to="/team" />}>
       <Async q={q}>{(d: any[]) => <ul className="divide-y divide-line">{[...d].map((u) => ({ ...u, ...(presence[u.userId] || {}) })).sort((a, b) => order[a.status] - order[b.status] || a.name.localeCompare(b.name)).slice(0, 8).map((u) => (
-        <li key={u.userId} className="flex items-center gap-3 px-4 py-2"><span className="relative"><Avatar name={u.name} /><PresenceDot userId={u.userId} className="absolute -bottom-0.5 -right-0.5" /></span><div className="min-w-0 flex-1"><div className="flex items-baseline gap-2"><span className="font-medium">{u.name}</span><span className="text-meta text-ink-3">{roleLabel(u.role)}</span></div><div className="truncate text-meta text-ink-2">{u.status === 'OFFLINE' ? (u.lastActive ? `Last active ${ago(u.lastActive)}` : 'Offline') : u.status === 'AWAY' ? `Away · last active ${ago(u.lastActive)}` : u.currentActivity || label(u.status)}</div></div></li>
+        <li key={u.userId} className="flex items-center gap-3 px-4 py-2"><span className="relative"><Avatar name={u.name} avatarUrl={u.avatarUrl} /><PresenceDot userId={u.userId} className="absolute -bottom-0.5 -right-0.5" /></span><div className="min-w-0 flex-1"><div className="flex items-baseline gap-2"><span className="font-medium">{u.name}</span><span className="text-meta text-ink-3">{roleLabel(u.role)}</span></div><div className="truncate text-meta text-ink-2">{u.status === 'OFFLINE' ? (u.lastActive ? `Last active ${ago(u.lastActive)}` : 'Offline') : u.status === 'AWAY' ? `Away · last active ${ago(u.lastActive)}` : u.currentActivity || label(u.status)}</div></div></li>
       ))}</ul>}</Async>
     </Card>
   );
