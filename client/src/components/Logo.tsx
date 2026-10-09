@@ -1,33 +1,58 @@
-/** Brand mark drawn inline with iOS 27 liquid squircle and neon holographic gradient */
-export function LogoMark({ size = 30 }: { size?: number }) {
+/**
+ * Bulletproof Brands official logo components
+ * Shield mark with red lightning bolt & "IMPOSSIBLE TO IGNORE" typography
+ */
+
+interface LogoMarkProps {
+  size?: number;
+  className?: string;
+  glow?: boolean;
+}
+
+export function LogoMark({ size = 32, className = '', glow = true }: LogoMarkProps) {
   return (
     <div
       style={{ width: size, height: size }}
-      className="relative flex shrink-0 items-center justify-center overflow-hidden rounded-[10px] p-0.5 shadow-[0_4px_16px_-2px_rgba(124,58,237,0.55)] ring-1 ring-white/25 transition-transform duration-300 hover:scale-105 active:scale-95"
+      className={`relative flex shrink-0 items-center justify-center transition-transform duration-300 hover:scale-105 active:scale-95 ${className}`}
     >
-      <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 via-purple-600 to-pink-500" />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-white/30" />
-      <svg width={size * 0.72} height={size * 0.72} viewBox="0 0 24 24" fill="none" className="relative z-10 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.4)]">
-        <path d="M4 18V6h3.5l4.5 7 4.5-7H20v12h-3v-6.5l-4.5 7-4.5-7V18H4z" fill="currentColor" />
-      </svg>
+      {/* Subtle crimson neon glow behind shield */}
+      {glow && (
+        <div
+          className="absolute inset-0 rounded-full bg-red-600/30 blur-md pointer-events-none -z-10 animate-pulse"
+          style={{ animationDuration: '3s' }}
+        />
+      )}
+      <img
+        src="/brand/bulletproof-shield.png"
+        alt="Bulletproof Brands Shield"
+        className="h-full w-full object-contain"
+        style={{ filter: 'drop-shadow(0 2px 6px rgba(239,68,68,0.45)) drop-shadow(0 0 1px rgba(255,255,255,0.35))' }}
+        loading="eager"
+        decoding="sync"
+      />
     </div>
   );
 }
 
-export function Logo({ size = 30 }: { size?: number }) {
+export function Logo({ size = 36, showTagline = true }: { size?: number; showTagline?: boolean }) {
   return (
-    <span className="flex items-center gap-3">
+    <span className="flex items-center gap-2.5">
       <LogoMark size={size} />
-      <div className="flex flex-col">
-        <span className="text-[15px] font-extrabold tracking-tight text-white">
-          SMM PRO
+      <div className="flex flex-col select-none leading-none">
+        <span className="text-[12.5px] font-black uppercase tracking-tight text-white font-sans">
+          BULLETPROOF
         </span>
-        <span className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.14em] text-white/45">
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]" />
-          Live
+        <span className="text-[12.5px] font-black uppercase tracking-tight text-white font-sans mt-0.5">
+          BRANDS
         </span>
+        {showTagline && (
+          <span className="text-[7px] font-extrabold uppercase tracking-[0.22em] text-red-400 mt-1">
+            IMPOSSIBLE TO IGNORE
+          </span>
+        )}
       </div>
     </span>
   );
 }
 
+export default Logo;

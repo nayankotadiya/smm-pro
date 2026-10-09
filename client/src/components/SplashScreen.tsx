@@ -69,13 +69,13 @@ export function SplashScreen({ ready, onFinish, minDurationMs = 1100 }: SplashSc
       className={`fixed inset-0 z-[99999] flex flex-col items-center justify-center overflow-hidden bg-[#070A12] select-none transition-all duration-700 ease-out ${
         fading ? 'opacity-0 scale-105 pointer-events-none' : 'opacity-100 scale-100'
       }`}
-      aria-label="Loading SMM PRO"
+      aria-label="Loading Bulletproof Brands"
     >
       {/* Background Animated Aurora Glow */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -left-28 -top-28 h-[500px] w-[500px] rounded-full bg-violet-600/30 blur-[120px] animate-pulse" style={{ animationDuration: '4s' }} />
-        <div className="absolute -right-20 top-1/4 h-[420px] w-[420px] rounded-full bg-indigo-500/25 blur-[130px] animate-pulse" style={{ animationDuration: '5s', animationDelay: '1s' }} />
-        <div className="absolute bottom-0 left-1/3 h-[460px] w-[460px] rounded-full bg-blue-600/20 blur-[140px]" />
+        <div className="absolute -left-28 -top-28 h-[500px] w-[500px] rounded-full bg-red-600/20 blur-[130px] animate-pulse" style={{ animationDuration: '4s' }} />
+        <div className="absolute -right-20 top-1/4 h-[420px] w-[420px] rounded-full bg-rose-500/18 blur-[130px] animate-pulse" style={{ animationDuration: '5s', animationDelay: '1s' }} />
+        <div className="absolute bottom-0 left-1/3 h-[460px] w-[460px] rounded-full bg-amber-600/15 blur-[140px]" />
       </div>
 
       {/* Subtle Grid Texture */}
@@ -89,33 +89,36 @@ export function SplashScreen({ ready, onFinish, minDurationMs = 1100 }: SplashSc
 
       {/* Main Content Card */}
       <div className="relative z-10 flex flex-col items-center px-6 text-center max-w-sm">
-        {/* Animated Brand Logo Icon with Pulsing Neon Halo */}
+        {/* Animated Brand Shield Logo with Crimson Halo */}
         <div className="relative mb-6 flex items-center justify-center">
-          <div className="absolute -inset-4 rounded-3xl bg-gradient-to-r from-violet-600 via-indigo-600 to-pink-500 opacity-40 blur-xl animate-pulse" style={{ animationDuration: '2.5s' }} />
-          <div className="relative rounded-2xl p-1.5 ring-1 ring-white/20 shadow-[0_0_35px_rgba(99,102,241,0.5)] bg-white/5 backdrop-blur-xl">
-            <LogoMark size={64} />
+          <div className="absolute -inset-4 rounded-3xl bg-gradient-to-r from-red-600 via-rose-600 to-amber-500 opacity-40 blur-xl animate-pulse" style={{ animationDuration: '2.5s' }} />
+          <div className="relative rounded-2xl p-2 ring-1 ring-white/20 shadow-[0_0_35px_rgba(239,68,68,0.45)] bg-white/5 backdrop-blur-xl">
+            <LogoMark size={76} />
           </div>
         </div>
 
-        {/* Title */}
-        <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white mb-1.5 flex items-center gap-2">
-          <span>SMM PRO</span>
-          <span className="inline-flex items-center gap-1 rounded-full bg-indigo-500/15 border border-indigo-400/30 px-2 py-0.5 text-[10px] font-semibold tracking-wider uppercase text-indigo-300">
-            <Sparkles size={10} className="text-indigo-400 animate-spin" style={{ animationDuration: '8s' }} />
-            STUDIO
+        {/* Title & Slogan */}
+        <div className="flex flex-col items-center select-none mb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-white font-sans">
+              BULLETPROOF <span className="text-red-500">BRANDS</span>
+            </span>
+          </div>
+          <span className="mt-1 text-[10px] sm:text-[11px] font-extrabold uppercase tracking-[0.24em] text-red-400">
+            IMPOSSIBLE TO IGNORE
           </span>
-        </h1>
+        </div>
 
-        {/* Tagline */}
-        <p className="text-[11.5px] font-semibold tracking-[0.14em] uppercase text-indigo-200/60 mb-8">
-          BULLETPROOF SCRIPT MANAGEMENT
+        {/* System Subtitle */}
+        <p className="text-[10px] font-semibold tracking-[0.16em] uppercase text-white/50 mb-7">
+          BULLETPROOF SCRIPT MANAGEMENT SYSTEM
         </p>
 
         {/* Loading Progress Bar Container */}
         <div className="w-56 sm:w-64">
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10 p-0.5 backdrop-blur-md shadow-inner">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 shadow-[0_0_12px_rgba(139,92,246,0.8)] transition-all duration-300 ease-out"
+              className="h-full rounded-full bg-gradient-to-r from-red-600 via-rose-500 to-amber-500 shadow-[0_0_12px_rgba(239,68,68,0.8)] transition-all duration-300 ease-out"
               style={{ width: `${progress}%` }}
             />
           </div>
