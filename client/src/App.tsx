@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth, useCan } from '@/store/auth';
 import { refreshSession } from '@/lib/api';
@@ -6,6 +6,7 @@ import AppLayout from '@/layouts/AppLayout';
 import { Login, ForgotPassword, ResetPassword } from '@/pages/Auth';
 import Dashboard from '@/pages/Dashboard';
 import { Empty, Spinner } from '@/components/ui';
+import { SplashScreen } from '@/components/SplashScreen';
 
 const PublicApproval = lazy(() => import('@/pages/PublicApproval'));
 const ContentDetail = lazy(() => import('@/pages/ContentDetail'));
@@ -31,13 +32,18 @@ function Protected() {
 function Need({ perm, children }: { perm: string; children: JSX.Element }) { const can = useCan(); return can(perm) ? children : <Empty title="You do not have access to this page" hint="Ask an admin if you need it." />; }
 
 export default function App() {
-  const setReady = useAuth((s) => s.setReady); const loc = useLocation();
+  const { ready, setReady } = useAuth(); const loc = useLocation();
   const isPublic = loc.pathname.startsWith('/approval/');
+  const [splashFinished, setSplashFinished] = useState(false);
   // restore the session from the httpOnly refresh cookie; never attempted on the client approval page
   useEffect(() => { if (isPublic) { setReady(); return; } refreshSession().finally(setReady); }, []); // eslint-disable-line
   return (
-    <Suspense fallback={<Fallback />}>
-      <Routes>
+    <>
+      {!isPublic && !splashFinished && (
+        <SplashScreen ready={ready} onFinish={() => setSplashFinished(true)} />
+      )}
+      <Suspense fallback={<Fallback />}>
+        <Routes>
         <Route path="/approval/:token" element={<PublicApproval />} />
         <Route path="/login" element={<Login />} /><Route path="/forgot-password" element={<ForgotPassword />} /><Route path="/reset-password" element={<ResetPassword />} />
         <Route element={<Protected />}>
@@ -63,5 +69,6 @@ export default function App() {
         </Route>
       </Routes>
     </Suspense>
+    </>
   );
 }
