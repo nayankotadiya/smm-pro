@@ -9,7 +9,21 @@ export async function createTask(data: any, opts: { actorId?: any; source?: 'MAN
   const content = t.contentId ? await Content.findById(t.contentId).select('contentId title clientId').lean() : null;
   if (content && !t.clientId) { t.clientId = content.clientId as any; await t.save(); }
   const by = opts.actorId ? await userName(opts.actorId) : 'Automation';
-  await logActivity({ actorId: opts.actorId, actorType: opts.actorId ? 'USER' : 'AUTOMATION', action: 'task.created', message: `${by} created task "${t.title}"${content ? ` for ${content.contentId}` : ''}`, entityType: 'task', entityId: t._id, contentId: t.contentId, clientId: t.clientId });
+  const assignee = t.assignedTo ? await userName(t.assignedTo) : null;
+  const msg = assignee
+    ? `${by} created task "${t.title}" assigned to ${assignee}${content ? ` for ${content.contentId}` : ''}`
+    : `${by} created task "${t.title}"${content ? ` for ${content.contentId}` : ''}`;
+  await logActivity({
+    actorId: opts.actorId,
+    actorType: opts.actorId ? 'USER' : 'AUTOMATION',
+    action: t.assignedTo ? 'task.assigned' : 'task.created',
+    message: msg,
+    entityType: 'task',
+    entityId: t._id,
+    contentId: t.contentId,
+    clientId: t.clientId,
+    meta: { assignedTo: t.assignedTo, assignee },
+  });
   if (t.assignedTo && !opts.silent) {
     await notify([t.assignedTo], { type: 'task.assigned', category: 'TASK', title: 'Task assigned', message: `${t.title}${content ? ` · ${content.contentId}` : ''}`, link: `/tasks/${t._id}`, entityType: 'task', entityId: t._id, contentId: t.contentId }, { excludeUserId: opts.actorId });
     emitToUser(t.assignedTo, 'task:assigned', t.toJSON());

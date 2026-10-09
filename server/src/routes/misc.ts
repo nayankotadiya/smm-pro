@@ -180,11 +180,17 @@ r.get('/activity', ah(async (req, res) => {
   if (p.contentId) q.contentId = p.contentId;
   if (p.clientId) q.clientId = p.clientId;
   if (p.actorId) q.actorId = p.actorId;
-  if (p.action) q.action = new RegExp('^' + escapeRx(p.action));
+  if (p.action) {
+    if (p.action === 'assign' || p.action === 'assignment' || p.action === 'assignments') {
+      q.action = { $in: ['content.assigned', 'task.assigned', 'task.reassigned', 'assignment'] };
+    } else {
+      q.action = new RegExp('^' + escapeRx(p.action));
+    }
+  }
   if (p.q) q.message = new RegExp(escapeRx(p.q), 'i');
-  const isSuper = req.user?.role === 'SUPER_ADMIN';
+  const isSuperOrAdmin = req.user?.role === 'SUPER_ADMIN' || req.user?.role === 'ADMIN';
   let items = await ActivityLog.find(q).sort({ createdAt: -1 }).skip(Number(p.skip) || 0).limit(Math.min(200, Number(p.limit) || 50)).populate('contentId', 'contentId title').lean();
-  if (!isSuper) {
+  if (!isSuperOrAdmin) {
     const superAdminUsers = await User.find({ role: 'SUPER_ADMIN' }).select('_id name').lean();
     const superIds = new Set(superAdminUsers.map((u) => String(u._id)));
     const superNames = superAdminUsers.map((u) => u.name).filter(Boolean);
@@ -204,8 +210,8 @@ r.get('/activity', ah(async (req, res) => {
 
 // ---------------- Team / users ----------------
 r.get('/team', ah(async (req, res) => {
-  const isSuperAdmin = req.user?.role === 'SUPER_ADMIN';
-  const roleFilter = isSuperAdmin ? {} : { role: { $ne: 'SUPER_ADMIN' } };
+  const canSeeAll = req.user?.role === 'SUPER_ADMIN' || req.user?.role === 'ADMIN';
+  const roleFilter = canSeeAll ? {} : { role: { $ne: 'SUPER_ADMIN' } };
   const users = await User.find({
     ...(req.query.all === '1' && can(req.user, 'users.manage') ? {} : { active: true }),
     ...roleFilter,
@@ -229,7 +235,7 @@ r.get('/team', ah(async (req, res) => {
 r.get('/team/:id', ah(async (req, res) => {
   const u = await User.findById(req.params.id).select('name role title active').lean();
   if (!u) throw notFound('Team member');
-  if (u.role === 'SUPER_ADMIN' && req.user!.role !== 'SUPER_ADMIN') throw notFound('Team member');
+  if (u.role === 'SUPER_ADMIN' && req.user!.role !== 'SUPER_ADMIN' && req.user!.role !== 'ADMIN') throw notFound('Team member');
   const self = req.params.id === req.user!._id; const mgr = can(req.user, 'tasks.read.all');
   if (!self && !mgr) return res.json({ user: u, restricted: true });
   const id = req.params.id;

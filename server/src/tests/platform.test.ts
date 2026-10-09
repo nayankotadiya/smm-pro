@@ -4,7 +4,7 @@ import http from 'http';
 import { io as ioc, Socket } from 'socket.io-client';
 import { app, as, boot, shutdown, users, settle, makeClient } from './setup';
 import { initSockets } from '../sockets';
-import { Approval, Task, Notification, Reminder, CommunicationLog, Content, User, WebhookEvent, Presence } from '../models';
+import { Approval, Task, Notification, Reminder, CommunicationLog, Content, User, WebhookEvent, Presence, ActivityLog } from '../models';
 import { runAllChecks } from '../jobs/checks';
 import { progressFor, mediaFileName } from '../utils/naming';
 import { STAGES } from '../config/constants';
@@ -332,4 +332,46 @@ describe('Dashboards, search, calendar, reports', () => {
     });
     expect(directChatTry.status).toBe(404);
   });
+
+  it('logs rich assignment history for content and tasks, and provides full log history for admin and super admin', async () => {
+    // 1. Assign writer to Aman (different from default Pooja)
+    const patchRes = await as('nayan').patch(`/api/content/${content._id}`, {
+      assignedWriter: users.aman.id,
+    });
+    expect(patchRes.status).toBe(200);
+
+    // 2. Verify ActivityLog recorded detailed assignment history
+    const assignLog = await ActivityLog.findOne({
+      contentId: content._id,
+      action: 'content.assigned',
+    }).sort({ createdAt: -1 });
+    expect(assignLog).toBeTruthy();
+    expect(assignLog?.message).toContain('Writer → Aman');
+    expect(assignLog?.meta?.assignments).toHaveLength(1);
+
+    // 3. Query activity filtering by action=assign
+    const assignFilter = await as('nayan').get('/api/activity?action=assign');
+    expect(assignFilter.status).toBe(200);
+    expect(assignFilter.body.some((a: any) => a.action === 'content.assigned')).toBe(true);
+
+    // 4. Reassign a task and verify task.reassigned log history
+    const task = await as('ishita').post('/api/tasks', {
+      title: 'Follow-up Task',
+      assignedTo: users.rahul.id,
+    });
+    expect(task.status).toBe(201);
+
+    const reassignRes = await as('nayan').patch(`/api/tasks/${task.body._id}`, {
+      assignedTo: users.aman.id,
+    });
+    expect(reassignRes.status).toBe(200);
+
+    const reassignLog = await ActivityLog.findOne({
+      entityId: task.body._id,
+      action: 'task.reassigned',
+    });
+    expect(reassignLog).toBeTruthy();
+    expect(reassignLog?.message).toContain('Aman');
+  });
 });
+

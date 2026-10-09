@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { Task, Content } from '../models';
+import { Task, Content, User } from '../models';
 import { ah } from '../utils/async';
 import { badRequest, forbidden, notFound } from '../utils/errors';
 import { can } from '../middleware/auth';
@@ -64,9 +64,10 @@ r.patch('/:id', ah(async (req, res) => {
     if (b.status === 'IN_PROGRESS' && t.kind === 'EDIT' && t.contentId) { const c = await Content.findById(t.contentId); if (c && c.stage === 'RAW_FOOTAGE') await moveToStage(c, 'EDITING', req.user!._id, `${req.user!.name} started editing`); }
   }
   if (b.assignedTo && String(b.assignedTo) !== prevAssignee) {
+    const newAssignee = (await User.findById(b.assignedTo).select('name').lean())?.name || 'Someone';
     await notify([b.assignedTo], { type: 'task.assigned', category: 'TASK', title: 'Task assigned', message: t.title, link: `/tasks/${t._id}`, entityType: 'task', entityId: t._id, contentId: t.contentId }, { excludeUserId: req.user!._id });
     emitToUser(b.assignedTo, 'task:assigned', t.toJSON());
-    await logActivity({ actorId: req.user!._id, action: 'task.reassigned', message: `${req.user!.name} reassigned "${t.title}"`, entityType: 'task', entityId: t._id, contentId: t.contentId, clientId: t.clientId });
+    await logActivity({ actorId: req.user!._id, action: 'task.reassigned', message: `${req.user!.name} reassigned "${t.title}" to ${newAssignee}`, entityType: 'task', entityId: t._id, contentId: t.contentId, clientId: t.clientId, meta: { assignedTo: b.assignedTo, assignee: newAssignee, prevAssignee } });
   }
   emitOrg('task:updated', t.toJSON());
   res.json(t);

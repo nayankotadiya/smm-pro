@@ -93,8 +93,8 @@ r.get('/:id', ah(async (req, res) => {
     ScheduledPost.find({ contentId: id }).sort({ createdAt: -1 }).lean(),
     Reminder.find({ contentId: id, completed: false }).sort({ remindAt: 1 }).lean(),
   ]);
-  const isSuper = req.user?.role === 'SUPER_ADMIN';
-  if (!isSuper && content) {
+  const isSuperOrAdmin = req.user?.role === 'SUPER_ADMIN' || req.user?.role === 'ADMIN';
+  if (!isSuperOrAdmin && content) {
     sanitizeSuperAdminUsers(content, false);
   }
   res.json({ content, script, versions, shoot, media, approvals, tasks, feedback, activity, roomId: room._id, posts, reminders, stages: STAGES });
@@ -106,6 +106,8 @@ r.patch('/:id', ah(async (req, res) => {
   const touchingAssign = ASSIGN.some((a) => (b as any)[a] !== undefined);
   if (touchingAssign && !can(req.user, 'content.assign')) throw forbidden('You cannot change assignments');
   if (!can(req.user, 'content.write') && !touchingAssign) throw forbidden();
+  const oldAssign: Record<string, any> = {};
+  for (const a of ASSIGN) { oldAssign[a] = c[a]; }
   const changed: string[] = [];
   for (const [k, v] of Object.entries(b)) { if (String(c[k] ?? '') !== String(v ?? '')) changed.push(k); c[k] = v; }
   if (touchingAssign) applyStage(c, c.stage);
@@ -117,7 +119,71 @@ r.patch('/:id', ah(async (req, res) => {
     const newly = ASSIGN.filter((a) => changed.includes(a) && c[a]).map((a) => c[a]);
     await notify(newly, { type: 'content.assigned', category: 'TASK', title: 'You were assigned to content', message: `${c.contentId} · ${c.title}`, link: `/content/${c._id}`, entityType: 'content', entityId: c._id, contentId: c._id }, { excludeUserId: req.user!._id });
   }
-  if (changed.length) await logActivity({ actorId: req.user!._id, action: touchingAssign ? 'content.assigned' : 'content.updated', message: `${req.user!.name} updated ${c.contentId} (${changed.join(', ')})`, entityType: 'content', entityId: c._id, contentId: c._id, clientId: c.clientId, ip: req.ip });
+
+  const assignFieldChanges = ASSIGN.filter((a) => changed.includes(a));
+  if (assignFieldChanges.length > 0) {
+    const ROLE_LABELS: Record<string, string> = {
+      assignedWriter: 'Writer',
+      assignedShooter: 'Shooter',
+      assignedEditor: 'Editor',
+      assignedSMM: 'SMM',
+      assignedReviewer: 'Reviewer',
+    };
+    const userIdsToLookup = [
+      ...assignFieldChanges.map((a) => oldAssign[a]),
+      ...assignFieldChanges.map((a) => c[a]),
+    ].filter(Boolean);
+    const foundUsers = userIdsToLookup.length ? await User.find({ _id: { $in: userIdsToLookup } }).select('_id name').lean() : [];
+    const userMap = new Map(foundUsers.map((u) => [String(u._id), u.name]));
+
+    const details: string[] = [];
+    const metaList: any[] = [];
+    for (const a of assignFieldChanges) {
+      const role = ROLE_LABELS[a] || a;
+      const newName = c[a] ? userMap.get(String(c[a])) || 'Assigned' : null;
+      const oldName = oldAssign[a] ? userMap.get(String(oldAssign[a])) || 'Previous' : null;
+      if (newName) {
+        details.push(`${role} → ${newName}`);
+      } else {
+        details.push(`${role} → Unassigned`);
+      }
+      metaList.push({
+        role,
+        field: a,
+        newUserId: c[a] ? String(c[a]) : null,
+        newUserName: newName,
+        oldUserId: oldAssign[a] ? String(oldAssign[a]) : null,
+        oldUserName: oldName,
+      });
+    }
+
+    await logActivity({
+      actorId: req.user!._id,
+      action: 'content.assigned',
+      message: `${req.user!.name} assigned ${details.join(', ')} on ${c.contentId}`,
+      entityType: 'content',
+      entityId: c._id,
+      contentId: c._id,
+      clientId: c.clientId,
+      ip: req.ip,
+      meta: { type: 'ASSIGNMENT', assignments: metaList },
+    });
+    await postSystemEvent(c._id, 'content.assigned', 'ASSIGNMENTS UPDATED', details.map((d) => `• ${d}`));
+  }
+
+  const nonAssignChanged = changed.filter((x) => !ASSIGN.includes(x as any));
+  if (nonAssignChanged.length) {
+    await logActivity({
+      actorId: req.user!._id,
+      action: 'content.updated',
+      message: `${req.user!.name} updated ${c.contentId} (${nonAssignChanged.join(', ')})`,
+      entityType: 'content',
+      entityId: c._id,
+      contentId: c._id,
+      clientId: c.clientId,
+      ip: req.ip,
+    });
+  }
   await broadcastContent(c);
   res.json(c);
 }));

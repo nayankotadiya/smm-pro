@@ -383,5 +383,28 @@ export function TaskList({ tasks, showAssignee = true, emptyText = 'No tasks' }:
 }
 export function ActivityFeed({ items, limit }: { items: any[]; limit?: number }) {
   if (!items.length) return <Empty title="No activity yet" />;
-  return <ul className="divide-y divide-line">{items.slice(0, limit || items.length).map((a) => <li key={a._id} className="flex animate-rise items-start justify-between gap-3 px-4 py-2.5 transition-colors duration-150 hover:bg-surface-2"><div className="min-w-0"><div className="text-[13px] font-medium text-ink">{a.message}</div>{a.contentId?.contentId && <Link to={`/content/${a.contentId._id}`} className="text-meta font-mono font-medium text-ink-3 hover:text-primary-ink">{a.contentId.contentId}</Link>}</div><span className="shrink-0 text-meta text-ink-3">{ago(a.createdAt)}</span></li>)}</ul>;
+  return (
+    <ul className="divide-y divide-line">
+      {items.slice(0, limit || items.length).map((a) => (
+        <li key={a._id} className="flex animate-rise items-start justify-between gap-3 px-4 py-2.5 transition-colors duration-150 hover:bg-surface-2">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[13px] font-medium text-ink">{a.message}</span>
+              {(a.action?.includes('assign') || a.meta?.type === 'ASSIGNMENT') && (
+                <span className="rounded bg-indigo-500/10 px-1.5 py-0.2 text-[10px] font-bold uppercase tracking-wider text-indigo-400">
+                  Assign
+                </span>
+              )}
+            </div>
+            {a.contentId?.contentId && (
+              <Link to={`/content/${a.contentId._id}`} className="text-meta font-mono font-medium text-ink-3 hover:text-primary-ink">
+                {a.contentId.contentId}
+              </Link>
+            )}
+          </div>
+          <span className="shrink-0 text-meta text-ink-3">{ago(a.createdAt)}</span>
+        </li>
+      ))}
+    </ul>
+  );
 }

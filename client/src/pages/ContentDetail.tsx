@@ -120,7 +120,7 @@ export default function ContentDetail() {
                 </dl>
                 {!done && STAGE_TAB[c.stage] !== tab && <Button className="mt-4 w-full" variant="primary" onClick={() => setSp({ tab: STAGE_TAB[c.stage] }, { replace: true })}>Go to {label(c.stage)}<ArrowRight size={15} /></Button>}
               </Card>
-              <Card title="Team">
+              <Card title="Team" action={<button className="link text-[12px] font-semibold text-primary-ink" onClick={() => setSp({ tab: 'activity' }, { replace: true })}>Log History</button>}>
                 <ul className="space-y-2.5 text-[13px]">{([['Writer', c.assignedWriter], ['Shooter', c.assignedShooter], ['Editor', c.assignedEditor], ['SMM', c.assignedSMM], ['Reviewer', c.assignedReviewer]] as [string, any][]).map(([r, u]) => <li key={r} className="flex items-center justify-between gap-2"><span className="font-medium text-ink-2">{r}</span>{u ? <Link to={`/team/${u._id}`} className="flex items-center gap-1.5 font-semibold text-ink hover:text-primary-ink"><PresenceDot userId={u._id} />{u.name}</Link> : <span className="text-ink-3">Unassigned</span>}</li>)}</ul>
               </Card>
             </aside>
