@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
-import { Plus, CheckCircle2, Circle, Trash2, ArrowRight, MessageSquare, Repeat, Sparkles, Send } from 'lucide-react';
+import { Plus, CheckCircle2, Circle, Trash2, ArrowRight, MessageSquare, Repeat, Sparkles, Send, Printer } from 'lucide-react';
 import { get, post, patch, del, errMsg } from '@/lib/api';
 import { useAuth, useCan } from '@/store/auth';
 import { useUI, toast } from '@/store/ui';
@@ -134,7 +134,9 @@ export function Reports() {
   return (
     <>
       <PageHeader
+        back="/"
         title="Reports"
+        sub="Company-wide content metrics, turnaround speeds, stage distributions, and team workload."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -143,6 +145,13 @@ export function Reports() {
               onClick={() => setShowStatusModal(true)}
             >
               Status Report &amp; PDF
+            </Button>
+            <Button
+              variant="secondary"
+              icon={<Printer size={15} />}
+              onClick={() => window.print()}
+            >
+              Print / Save PDF
             </Button>
             <Select aria-label="Period" value={days} onChange={(e) => setDays(Number(e.target.value))} className="!w-auto">
               {[7, 30, 90, 365].map((d) => <option key={d} value={d}>Last {d} days</option>)}

@@ -644,6 +644,14 @@
     margin: 10mm;
   }
 
+  *,
+  *::before,
+  *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
   /* Reset body and html overflow so multi-page documents paginate without clipping */
   html,
   body,
@@ -655,9 +663,9 @@
     color: #0f172a !important;
   }
 
-  /* Hide app navigation chrome, auroras, and overlays */
+  /* Hide app navigation chrome, auroras, bottom bars, and interactive buttons */
   aside,
-  header,
+  header:not(.print-header),
   nav,
   .aurora-orb-1,
   .aurora-orb-2,
@@ -666,6 +674,31 @@
   .mobile-bottom-nav,
   .no-print {
     display: none !important;
+  }
+
+  /* Unclip modal containers for seamless multi-page print */
+  .fixed.inset-0.z-50 {
+    position: static !important;
+    display: block !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    padding: 0 !important;
+  }
+
+  div[role="dialog"] {
+    max-height: none !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: transparent !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  div[role="dialog"] > div.overflow-y-auto {
+    overflow: visible !important;
+    max-height: none !important;
+    padding: 0 !important;
   }
 
   /* Printable report container */
@@ -679,6 +712,10 @@
   table {
     border-collapse: collapse !important;
     width: 100% !important;
+  }
+
+  thead {
+    display: table-header-group !important;
   }
 
   tr {

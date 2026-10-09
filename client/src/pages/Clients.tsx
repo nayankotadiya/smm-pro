@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Plus, Pencil, Phone, Mail, Globe, Instagram, Facebook, MapPin, ExternalLink, MessageSquareText, Eye, EyeOff, Copy, Check, KeyRound, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Phone, Mail, Globe, Instagram, Facebook, MapPin, ExternalLink, MessageSquareText, Eye, EyeOff, Copy, Check, KeyRound, Trash2, Sparkles } from 'lucide-react';
 import { get, post, patch, del, errMsg } from '@/lib/api';
 import { useAuth, useCan } from '@/store/auth';
 import { toast } from '@/store/ui';
@@ -16,6 +16,7 @@ import { ChatThread } from '@/features/ChatThread';
 import { ClientTracking, useClientReviewActions } from '@/features/ContentTabs';
 import { CalendarView } from './Calendar';
 import { useTeam } from '@/hooks/useData';
+import { ClientReportModal } from '@/components/ClientReportModal';
 import { ago, fmtDate, fmtDateTime, label, roleLabel, toLocalInput } from '@/lib/format';
 
 export function Clients() {
@@ -722,8 +723,26 @@ function Communication({ clientId, reviews }: { clientId: string; reviews: any[]
 }
 function ClientActivity({ clientId }: { clientId: string }) { const q = useQuery({ queryKey: ['activity', 'client', clientId], queryFn: () => get<any[]>(`/clients/${clientId}/activity`) }); return <Card pad={false}><Async q={q}>{(d: any[]) => <ActivityFeed items={d} />}</Async></Card>; }
 function ClientReport({ clientId }: { clientId: string }) {
-  const can = useCan(); const q = useQuery({ queryKey: ['reports', clientId], queryFn: () => get('/reports', { clientId, days: 90 }), enabled: can('reports.view') });
+  const can = useCan();
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const q = useQuery({ queryKey: ['reports', clientId], queryFn: () => get('/reports', { clientId, days: 90 }), enabled: can('reports.view') });
   if (!can('reports.view')) return <Card><Empty title="Reports are available to managers" /></Card>;
-  return <Async q={q}>{(r: any) => <div className="grid grid-cols-2 gap-3 sm:grid-cols-4"><Stat label="Created (90 days)" value={r.created} /><Stat label="Published (90 days)" value={r.published} /><Stat label="In production" value={r.pending} /><Stat label="Revisions requested" value={r.revisionCount.total} /><Stat label="Client approval time" value={r.approvalTimeHours.client != null ? `${r.approvalTimeHours.client} h` : '—'} hint="Average, sent to decision" /><Stat label="Internal review time" value={r.approvalTimeHours.internal != null ? `${r.approvalTimeHours.internal} h` : '—'} /><Stat label="Blocked" value={r.blocked} tone="red" /><Stat label="Files uploaded" value={r.filesUploaded} /></div>}</Async>;
+  return (
+    <>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-[15px] font-bold text-ink">90-Day Production &amp; Approval Overview</h3>
+        <Button
+          variant="primary"
+          size="sm"
+          icon={<Sparkles size={14} className="text-emerald-300" />}
+          onClick={() => setShowStatusModal(true)}
+        >
+          Detailed Status Report &amp; PDF
+        </Button>
+      </div>
+      <Async q={q}>{(r: any) => <div className="grid grid-cols-2 gap-3 sm:grid-cols-4"><Stat label="Created (90 days)" value={r.created} /><Stat label="Published (90 days)" value={r.published} /><Stat label="In production" value={r.pending} /><Stat label="Revisions requested" value={r.revisionCount.total} /><Stat label="Client approval time" value={r.approvalTimeHours.client != null ? `${r.approvalTimeHours.client} h` : '—'} hint="Average, sent to decision" /><Stat label="Internal review time" value={r.approvalTimeHours.internal != null ? `${r.approvalTimeHours.internal} h` : '—'} /><Stat label="Blocked" value={r.blocked} tone="red" /><Stat label="Files uploaded" value={r.filesUploaded} /></div>}</Async>
+      <ClientReportModal open={showStatusModal} onClose={() => setShowStatusModal(false)} defaultClientId={clientId} />
+    </>
+  );
 }
 export { ago, useClientReviewActions };

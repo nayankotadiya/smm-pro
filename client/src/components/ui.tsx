@@ -1,7 +1,8 @@
 import { ReactNode, ButtonHTMLAttributes, useEffect, useLayoutEffect, useRef, useState, forwardRef, InputHTMLAttributes, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
 import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
-import { Loader2, X, AlertCircle, Inbox, RotateCw } from 'lucide-react';
+import { Loader2, X, AlertCircle, Inbox, RotateCw, ArrowLeft } from 'lucide-react';
 import { label as toLabel, tone, initials, ago, formatLastSeen } from '@/lib/format';
 import { useUI } from '@/store/ui';
 import { usePresence, useCountUp } from '@/hooks/useMotion';
@@ -101,17 +102,46 @@ export function Card({ title, action, children, className, pad = true }: { title
   );
 }
 
-export function PageHeader({ title, sub, actions }: { title: ReactNode; sub?: ReactNode; actions?: ReactNode }) {
+export function PageHeader({
+  title,
+  sub,
+  actions,
+  back,
+}: {
+  title: ReactNode;
+  sub?: ReactNode;
+  actions?: ReactNode;
+  back?: boolean | string | (() => void);
+}) {
+  const nav = useNavigate();
+  const handleBack = () => {
+    if (typeof back === 'function') back();
+    else if (typeof back === 'string') nav(back);
+    else if (window.history.length > 1) nav(-1);
+    else nav('/');
+  };
+
   return (
     <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2.5">
+          {back && (
+            <button
+              type="button"
+              onClick={handleBack}
+              className="mr-1 -ml-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-line/80 bg-surface-2/90 text-ink hover:bg-surface-3 hover:scale-105 active:scale-95 transition-all shadow-xs cursor-pointer no-print"
+              title="Go back"
+              aria-label="Go back"
+            >
+              <ArrowLeft size={18} />
+            </button>
+          )}
           <span className="h-5 w-1 shrink-0 rounded-full bg-gradient-to-b from-indigo-500 via-violet-500 to-fuchsia-500 shadow-[0_0_8px_rgba(139,92,246,0.7)]" aria-hidden />
           <h1 className="truncate text-[20px] sm:text-[24px] font-bold text-ink">{title}</h1>
         </div>
-        {sub && <div className="mt-1.5 pl-3.5 text-[13px] font-medium text-ink-2">{sub}</div>}
+        {sub && <div className={clsx('mt-1.5 text-[13px] font-medium text-ink-2', back ? 'pl-0 sm:pl-3.5' : 'pl-3.5')}>{sub}</div>}
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2 pt-0.5 sm:justify-end">{actions}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-2 pt-0.5 sm:justify-end no-print">{actions}</div>}
     </div>
   );
 }

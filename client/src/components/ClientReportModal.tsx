@@ -1,15 +1,27 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Copy, Printer, Check, Sparkles, Calendar, FileText, Camera, Scissors, Rocket, Hourglass, ExternalLink } from 'lucide-react';
+import { Copy, Printer, Check, Sparkles, Calendar, FileText, Camera, Scissors, Rocket, Hourglass, ExternalLink, ArrowLeft } from 'lucide-react';
 import { get } from '@/lib/api';
 import { Badge, Button, Modal, Select, Spinner } from '@/components/ui';
 import { toast } from '@/store/ui';
 
-export function ClientReportModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [clientId, setClientId] = useState<string>('');
+export function ClientReportModal({
+  open,
+  onClose,
+  defaultClientId,
+}: {
+  open: boolean;
+  onClose: () => void;
+  defaultClientId?: string;
+}) {
+  const [clientId, setClientId] = useState<string>(defaultClientId || '');
   const [period, setPeriod] = useState<string>('week');
   const [copied, setCopied] = useState(false);
-  const [tab, setTab] = useState<'whatsapp' | 'visual'>('whatsapp');
+  const [tab, setTab] = useState<'whatsapp' | 'visual'>('visual');
+
+  useEffect(() => {
+    if (defaultClientId) setClientId(defaultClientId);
+  }, [defaultClientId, open]);
 
   const clientsQ = useQuery({
     queryKey: ['clients-list'],
@@ -49,10 +61,19 @@ export function ClientReportModal({ open, onClose }: { open: boolean; onClose: (
       onClose={onClose}
       title={
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="mr-0.5 inline-flex h-8 w-8 items-center justify-center rounded-lg border border-line/70 bg-surface-2 text-ink-2 hover:bg-surface-3 hover:text-ink transition-colors cursor-pointer"
+            title="Go back"
+            aria-label="Go back"
+          >
+            <ArrowLeft size={16} />
+          </button>
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-400">
             <Sparkles size={16} />
           </span>
-          <span className="text-[15px] sm:text-[16px]">Daily &amp; Weekly Status Report</span>
+          <span className="text-[15px] sm:text-[16px] font-bold">Daily &amp; Weekly Status Report</span>
         </div>
       }
       wide
@@ -62,7 +83,7 @@ export function ClientReportModal({ open, onClose }: { open: boolean; onClose: (
             {rep?.stats?.total ?? 0} content pieces in this report period
           </div>
           <div className="flex items-center gap-2">
-            <Button onClick={onClose}>Close</Button>
+            <Button onClick={onClose} icon={<ArrowLeft size={15} />}>Back</Button>
             {tab === 'whatsapp' ? (
               <Button
                 variant="primary"
@@ -308,70 +329,237 @@ function escapeHtml(str: string) {
     .replace(/"/g, '&quot;');
 }
 
+function getStageBadgeStyle(stage: string) {
+  const s = String(stage || '').toUpperCase();
+  if (['IDEA', 'SCRIPT', 'INTERNAL_REVIEW'].includes(s)) {
+    return 'background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe;';
+  }
+  if (s === 'SHOOTING') {
+    return 'background: #fffbeb; color: #b45309; border: 1px solid #fde68a;';
+  }
+  if (['RAW_FOOTAGE', 'EDITING', 'SMM_REVIEW', 'FINAL_REVIEW'].includes(s)) {
+    return 'background: #faf5ff; color: #7e22ce; border: 1px solid #e9d5ff;';
+  }
+  if (s === 'SCHEDULE') {
+    return 'background: #ecfeff; color: #0e7490; border: 1px solid #a5f3fc;';
+  }
+  if (s === 'PUBLISHED') {
+    return 'background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0;';
+  }
+  return 'background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1;';
+}
+
 function printOrSavePdf(rep: any) {
   if (!rep) return;
-  const itemsHtml = (rep.items || []).map((item: any) => `
-    <tr>
-      <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0;">
-        <div style="font-weight: 600; color: #0f172a;">${escapeHtml(item.title)}</div>
-        <div style="font-family: monospace; font-size: 11px; color: #64748b;">${escapeHtml(item.code)}</div>
-      </td>
-      <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; color: #334155;">${escapeHtml(item.clientName || '—')}</td>
-      <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0;">
-        <span style="display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; background: #e0e7ff; color: #3730a3;">${escapeHtml(item.stage || '')}</span>
-      </td>
-      <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; color: #0f172a; font-weight: 500;">${escapeHtml(item.owner || '—')}</td>
-      <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; color: #334155; font-size: 11.5px;">
-        ${item.shoot ? `
-          <div><strong>${escapeHtml(item.shoot.shooterName || '')}</strong>${item.shoot.shootDate ? ` · ${new Date(item.shoot.shootDate).toLocaleDateString()}` : ''}</div>
-          ${item.shoot.remarks?.length ? `<div style="color: #b91c1c; font-size: 10.5px; margin-top: 2px; font-weight: 600;">⚠️ Remark: ${escapeHtml(item.shoot.remarks[item.shoot.remarks.length - 1].text || '')}</div>` : ''}
-        ` : '—'}
-      </td>
-    </tr>
-  `).join('');
+
+  const upcomingShoots = (rep.items || []).filter((i: any) => i.shoot && i.shoot.shootDate);
+  const shootsSection = upcomingShoots.length > 0 ? `
+    <div style="margin-bottom: 16px; border: 1px solid #fed7aa; background: #fff7ed; border-radius: 8px; padding: 10px 12px; page-break-inside: avoid; break-inside: avoid;">
+      <div style="font-size: 11.5px; font-weight: 700; color: #9a3412; margin-bottom: 6px;">🎥 Scheduled Shoots in this Period (${upcomingShoots.length})</div>
+      <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">
+        ${upcomingShoots.slice(0, 8).map((item: any) => {
+          const d = new Date(item.shoot.shootDate).toLocaleDateString([], { month: 'short', day: 'numeric', weekday: 'short' });
+          return `
+            <div style="font-size: 10.5px; color: #431407; padding: 4px 8px; border-left: 2px solid #f97316; background: rgba(255,255,255,0.7); border-radius: 4px;">
+              <div><strong>${escapeHtml(item.title)}</strong> <span style="font-family: monospace; font-size: 9.5px; color: #78350f;">[${escapeHtml(item.code)}]</span></div>
+              <div style="margin-top: 2px;">📅 ${d} ${item.shoot.shootTime ? `@ ${escapeHtml(item.shoot.shootTime)}` : ''} · Shooter: <strong>${escapeHtml(item.shoot.shooterName || 'Assigned')}</strong></div>
+              ${item.shoot.location ? `<div>📍 ${escapeHtml(item.shoot.location)}</div>` : ''}
+              ${item.shoot.remarks?.length ? `<div style="background: #fee2e2; border: 1px solid #fca5a5; color: #991b1b; font-size: 9.5px; padding: 2px 4px; border-radius: 3px; margin-top: 2px;">⚠️ Remark: ${escapeHtml(item.shoot.remarks[item.shoot.remarks.length - 1].text || '')}</div>` : ''}
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  ` : '';
+
+  const itemsHtml = (rep.items || []).map((item: any) => {
+    const badgeStyle = getStageBadgeStyle(item.stage);
+    return `
+      <tr>
+        <td style="padding: 7px 9px; border-bottom: 1px solid #e2e8f0; width: 30%;">
+          <div style="font-weight: 600; color: #0f172a; font-size: 11px;">${escapeHtml(item.title)}</div>
+          <div style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9.5px; color: #64748b; margin-top: 1px;">${escapeHtml(item.code)}</div>
+        </td>
+        <td style="padding: 7px 9px; border-bottom: 1px solid #e2e8f0; color: #334155; width: 18%; font-size: 10.5px;">${escapeHtml(item.clientName || 'General')}</td>
+        <td style="padding: 7px 9px; border-bottom: 1px solid #e2e8f0; width: 15%;">
+          <span style="display: inline-block; padding: 2px 7px; border-radius: 9999px; font-size: 9.5px; font-weight: 700; ${badgeStyle}">
+            ${escapeHtml(item.stage || '—')}
+          </span>
+        </td>
+        <td style="padding: 7px 9px; border-bottom: 1px solid #e2e8f0; color: #0f172a; font-weight: 500; width: 14%; font-size: 10.5px;">${escapeHtml(item.owner || 'Unassigned')}</td>
+        <td style="padding: 7px 9px; border-bottom: 1px solid #e2e8f0; color: #334155; width: 23%; font-size: 10.5px;">
+          ${item.shoot ? `
+            <div><strong>🎥 ${escapeHtml(item.shoot.shooterName || 'Shooter')}</strong>${item.shoot.shootDate ? ` · ${new Date(item.shoot.shootDate).toLocaleDateString([], { month: 'short', day: 'numeric' })}` : ''}</div>
+            ${item.shoot.remarks?.length ? `<div style="color: #b91c1c; font-size: 9.5px; margin-top: 2px; font-weight: 600; background: #fef2f2; border: 1px solid #fecaca; padding: 1px 4px; border-radius: 3px;">⚠️ ${escapeHtml(item.shoot.remarks[item.shoot.remarks.length - 1].text || '')}</div>` : ''}
+          ` : item.pendingApproval ? `
+            <div style="color: #be123c; font-weight: 600;">⏳ Waiting for Client (${escapeHtml(item.pendingApproval.version || 'Review')})</div>
+          ` : '—'}
+        </td>
+      </tr>
+    `;
+  }).join('');
 
   const html = `
     <!DOCTYPE html>
-    <html>
+    <html lang="en">
     <head>
       <meta charset="utf-8">
       <title>${escapeHtml(rep.client || 'Client')} - Status Report</title>
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <style>
-        @page { size: A4; margin: 10mm 10mm 10mm 10mm; }
-        * { box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0f172a; margin: 0; padding: 24px; font-size: 12px; line-height: 1.4; background: #ffffff; }
-        .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #2563eb; padding-bottom: 12px; margin-bottom: 16px; }
-        .title { font-size: 20px; font-weight: 800; color: #0f172a; }
-        .sub { font-size: 12px; color: #64748b; margin-top: 4px; }
-        .badge { background: #2563eb; color: #fff; padding: 4px 12px; border-radius: 9999px; font-weight: 700; font-size: 12px; }
-        .kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 18px; }
-        .kpi { border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px; text-align: center; background: #f8fafc; }
-        .kpi-val { font-size: 18px; font-weight: 700; color: #0f172a; }
-        .kpi-lbl { font-size: 10.5px; color: #64748b; font-weight: 600; text-transform: uppercase; margin-top: 2px; }
-        table { width: 100%; border-collapse: collapse; text-align: left; margin-bottom: 20px; }
-        th { background: #f1f5f9; padding: 8px 10px; border-bottom: 2px solid #cbd5e1; font-size: 11px; text-transform: uppercase; color: #475569; font-weight: 700; }
-        tr { page-break-inside: avoid; }
-        .footer { border-top: 1px solid #e2e8f0; padding-top: 10px; text-align: center; color: #94a3b8; font-size: 11px; }
+        @page {
+          size: A4 portrait;
+          margin: 10mm 10mm 10mm 10mm;
+        }
+        * {
+          box-sizing: border-box;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+          color-adjust: exact !important;
+        }
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+          color: #0f172a;
+          margin: 0;
+          padding: 12px 14px;
+          font-size: 11px;
+          line-height: 1.45;
+          background: #ffffff;
+        }
+        .header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          border-bottom: 2.5px solid #2563eb;
+          padding-bottom: 12px;
+          margin-bottom: 14px;
+        }
+        .title {
+          font-size: 19px;
+          font-weight: 800;
+          color: #0f172a;
+          letter-spacing: -0.2px;
+        }
+        .brand-sub {
+          font-size: 10px;
+          font-weight: 700;
+          color: #2563eb;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          margin-bottom: 2px;
+        }
+        .sub {
+          font-size: 11px;
+          color: #64748b;
+          margin-top: 3px;
+        }
+        .badge {
+          background: #eff6ff;
+          border: 1px solid #bfdbfe;
+          color: #1d4ed8;
+          padding: 5px 12px;
+          border-radius: 9999px;
+          font-weight: 700;
+          font-size: 11.5px;
+          white-space: nowrap;
+        }
+        .kpis {
+          display: grid;
+          grid-template-columns: repeat(6, 1fr);
+          gap: 7px;
+          margin-bottom: 14px;
+        }
+        .kpi {
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          padding: 7px 4px;
+          text-align: center;
+          background: #f8fafc;
+        }
+        .kpi.script { border-color: #bfdbfe; background: #eff6ff; }
+        .kpi.script .kpi-val { color: #1d4ed8; }
+        .kpi.shoot { border-color: #fde68a; background: #fffbeb; }
+        .kpi.shoot .kpi-val { color: #b45309; }
+        .kpi.edit { border-color: #e9d5ff; background: #faf5ff; }
+        .kpi.edit .kpi-val { color: #7e22ce; }
+        .kpi.review { border-color: #fecdd3; background: #fff1f2; }
+        .kpi.review .kpi-val { color: #be123c; }
+        .kpi.sched { border-color: #a5f3fc; background: #ecfeff; }
+        .kpi.sched .kpi-val { color: #0e7490; }
+        .kpi.pub { border-color: #a7f3d0; background: #ecfdf5; }
+        .kpi.pub .kpi-val { color: #047857; }
+
+        .kpi-val {
+          font-size: 18px;
+          font-weight: 800;
+          line-height: 1.1;
+        }
+        .kpi-lbl {
+          font-size: 9.5px;
+          color: #475569;
+          font-weight: 700;
+          text-transform: uppercase;
+          margin-top: 2px;
+          letter-spacing: 0.3px;
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          text-align: left;
+          margin-bottom: 16px;
+        }
+        thead {
+          display: table-header-group;
+        }
+        th {
+          background: #f1f5f9;
+          padding: 7px 9px;
+          border-bottom: 2px solid #cbd5e1;
+          font-size: 10px;
+          text-transform: uppercase;
+          color: #334155;
+          font-weight: 700;
+          letter-spacing: 0.4px;
+        }
+        tr {
+          page-break-inside: avoid;
+          break-inside: avoid;
+        }
+        tr:nth-child(even) td {
+          background-color: #f8fafc;
+        }
+        .footer {
+          border-top: 1px solid #e2e8f0;
+          padding-top: 8px;
+          margin-top: 16px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          color: #94a3b8;
+          font-size: 9.5px;
+        }
       </style>
     </head>
     <body>
       <div class="header">
         <div>
+          <div class="brand-sub">SMM PRO · PRODUCTION &amp; CLIENT REPORT</div>
           <div class="title">${escapeHtml(rep.client || 'All Clients')} — Status Report</div>
-          <div class="sub">Period: ${escapeHtml(rep.period?.toUpperCase() || '')} · Generated on ${new Date().toLocaleDateString([], { dateStyle: 'full' })}</div>
+          <div class="sub">Period: <strong>${escapeHtml(rep.period?.toUpperCase() || '')}</strong> · Generated on ${new Date().toLocaleDateString([], { dateStyle: 'full' })} at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
         </div>
         <div class="badge">${rep.stats?.total || 0} Total Items</div>
       </div>
 
       <div class="kpis">
-        <div class="kpi"><div class="kpi-val">${rep.stats?.inScript || 0}</div><div class="kpi-lbl">Scripting</div></div>
-        <div class="kpi"><div class="kpi-val">${rep.stats?.inShoot || 0}</div><div class="kpi-lbl">Shooting</div></div>
-        <div class="kpi"><div class="kpi-val">${rep.stats?.inEdit || 0}</div><div class="kpi-lbl">Editing</div></div>
-        <div class="kpi"><div class="kpi-val">${rep.stats?.pendingClient || 0}</div><div class="kpi-lbl">Client Review</div></div>
-        <div class="kpi"><div class="kpi-val">${rep.stats?.scheduled || 0}</div><div class="kpi-lbl">Scheduled</div></div>
-        <div class="kpi"><div class="kpi-val">${rep.stats?.published || 0}</div><div class="kpi-lbl">Published</div></div>
+        <div class="kpi script"><div class="kpi-val">${rep.stats?.inScript || 0}</div><div class="kpi-lbl">Scripting</div></div>
+        <div class="kpi shoot"><div class="kpi-val">${rep.stats?.inShoot || 0}</div><div class="kpi-lbl">Shooting</div></div>
+        <div class="kpi edit"><div class="kpi-val">${rep.stats?.inEdit || 0}</div><div class="kpi-lbl">Editing</div></div>
+        <div class="kpi review"><div class="kpi-val">${rep.stats?.pendingClient || 0}</div><div class="kpi-lbl">Client Review</div></div>
+        <div class="kpi sched"><div class="kpi-val">${rep.stats?.scheduled || 0}</div><div class="kpi-lbl">Scheduled</div></div>
+        <div class="kpi pub"><div class="kpi-val">${rep.stats?.published || 0}</div><div class="kpi-lbl">Published</div></div>
       </div>
+
+      ${shootsSection}
 
       <table>
         <thead>
@@ -384,18 +572,56 @@ function printOrSavePdf(rep: any) {
           </tr>
         </thead>
         <tbody>
-          ${itemsHtml}
+          ${itemsHtml || '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #94a3b8;">No content items found for this report period.</td></tr>'}
         </tbody>
       </table>
 
       <div class="footer">
-        Generated by SMM Pro Management System · Confidential
+        <div>BULLETPROOF SCRIPT MANAGEMENT SYSTEM · CONFIDENTIAL</div>
+        <div>Page automatically formatted for A4 PDF export</div>
       </div>
     </body>
     </html>
   `;
 
-  // 1. Try opening popup window with clean document ready for print/Save as PDF
+  // 1. Primary: Print cleanly via hidden iframe (bypasses popup blockers and isolates print styles)
+  try {
+    let iframe = document.getElementById('report-print-frame') as HTMLIFrameElement;
+    if (iframe) iframe.remove();
+
+    iframe = document.createElement('iframe');
+    iframe.id = 'report-print-frame';
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    iframe.style.opacity = '0';
+    iframe.style.pointerEvents = 'none';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document || iframe.contentDocument;
+    if (doc) {
+      doc.open();
+      doc.write(html);
+      doc.close();
+
+      setTimeout(() => {
+        try {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+        } catch {
+          window.print();
+        }
+      }, 350);
+      return;
+    }
+  } catch (err) {
+    console.error('Iframe print failed', err);
+  }
+
+  // 2. Secondary fallback: popup window
   try {
     const printWindow = window.open('', '_blank');
     if (printWindow) {
@@ -409,13 +635,6 @@ function printOrSavePdf(rep: any) {
     }
   } catch {}
 
-  // 2. Fallback: print directly in current window
-  const prevOverflow = document.body.style.overflow;
-  document.body.style.overflow = 'visible';
-  setTimeout(() => {
-    window.print();
-    setTimeout(() => {
-      document.body.style.overflow = prevOverflow;
-    }, 1000);
-  }, 100);
+  // 3. Last fallback: current window print
+  window.print();
 }
