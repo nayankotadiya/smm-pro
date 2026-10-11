@@ -1,15 +1,17 @@
 import { Link, NavLink } from 'react-router-dom';
 import { LogOut, Sparkles, Home, CheckSquare, Calendar, FolderArchive, PlusCircle, MessageSquare } from 'lucide-react';
 import { useAuth } from '@/store/auth';
+import { useNotifications } from '@/store/notifications';
 import clsx from 'clsx';
 
 export function Navbar() {
   const { user, brand, logout } = useAuth();
+  const { pendingApprovals, unreadChat } = useNotifications();
 
   const navLinks = [
     { label: 'Dashboard', to: '/', icon: Home, end: true },
-    { label: 'Reviews', to: '/approvals', icon: CheckSquare },
-    { label: 'Chat', to: '/chat', icon: MessageSquare },
+    { label: 'Reviews', to: '/approvals', icon: CheckSquare, badge: pendingApprovals > 0 ? pendingApprovals : null, badgeVariant: 'amber' },
+    { label: 'Chat', to: '/chat', icon: MessageSquare, badge: unreadChat > 0 ? unreadChat : null, badgeVariant: 'blue' },
     { label: 'Calendar', to: '/calendar', icon: Calendar },
     { label: 'Assets', to: '/assets', icon: FolderArchive },
     { label: 'New Brief', to: '/briefs', icon: PlusCircle },
@@ -50,7 +52,7 @@ export function Navbar() {
                 end={item.end}
                 className={({ isActive }) =>
                   clsx(
-                    'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all select-none',
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all select-none relative',
                     isActive
                       ? 'bg-surface text-primary shadow-xs font-bold'
                       : 'text-ink-2 hover:text-ink hover:bg-surface/50'
@@ -59,6 +61,18 @@ export function Navbar() {
               >
                 <Icon size={14} />
                 <span>{item.label}</span>
+                {item.badge != null && (
+                  <span
+                    className={clsx(
+                      'ml-0.5 px-1.5 py-0.2 text-[10px] font-black rounded-full shrink-0',
+                      item.badgeVariant === 'amber'
+                        ? 'bg-amber-500 text-white animate-pulse'
+                        : 'bg-primary text-white'
+                    )}
+                  >
+                    {item.badge}
+                  </span>
+                )}
               </NavLink>
             );
           })}

@@ -14,6 +14,7 @@ import { ensureClientRoom, broadcastMessage } from '../services/chat';
 import { aisensyConfigured, sendTemplate } from '../integrations/aisensy';
 import { sendEmail } from '../integrations/email';
 import { logger } from '../utils/logger';
+import { notify, managerIds } from '../services/notify';
 
 const r = Router();
 
@@ -682,6 +683,23 @@ r.post('/briefs', ah(async (req, res) => {
     ...b,
   });
 
+  try {
+    const client = await Client.findById(clientId);
+    const assignedTeam = client?.assignedTeam || [];
+    const targets = assignedTeam.length ? assignedTeam : await managerIds();
+    await notify(targets, {
+      type: 'client.brief',
+      category: 'WORKFLOW',
+      title: `New Brief from ${client?.businessName || client?.name || 'Client'}`,
+      message: b.title,
+      link: `/clients/${clientId}?tab=briefs`,
+      entityType: 'client',
+      entityId: String(clientId),
+    });
+  } catch (err: any) {
+    logger.warn('[portal brief notification]', err?.message);
+  }
+
   res.status(201).json(brief);
 }));
 
@@ -787,21 +805,18 @@ r.post('/chat/messages', ah(async (req, res) => {
   // Broadcast to agency socket room & participants
   await broadcastMessage(room, msg);
 
-  // Create notifications for assigned agency members
+  // Create notifications and emit live socket alerts for assigned agency members
   try {
     const notifTargets = room.participants || [];
-    for (const uid of notifTargets) {
-      await Notification.create({
-        userId: uid,
-        type: 'CLIENT_MESSAGE',
-        category: 'CHAT',
-        title: `Message from ${senderName} (${client.name})`,
-        message: message.trim().slice(0, 100),
-        link: `/clients/${client._id}?tab=chat`,
-        entityType: 'client',
-        entityId: String(client._id),
-      });
-    }
+    await notify(notifTargets, {
+      type: 'client.message',
+      category: 'CHAT',
+      title: `Message from ${senderName} (${client.name})`,
+      message: message.trim().slice(0, 100),
+      link: `/clients/${client._id}?tab=chat`,
+      entityType: 'client',
+      entityId: String(client._id),
+    });
   } catch (err: any) {
     logger.warn('[portal chat notification]', err?.message);
   }

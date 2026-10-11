@@ -2,6 +2,7 @@ import { Server as HttpServer } from 'http';
 import { Server } from 'socket.io';
 import { env, isAllowedOrigin } from '../config/env';
 import { userFromToken } from '../middleware/auth';
+import { userFromPortalToken } from '../middleware/clientAuth';
 import { setIO } from '../services/realtime';
 import { Presence, ChatRoom, Message, Content } from '../models';
 import { visibilityFilter } from '../services/content';
@@ -36,10 +37,51 @@ export function initSockets(server: HttpServer) {
   });
   setIO(io);
   io.use(async (socket, next) => {
-    try { (socket.data as any).user = await userFromToken(String(socket.handshake.auth?.token || '')); next(); }
-    catch { next(new Error('unauthorized')); }
+    const token = String(socket.handshake.auth?.token || '');
+    if (!token) return next(new Error('unauthorized'));
+    try {
+      (socket.data as any).user = await userFromToken(token);
+      (socket.data as any).authType = 'AGENCY';
+      return next();
+    } catch {
+      try {
+        (socket.data as any).portalUser = await userFromPortalToken(token);
+        (socket.data as any).authType = 'PORTAL';
+        return next();
+      } catch {
+        return next(new Error('unauthorized'));
+      }
+    }
   });
-  io.on('connection', (socket) => {
+
+  io.on('connection', async (socket) => {
+    const authType = (socket.data as any).authType;
+
+    // Portal client connection
+    if (authType === 'PORTAL') {
+      const pUser = (socket.data as any).portalUser;
+      const uid = pUser._id;
+      const cid = pUser.clientId;
+      socket.join(`portalUser:${uid}`);
+      socket.join(`client:${cid}`);
+
+      try {
+        const room = await ChatRoom.findOne({ type: 'CLIENT', clientId: cid });
+        if (room) socket.join(`chat:${room._id}`);
+      } catch (err) {
+        console.warn('[socket portal join room]', err);
+      }
+
+      const on = (ev: string, fn: (...a: any[]) => any) => socket.on(ev, (...a: any[]) => { Promise.resolve().then(() => fn(...a)).catch((e) => console.error(`[socket portal] ${ev}`, e?.message || e)); });
+      on('chat:join', async (roomId: string, ack?: (ok: boolean) => void) => {
+        const ok = !!(await ChatRoom.exists({ _id: roomId, clientId: cid }));
+        if (ok) socket.join(`chat:${roomId}`);
+        ack?.(ok);
+      });
+      on('chat:leave', (roomId: string) => socket.leave(`chat:${roomId}`));
+      return;
+    }
+
     const user = (socket.data as any).user;
     const uid = user._id;
     socket.join(`user:${uid}`); socket.join('org');

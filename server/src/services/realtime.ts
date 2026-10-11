@@ -6,3 +6,5 @@ export const emitToUser = (userId: any, event: string, data: any) => io?.to(`use
 export const emitToUsers = (ids: any[], event: string, data: any) => { const u = [...new Set(ids.filter(Boolean).map(String))]; if (u.length) io?.to(u.map((i) => `user:${i}`)).emit(event, data); };
 export const emitToRoom = (room: string, event: string, data: any) => io?.to(room).emit(event, data);
 export const emitOrg = (event: string, data: any) => io?.to('org').emit(event, data);
+export const emitToClient = (clientId: any, event: string, data: any) => io?.to(`client:${String(clientId)}`).emit(event, data);
+export const emitToPortalUser = (userId: any, event: string, data: any) => io?.to(`portalUser:${String(userId)}`).emit(event, data);

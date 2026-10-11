@@ -3,7 +3,9 @@ import { Routes, Route, Navigate, useLocation, useNavigate, useSearchParams } fr
 import { useAuth } from '@/store/auth';
 import { Navbar } from '@/components/Navbar';
 import { BottomNav } from '@/components/BottomNav';
+import { ToastsContainer } from '@/components/Toasts';
 import { Spinner } from '@/components/Ui';
+import { useNotifications } from '@/store/notifications';
 import { api } from '@/lib/api';
 
 const AuthPage = lazy(() => import('@/pages/Auth').then((m) => ({ default: m.AuthPage })));
@@ -43,6 +45,19 @@ function MagicVerify() {
 function ProtectedLayout() {
   const { user, ready } = useAuth();
   const location = useLocation();
+  const { initRealtime, clearUnreadChat } = useNotifications();
+
+  useEffect(() => {
+    if (user) {
+      initRealtime();
+    }
+  }, [user, initRealtime]);
+
+  useEffect(() => {
+    if (location.pathname.startsWith('/chat')) {
+      clearUnreadChat();
+    }
+  }, [location.pathname, clearUnreadChat]);
 
   if (!ready) {
     return (
@@ -58,6 +73,7 @@ function ProtectedLayout() {
 
   return (
     <div className="min-h-screen bg-canvas flex flex-col">
+      <ToastsContainer />
       <Navbar />
       <main className="flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 pt-6 pb-24 md:pb-12">
         <Suspense fallback={<div className="flex justify-center py-16"><Spinner /></div>}>

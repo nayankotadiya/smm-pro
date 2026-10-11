@@ -1,5 +1,5 @@
 import { ChatRoom, Message, Content, Client, ChatActionMessage } from '../models';
-import { emitToRoom, emitToUsers } from './realtime';
+import { emitToRoom, emitToUsers, emitToClient } from './realtime';
 import { managerIds } from './notify';
 
 export async function ensureContentRoom(content: any) {
@@ -29,6 +29,9 @@ export async function broadcastMessage(room: any, msg: any) {
     .populate('system.mediaId')
     .lean();
   emitToRoom(`chat:${room._id}`, 'message:new', populated);
+  if (room.clientId) {
+    emitToClient(room.clientId, 'message:new', populated);
+  }
   emitToUsers(room.participants, 'chat:room_activity', { roomId: String(room._id), preview: room.lastMessagePreview, at: room.lastMessageAt, senderId: msg.senderId ? String(msg.senderId) : null });
   return populated;
 }
