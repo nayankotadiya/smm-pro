@@ -26,6 +26,8 @@ services:
         sync: false # Paste your free MongoDB Atlas connection string here
       - key: APP_URL
         sync: false # e.g. https://your-frontend.vercel.app
+      - key: CLIENT_PORTAL_URL
+        sync: false # e.g. https://your-client-portal.vercel.app
       - key: PUBLIC_APPROVAL_URL
         sync: false # e.g. https://your-frontend.vercel.app/approval
       - key: JWT_SECRET

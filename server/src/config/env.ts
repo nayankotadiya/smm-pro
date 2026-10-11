@@ -14,7 +14,11 @@ export const env = {
   isProd: process.env.NODE_ENV === 'production',
   port: Number(process.env.PORT || 4000),
   appUrl: process.env.APP_URL || 'http://localhost:5173',
-  appOrigins: (process.env.APP_URL || 'http://localhost:5173').split(',').map((x) => x.trim().replace(/\/$/, '')),
+  clientPortalUrl: process.env.CLIENT_PORTAL_URL || 'http://localhost:5174',
+  appOrigins: [
+    ...(process.env.APP_URL || 'http://localhost:5173').split(','),
+    ...(process.env.CLIENT_PORTAL_URL || 'http://localhost:5174').split(','),
+  ].map((x) => x.trim().replace(/\/$/, '')).filter(Boolean),
   cookieSameSite: (process.env.COOKIE_SAMESITE || 'lax') as 'lax' | 'none' | 'strict',
   cookieDomain: process.env.COOKIE_DOMAIN || undefined,
   publicApprovalUrl: (() => {

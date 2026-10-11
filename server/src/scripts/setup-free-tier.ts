@@ -34,6 +34,7 @@ PORT=4000
 # Set this to your frontend URL (e.g. on Vercel: https://smm-pro.vercel.app)
 # If using custom domain, put that here (e.g. https://app.yourdomain.com)
 APP_URL=https://YOUR-FRONTEND.vercel.app
+CLIENT_PORTAL_URL=https://YOUR-CLIENT-PORTAL.vercel.app
 PUBLIC_APPROVAL_URL=https://YOUR-FRONTEND.vercel.app/approval
 
 # Set to 'none' if frontend & backend are on different domains (e.g. vercel.app and onrender.com)
