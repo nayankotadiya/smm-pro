@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MessageSquare, Mail, Lock, ArrowRight, CheckCircle2, AlertCircle } from 'lucide-react';
+import { MessageSquare, Mail, Lock, ArrowRight, CheckCircle2, AlertCircle, ShieldCheck } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/store/auth';
 import { Button, Input, Card } from '@/components/Ui';
@@ -107,18 +107,56 @@ export function AuthPage() {
   const showOtp = portalConfig.authMethod === 'OTP_ONLY' || (isHybrid && mode === 'otp');
 
   return (
-    <div className="min-h-screen bg-canvas flex flex-col justify-center items-center px-4 py-12">
-      <div className="w-full max-w-md">
-        {/* Brand Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-primary to-primary-hover text-white shadow-lift mb-4 font-extrabold text-2xl tracking-wider">
-            SP
+    <div className="min-h-screen bg-canvas relative flex flex-col justify-center items-center px-4 py-12 overflow-hidden">
+      {/* Background ambient lighting */}
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-red-600/10 rounded-full blur-3xl pointer-events-none -z-10" />
+      <div className="absolute bottom-1/4 left-1/2 -translate-x-1/2 w-80 h-80 bg-primary/10 rounded-full blur-3xl pointer-events-none -z-10" />
+
+      <div className="w-full max-w-md relative z-10">
+        {/* Bulletproof Brands Header */}
+        <div className="text-center mb-7">
+          <div className="relative inline-flex items-center justify-center mb-3.5 group">
+            <div
+              className="absolute inset-0 rounded-full bg-red-600/30 blur-xl pointer-events-none -z-10 animate-pulse"
+              style={{ animationDuration: '3.5s' }}
+            />
+            <img
+              src="/brand/bulletproof-shield.png"
+              alt="Bulletproof Brands Shield"
+              className="h-20 w-20 sm:h-22 sm:w-22 object-contain drop-shadow-[0_8px_20px_rgba(239,68,68,0.45)] transition-transform duration-300 group-hover:scale-105"
+              loading="eager"
+            />
           </div>
-          <h1 className="text-2xl font-extrabold text-ink tracking-tight">Client Portal</h1>
-          <p className="text-sm text-ink-2 mt-1">Review scripts, sign off videos & track your content deliverables</p>
+
+          <div className="flex flex-col items-center select-none">
+            <span className="text-[13px] font-black uppercase tracking-[0.25em] text-red-500 font-sans">
+              BULLETPROOF BRANDS
+            </span>
+            <span className="text-[9px] font-extrabold uppercase tracking-[0.32em] text-ink-3 mt-0.5">
+              IMPOSSIBLE TO IGNORE
+            </span>
+
+            <div className="mt-3.5 flex items-center gap-2">
+              <span className="h-4 w-1 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]" />
+              <h1 className="text-2xl font-extrabold text-ink tracking-tight">
+                Client Portal
+              </h1>
+            </div>
+            <p className="text-xs text-ink-2 mt-1.5 max-w-xs">
+              Review scripts, sign off video edits & track real-time content deliverables
+            </p>
+          </div>
         </div>
 
-        <Card className="p-6 sm:p-8 shadow-lift border-line">
+        <Card className="p-6 sm:p-8 shadow-2xl border-line/80 bg-surface/90 backdrop-blur-xl rounded-2xl relative">
+          {/* Security Banner */}
+          <div className="flex items-center justify-between text-[11px] text-ink-3 pb-3 mb-5 border-b border-line/60">
+            <span className="flex items-center gap-1 font-semibold text-ink-2">
+              <ShieldCheck size={14} className="text-emerald-500" /> Secure Client Session
+            </span>
+            <span className="font-semibold text-emerald-400">256-Bit Encrypted</span>
+          </div>
+
           {/* Hybrid Mode Switcher (Visible only if Super Admin enabled both methods) */}
           {isHybrid && (
             <div className="flex rounded-xl bg-surface-2 p-1 mb-6 border border-line">
@@ -255,10 +293,15 @@ export function AuthPage() {
           )}
 
           {/* Client Footer */}
-          <div className="mt-6 pt-5 border-t border-line/60 text-center">
+          <div className="mt-6 pt-5 border-t border-line/60 text-center space-y-2.5">
             <p className="text-xs text-ink-3">
               Need access or a password reset? Contact your agency account manager.
             </p>
+            <div className="flex items-center justify-center gap-1.5 text-[10.5px] text-ink-3">
+              <span>Powered by</span>
+              <span className="font-extrabold text-ink tracking-wider">BULLETPROOF BRANDS</span>
+              <span className="text-red-500 font-bold">· SMM PRO</span>
+            </div>
           </div>
         </Card>
       </div>

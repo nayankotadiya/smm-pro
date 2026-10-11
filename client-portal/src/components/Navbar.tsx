@@ -9,19 +9,23 @@ export function Navbar() {
     <header className="sticky top-0 z-40 w-full border-b border-line bg-surface/85 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4 sm:px-6">
         <Link to="/" className="flex items-center gap-3 group">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary-hover text-white shadow-sm font-bold text-lg tracking-wider">
-            {brand?.name ? brand.name.slice(0, 2).toUpperCase() : 'SP'}
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface-2 border border-line p-1 shadow-sm">
+            <img
+              src="/brand/bulletproof-shield.png"
+              alt="Bulletproof Brands"
+              className="h-full w-full object-contain"
+            />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <span className="font-bold text-ink text-base tracking-tight group-hover:text-primary transition-colors">
-                {brand?.businessName || brand?.name || 'Client Portal'}
+                {brand?.businessName || brand?.name || 'Bulletproof Brands'}
               </span>
               <span className="hidden sm:inline-flex items-center gap-1 rounded-md bg-primary-soft px-2 py-0.5 text-[10px] font-bold text-primary-ink uppercase tracking-wider">
-                <Sparkles size={10} /> Brand Portal
+                <Sparkles size={10} /> Client Portal
               </span>
             </div>
-            <p className="text-xs text-ink-3">Managed by SMM PRO</p>
+            <p className="text-xs text-ink-3">BULLETPROOF SCRIPT MANAGEMENT SYSTEM</p>
           </div>
         </Link>
 
