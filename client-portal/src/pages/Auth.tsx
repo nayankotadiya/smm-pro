@@ -136,12 +136,9 @@ export function AuthPage() {
               IMPOSSIBLE TO IGNORE
             </span>
 
-            <div className="mt-3.5 flex items-center gap-2">
-              <span className="h-4 w-1 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]" />
-              <h1 className="text-2xl font-extrabold text-ink tracking-tight">
-                Client Portal
-              </h1>
-            </div>
+            <h1 className="text-2xl font-extrabold text-ink tracking-tight mt-3.5">
+              Client Portal
+            </h1>
             <p className="text-xs text-ink-2 mt-1.5 max-w-xs">
               Review scripts, sign off video edits & track real-time content deliverables
             </p>
