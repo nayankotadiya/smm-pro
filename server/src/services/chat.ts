@@ -21,7 +21,13 @@ export async function ensureClientRoom(client: any) {
 }
 
 export async function broadcastMessage(room: any, msg: any) {
-  const populated = await Message.findById(msg._id).populate('senderId', 'name role').populate('attachments').populate({ path: 'replyTo', select: 'message senderId', populate: { path: 'senderId', select: 'name' } }).populate('system.mediaId').lean();
+  const populated = await Message.findById(msg._id)
+    .populate('senderId', 'name role')
+    .populate('senderClientUserId', 'name email')
+    .populate('attachments')
+    .populate({ path: 'replyTo', select: 'message senderId', populate: { path: 'senderId', select: 'name' } })
+    .populate('system.mediaId')
+    .lean();
   emitToRoom(`chat:${room._id}`, 'message:new', populated);
   emitToUsers(room.participants, 'chat:room_activity', { roomId: String(room._id), preview: room.lastMessagePreview, at: room.lastMessageAt, senderId: msg.senderId ? String(msg.senderId) : null });
   return populated;

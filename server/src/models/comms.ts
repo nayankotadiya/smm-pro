@@ -18,6 +18,9 @@ export const ChatRoom = model('ChatRoom', roomSchema);
 const messageSchema = new Schema({
   roomId: { type: ObjectId, ref: 'ChatRoom', required: true, index: true },
   senderId: { type: ObjectId, ref: 'User' },
+  senderClientUserId: { type: ObjectId, ref: 'ClientUser' },
+  senderType: { type: String, enum: ['AGENCY', 'CLIENT'], default: 'AGENCY' },
+  senderName: String,
   kind: { type: String, enum: ['USER', 'SYSTEM'], default: 'USER' },
   message: String,
   system: { event: String, title: String, lines: [String], mediaId: { type: ObjectId, ref: 'Media' }, link: String },

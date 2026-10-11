@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, ArrowRight, CheckCircle2, Clock, Calendar, Sparkles, User, Video, FileText, ChevronRight, Send } from 'lucide-react';
+import { AlertCircle, ArrowRight, CheckCircle2, Clock, Calendar, Sparkles, User, Video, FileText, ChevronRight, Send, MessageSquare } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/store/auth';
 import { PendingApproval, DashboardStats, UpcomingPost } from '@/lib/types';
@@ -205,9 +205,9 @@ export function DashboardPage() {
               <div className="text-[11px] text-ink-2">{accountManager.title}</div>
             </div>
           </div>
-          <Link to="/briefs">
-            <Button variant="secondary" size="sm">
-              Contact Agency
+          <Link to="/chat">
+            <Button variant="primary" size="sm" icon={<MessageSquare size={14} />}>
+              Chat with Lead
             </Button>
           </Link>
         </Card>

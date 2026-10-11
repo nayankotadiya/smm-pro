@@ -5,11 +5,12 @@ import rateLimit from 'express-rate-limit';
 import { ah } from '../utils/async';
 import { AppError, badRequest, notFound, forbidden } from '../utils/errors';
 import { randomToken, sha256 } from '../utils/crypto';
-import { ClientUser, Client, Content, Approval, ScriptVersion, Media, ClientBrief, Feedback, PortalConfig } from '../models';
+import { ClientUser, Client, Content, Approval, ScriptVersion, Media, ClientBrief, Feedback, PortalConfig, ChatRoom, Message, Notification } from '../models';
 import { requirePortalAuth, signPortalAccess } from '../middleware/clientAuth';
 import { requireAuth } from '../middleware/auth';
 import { clientDecision } from '../services/approvals';
 import { pipeMedia } from '../services/media';
+import { ensureClientRoom, broadcastMessage } from '../services/chat';
 import { aisensyConfigured, sendTemplate } from '../integrations/aisensy';
 import { sendEmail } from '../integrations/email';
 import { logger } from '../utils/logger';
@@ -682,6 +683,138 @@ r.post('/briefs', ah(async (req, res) => {
   });
 
   res.status(201).json(brief);
+}));
+
+/** Client Portal Chat: Get or Ensure Room & Team Info */
+r.get('/chat', ah(async (req, res) => {
+  const clientId = req.portalUser!.clientId;
+  const client = await Client.findById(clientId)
+    .populate('defaultTeam.smm defaultTeam.writer defaultTeam.shooter defaultTeam.editor defaultTeam.reviewer', 'name email role')
+    .lean();
+  if (!client) throw notFound('Client');
+
+  let room = await ChatRoom.findOne({ type: 'CLIENT', clientId });
+  if (!room) {
+    room = await ensureClientRoom(client);
+  }
+
+  // Get assigned team details
+  const team: Array<{ name: string; role: string; email?: string }> = [];
+  if (client.defaultTeam) {
+    const roles: Array<keyof typeof client.defaultTeam> = ['smm', 'writer', 'editor', 'shooter', 'reviewer'];
+    for (const rKey of roles) {
+      const member = (client.defaultTeam as any)[rKey];
+      if (member && member.name) {
+        team.push({ name: member.name, role: member.role || rKey.toUpperCase(), email: member.email });
+      }
+    }
+  }
+
+  res.json({
+    roomId: String(room._id),
+    roomName: room.name || `${client.businessName || client.name} Workspace`,
+    lastMessageAt: room.lastMessageAt,
+    lastMessagePreview: room.lastMessagePreview,
+    team,
+  });
+}));
+
+/** Client Portal Chat: Get Messages */
+r.get('/chat/messages', ah(async (req, res) => {
+  const clientId = req.portalUser!.clientId;
+  const room = await ChatRoom.findOne({ type: 'CLIENT', clientId });
+  if (!room) return res.json([]);
+
+  const messages = await Message.find({ roomId: room._id, deletedAt: null })
+    .sort({ createdAt: 1 })
+    .limit(100)
+    .populate('senderId', 'name role')
+    .populate('senderClientUserId', 'name email')
+    .populate('attachments', 'fileName url mimeType size')
+    .lean();
+
+  const currentUserId = String(req.portalUser!._id);
+
+  const formatted = messages.map((m: any) => {
+    const isClient = m.senderType === 'CLIENT' || !!m.senderClientUserId;
+    const isMe = isClient && String(m.senderClientUserId?._id || m.senderClientUserId) === currentUserId;
+
+    return {
+      _id: String(m._id),
+      message: m.message,
+      kind: m.kind,
+      senderType: m.senderType || (isClient ? 'CLIENT' : 'AGENCY'),
+      senderName: isClient ? (m.senderName || m.senderClientUserId?.name || 'Client') : (m.senderId?.name || m.senderName || 'Agency Team'),
+      senderRole: isClient ? 'Client' : (m.senderId?.role || 'Agency Lead'),
+      isMe,
+      isClient,
+      createdAt: m.createdAt,
+      attachments: m.attachments,
+    };
+  });
+
+  res.json(formatted);
+}));
+
+/** Client Portal Chat: Send Message */
+r.post('/chat/messages', ah(async (req, res) => {
+  const clientId = req.portalUser!.clientId;
+  const client = await Client.findById(clientId);
+  if (!client) throw notFound('Client');
+
+  let room = await ChatRoom.findOne({ type: 'CLIENT', clientId });
+  if (!room) room = await ensureClientRoom(client);
+
+  const { message } = z.object({
+    message: z.string().min(1).max(3000),
+  }).parse(req.body);
+
+  const senderName = req.portalUser!.name || client.contactPerson || client.name;
+
+  const msg = await Message.create({
+    roomId: room._id,
+    senderType: 'CLIENT',
+    senderClientUserId: req.portalUser!._id,
+    senderName,
+    kind: 'USER',
+    message: message.trim(),
+  });
+
+  room.lastMessageAt = new Date();
+  room.lastMessagePreview = `${senderName}: ${message.trim().slice(0, 60)}`;
+  await room.save();
+
+  // Broadcast to agency socket room & participants
+  await broadcastMessage(room, msg);
+
+  // Create notifications for assigned agency members
+  try {
+    const notifTargets = room.participants || [];
+    for (const uid of notifTargets) {
+      await Notification.create({
+        userId: uid,
+        type: 'CLIENT_MESSAGE',
+        category: 'CHAT',
+        title: `Message from ${senderName} (${client.name})`,
+        message: message.trim().slice(0, 100),
+        link: `/clients/${client._id}?tab=chat`,
+        entityType: 'client',
+        entityId: String(client._id),
+      });
+    }
+  } catch (err: any) {
+    logger.warn('[portal chat notification]', err?.message);
+  }
+
+  res.status(201).json({
+    _id: String(msg._id),
+    message: msg.message,
+    senderType: 'CLIENT',
+    senderName,
+    isMe: true,
+    isClient: true,
+    createdAt: msg.createdAt,
+  });
 }));
 
 export default r;

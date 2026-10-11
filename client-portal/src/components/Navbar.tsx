@@ -1,5 +1,5 @@
 import { Link, NavLink } from 'react-router-dom';
-import { LogOut, Sparkles, Home, CheckSquare, Calendar, FolderArchive, PlusCircle } from 'lucide-react';
+import { LogOut, Sparkles, Home, CheckSquare, Calendar, FolderArchive, PlusCircle, MessageSquare } from 'lucide-react';
 import { useAuth } from '@/store/auth';
 import clsx from 'clsx';
 
@@ -9,6 +9,7 @@ export function Navbar() {
   const navLinks = [
     { label: 'Dashboard', to: '/', icon: Home, end: true },
     { label: 'Reviews', to: '/approvals', icon: CheckSquare },
+    { label: 'Chat', to: '/chat', icon: MessageSquare },
     { label: 'Calendar', to: '/calendar', icon: Calendar },
     { label: 'Assets', to: '/assets', icon: FolderArchive },
     { label: 'New Brief', to: '/briefs', icon: PlusCircle },

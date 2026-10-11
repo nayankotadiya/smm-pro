@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { Home, CheckSquare, Calendar, FolderArchive, PlusCircle } from 'lucide-react';
+import { Home, CheckSquare, Calendar, FolderArchive, PlusCircle, MessageSquare } from 'lucide-react';
 import clsx from 'clsx';
 
 export function BottomNav() {
@@ -13,6 +13,7 @@ export function BottomNav() {
   const items = [
     { label: 'Home', to: '/', icon: Home, end: true },
     { label: 'Reviews', to: '/approvals', icon: CheckSquare },
+    { label: 'Chat', to: '/chat', icon: MessageSquare },
     { label: 'Calendar', to: '/calendar', icon: Calendar },
     { label: 'Assets', to: '/assets', icon: FolderArchive },
     { label: 'New Brief', to: '/briefs', icon: PlusCircle },

@@ -12,6 +12,7 @@ const ApprovalsPage = lazy(() => import('@/pages/Approvals').then((m) => ({ defa
 const ContentCalendarPage = lazy(() => import('@/pages/ContentCalendar').then((m) => ({ default: m.ContentCalendarPage })));
 const BrandAssetsPage = lazy(() => import('@/pages/BrandAssets').then((m) => ({ default: m.BrandAssetsPage })));
 const BriefsPage = lazy(() => import('@/pages/Briefs').then((m) => ({ default: m.BriefsPage })));
+const ChatPage = lazy(() => import('@/pages/Chat').then((m) => ({ default: m.ChatPage })));
 
 function MagicVerify() {
   const [searchParams] = useSearchParams();
@@ -67,6 +68,7 @@ function ProtectedLayout() {
             <Route path="calendar" element={<ContentCalendarPage />} />
             <Route path="assets" element={<BrandAssetsPage />} />
             <Route path="briefs" element={<BriefsPage />} />
+            <Route path="chat" element={<ChatPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>
