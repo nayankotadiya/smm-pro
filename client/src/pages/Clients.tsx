@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Plus, Pencil, Phone, Mail, Globe, Instagram, Facebook, MapPin, ExternalLink, MessageSquareText, Eye, EyeOff, Copy, Check, KeyRound, Trash2, Sparkles } from 'lucide-react';
+import { Plus, Pencil, Phone, Mail, Globe, Instagram, Facebook, MapPin, ExternalLink, MessageSquareText, Eye, EyeOff, Copy, Check, KeyRound, Trash2, Sparkles, Shield } from 'lucide-react';
 import { get, post, patch, del, errMsg } from '@/lib/api';
 import { useAuth, useCan } from '@/store/auth';
 import { toast } from '@/store/ui';
@@ -204,7 +204,9 @@ const schema = z.object({
   brandTone: z.string().optional(),
   brandColors: z.string().optional(),
   fonts: z.string().optional(),
-  brandGuidelines: z.string().optional()
+  brandGuidelines: z.string().optional(),
+  portalEmail: z.string().email('Enter a valid email').or(z.literal('')).optional(),
+  portalPassword: z.string().min(6, 'Password must be at least 6 characters').or(z.literal('')).optional(),
 });
 const TEXT: [string, string][] = [['description', 'Description'], ['products', 'Products'], ['services', 'Services'], ['usp', 'USP'], ['targetAudience', 'Target audience'], ['goals', 'Goals'], ['expectations', 'Expectations'], ['marketTrend', 'Market trend'], ['sellingPurpose', 'Selling purpose'], ['brandTone', 'Brand tone'], ['brandGuidelines', 'Brand guidelines']];
 
@@ -212,12 +214,16 @@ function ClientForm({ open, onClose, client }: { open: boolean; onClose: () => v
   const qc = useQueryClient(); const nav = useNavigate(); const team = useTeam(); const [step, setStep] = useState<'basic' | 'brand' | 'team'>('basic');
   const [showIgPass, setShowIgPass] = useState(false);
   const [showFbPass, setShowFbPass] = useState(false);
+  const [portalEnabled, setPortalEnabled] = useState(true);
+  const [showPortalPass, setShowPortalPass] = useState(false);
   const f = useForm<any>({ resolver: zodResolver(schema) }); const [assigned, setAssigned] = useState<string[]>([]); const [dt, setDt] = useState<any>({});
   useEffect(() => {
     if (!open) return;
     setStep('basic');
     setShowIgPass(false);
     setShowFbPass(false);
+    setShowPortalPass(false);
+    setPortalEnabled(!client);
     f.reset(client ? { ...client, brandColors: (client.brandColors || []).join(', '), fonts: (client.fonts || []).join(', '), status: client.status } : { status: 'ACTIVE' });
     setAssigned((client?.assignedTeam || []).map((u: any) => u._id || u));
     setDt(Object.fromEntries(Object.entries(client?.defaultTeam || {}).map(([k, v]: any) => [k, v?._id || v || ''])));
@@ -229,6 +235,17 @@ function ClientForm({ open, onClose, client }: { open: boolean; onClose: () => v
       b.fonts = String(v.fonts || '').split(',').map((s) => s.trim()).filter(Boolean);
       b.assignedTeam = assigned;
       b.defaultTeam = Object.fromEntries(['writer', 'shooter', 'editor', 'smm', 'reviewer'].map((k) => [k, dt[k] || null]));
+      if (!client && portalEnabled) {
+        const pEmail = (v.portalEmail || v.email || '').trim().toLowerCase();
+        if (pEmail && v.portalPassword) {
+          b.portalUser = {
+            email: pEmail,
+            password: v.portalPassword,
+            name: v.contactPerson || v.name,
+            phone: v.phone || undefined,
+          };
+        }
+      }
       return client ? patch(`/clients/${client._id}`, b) : post('/clients', b);
     },
     onSuccess: (c) => { toast.success(client ? 'Client updated.' : 'Client created. Drive folders are being set up.'); qc.invalidateQueries({ queryKey: ['clients'] }); onClose(); if (!client) nav(`/clients/${c._id}`); },
@@ -256,6 +273,72 @@ function ClientForm({ open, onClose, client }: { open: boolean; onClose: () => v
           </Field>
           {I('youtube', 'YouTube channel', { placeholder: '@channel' })}
         </div>
+
+        {/* Client Portal Credentials block (for initial client onboarding) */}
+        {!client && (
+          <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 space-y-3.5 backdrop-blur-md">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-[13.5px] font-bold text-ink">
+                <Shield size={16} className="text-primary" />
+                <span>Client Portal Access Credentials</span>
+                <Badge t="blue">Direct Provision</Badge>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-semibold text-ink">
+                <input
+                  type="checkbox"
+                  checked={portalEnabled}
+                  onChange={(ev) => setPortalEnabled(ev.target.checked)}
+                  className="rounded border-line text-primary focus:ring-primary h-4 w-4"
+                />
+                <span>Enable Portal Access</span>
+              </label>
+            </div>
+
+            <p className="text-[12px] text-ink-3">
+              Directly sets the client's login ID (email) and password so they can immediately sign in to their dedicated Brand Portal with Email &amp; Password.
+            </p>
+
+            {portalEnabled && (
+              <div className="grid gap-3 sm:grid-cols-2 pt-1 border-t border-line/50">
+                <Field
+                  label="Portal Login Email (ID)"
+                  hint="Client will use this email to sign in. Defaults to contact email if left blank."
+                  error={e.portalEmail?.message}
+                >
+                  <Input
+                    type="email"
+                    placeholder={f.watch('email') || 'client@brand.com'}
+                    {...f.register('portalEmail')}
+                  />
+                </Field>
+
+                <Field
+                  label="Portal Password"
+                  hint="Set client password (minimum 6 characters)."
+                  error={e.portalPassword?.message}
+                >
+                  <div className="relative">
+                    <Input
+                      type={showPortalPass ? 'text' : 'password'}
+                      placeholder="e.g. Client123!"
+                      {...f.register('portalPassword')}
+                      className="pr-10 font-mono text-[13px]"
+                    />
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      onClick={() => setShowPortalPass((v) => !v)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-3 hover:text-ink p-1 transition-colors"
+                      title={showPortalPass ? 'Hide password' : 'Show password'}
+                    >
+                      {showPortalPass ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
+                </Field>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Social media credentials block */}
         <div className="rounded-2xl border border-line/80 bg-surface-2/40 p-4 space-y-3.5 backdrop-blur-md">

@@ -14,12 +14,20 @@ import { emitOrg } from '../services/realtime';
 
 const r = Router();
 const str = z.string().max(4000).optional().nullable();
+const portalUserSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(6).optional().nullable(),
+  name: z.string().optional().nullable(),
+  phone: z.string().optional().nullable(),
+}).optional().nullable();
+
 const clientBody = z.object({
   name: z.string().min(1).max(120), businessName: str, contactPerson: str, phone: str, email: str, website: str, instagram: str, instagramPassword: str, facebook: str, facebookPassword: str, youtube: str,
   location: str, category: str, description: str, products: str, services: str, usp: str, targetAudience: str, goals: str, expectations: str, marketTrend: str,
   sellingPurpose: str, brandTone: str, brandColors: z.array(z.string().max(30)).max(12).optional(), fonts: z.array(z.string().max(60)).max(8).optional(), brandGuidelines: str,
   assignedTeam: z.array(z.string()).optional(), status: z.enum(['ACTIVE', 'PAUSED', 'ONBOARDING', 'ARCHIVED']).optional(),
   defaultTeam: z.object({ writer: z.string().nullable().optional(), shooter: z.string().nullable().optional(), editor: z.string().nullable().optional(), smm: z.string().nullable().optional(), reviewer: z.string().nullable().optional() }).optional(),
+  portalUser: portalUserSchema,
 });
 
 r.get('/', requirePerm('clients.read'), ah(async (req, res) => {
@@ -35,7 +43,30 @@ r.get('/', requirePerm('clients.read'), ah(async (req, res) => {
 export const escapeRx = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 r.post('/', requirePerm('clients.write'), ah(async (req, res) => {
-  const c = await Client.create({ ...clientBody.parse(req.body), createdBy: req.user!._id });
+  const parsed = clientBody.parse(req.body);
+  const { portalUser, ...cData } = parsed;
+  const c = await Client.create({ ...cData, createdBy: req.user!._id });
+
+  if (portalUser && portalUser.email) {
+    try {
+      const pEmail = portalUser.email.trim().toLowerCase();
+      const existing = await ClientUser.findOne({ email: pEmail });
+      if (!existing) {
+        await ClientUser.create({
+          clientId: c._id,
+          name: portalUser.name?.trim() || c.contactPerson || c.name,
+          email: pEmail,
+          phone: portalUser.phone?.trim() || c.phone || undefined,
+          passwordHash: portalUser.password ? await bcrypt.hash(portalUser.password, 12) : undefined,
+          role: 'CLIENT_ADMIN',
+          active: true,
+        });
+      }
+    } catch (err: any) {
+      console.warn('[client portal user creation]', err.message);
+    }
+  }
+
   await ensureClientRoom(c);
   ensureClientFolders(c).catch((e) => console.warn('[drive] client folders', e.message));
   await logActivity({ actorId: req.user!._id, action: 'client.created', message: `${req.user!.name} added client ${c.name}`, entityType: 'client', entityId: c._id, clientId: c._id, ip: req.ip });
