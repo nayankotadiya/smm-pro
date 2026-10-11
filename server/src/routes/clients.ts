@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { Client, Campaign, CommunicationLog, Content, Approval, Media, ActivityLog, Script, ScriptVersion, Shoot, Task, ChatRoom, Message, ScheduledPost, Reminder, ClientUser } from '../models';
+import { Client, Campaign, CommunicationLog, Content, Approval, Media, ActivityLog, Script, ScriptVersion, Shoot, Task, ChatRoom, Message, ScheduledPost, Reminder, ClientUser, ClientBrief } from '../models';
 import bcrypt from 'bcryptjs';
 import { ah } from '../utils/async';
 import { notFound, AppError } from '../utils/errors';
@@ -50,18 +50,22 @@ r.post('/', requirePerm('clients.write'), ah(async (req, res) => {
   if (portalUser && portalUser.email) {
     try {
       const pEmail = portalUser.email.trim().toLowerCase();
-      const existing = await ClientUser.findOne({ email: pEmail });
-      if (!existing) {
-        await ClientUser.create({
-          clientId: c._id,
-          name: portalUser.name?.trim() || c.contactPerson || c.name,
-          email: pEmail,
-          phone: portalUser.phone?.trim() || c.phone || undefined,
-          passwordHash: portalUser.password ? await bcrypt.hash(portalUser.password, 12) : undefined,
-          role: 'CLIENT_ADMIN',
-          active: true,
-        });
-      }
+      const passwordHash = portalUser.password ? await bcrypt.hash(portalUser.password, 12) : undefined;
+      const updateData: any = {
+        clientId: c._id,
+        name: portalUser.name?.trim() || c.contactPerson || c.name,
+        email: pEmail,
+        phone: portalUser.phone?.trim() || c.phone || undefined,
+        role: 'CLIENT_ADMIN',
+        active: true,
+      };
+      if (passwordHash) updateData.passwordHash = passwordHash;
+
+      await ClientUser.findOneAndUpdate(
+        { email: pEmail },
+        { $set: updateData },
+        { upsert: true, new: true }
+      );
     } catch (err: any) {
       console.warn('[client portal user creation]', err.message);
     }
@@ -109,6 +113,8 @@ r.delete('/:id', requirePerm('clients.delete'), ah(async (req, res) => {
       Media.deleteMany({ clientId: c._id }),
       Reminder.deleteMany({ clientId: c._id }),
       ActivityLog.deleteMany({ clientId: c._id }),
+      ClientUser.deleteMany({ clientId: c._id }),
+      ClientBrief.deleteMany({ clientId: c._id }),
     ]);
     await logActivity({ actorId: req.user!._id, action: 'client.deleted', message: `${req.user!.name} permanently deleted client ${c.name}`, entityType: 'client', entityId: c._id, clientId: c._id, ip: req.ip });
     emitOrg('client:updated', { _id: String(c._id), deleted: true });

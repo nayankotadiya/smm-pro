@@ -1,8 +1,15 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { Home, CheckSquare, Calendar, FolderArchive, PlusCircle } from 'lucide-react';
 import clsx from 'clsx';
 
 export function BottomNav() {
+  const location = useLocation();
+
+  // On approval detail view, hide bottom nav to make room for sticky decision action bar
+  if (location.pathname.startsWith('/approvals/') && location.pathname !== '/approvals') {
+    return null;
+  }
+
   const items = [
     { label: 'Home', to: '/', icon: Home, end: true },
     { label: 'Reviews', to: '/approvals', icon: CheckSquare },
@@ -12,7 +19,7 @@ export function BottomNav() {
   ];
 
   return (
-    <nav className="fixed bottom-0 inset-x-0 z-40 border-t border-line bg-surface/95 backdrop-blur-lg safe-b">
+    <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-line bg-surface/95 backdrop-blur-lg safe-b">
       <div className="mx-auto flex h-16 max-w-lg items-center justify-around px-2">
         {items.map((item) => {
           const Icon = item.icon;

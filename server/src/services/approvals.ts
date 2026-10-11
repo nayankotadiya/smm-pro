@@ -11,7 +11,7 @@ import { closeTasks } from './tasks';
 import { emitOrg } from './realtime';
 import { aisensyConfigured, sendTemplate } from '../integrations/aisensy';
 
-const OPEN = ['SENT', 'DELIVERED', 'OPENED', 'WAITING_FOR_CLIENT'];
+const OPEN = ['PENDING', 'SENT', 'DELIVERED', 'OPENED', 'WAITING_FOR_CLIENT'];
 const push = (a: any, status: string, extra: any = {}) => a.history.push({ status, at: new Date(), ...extra });
 const broadcast = (a: any) => emitOrg('approval:updated', { _id: String(a._id), contentId: String(a.contentId), status: a.status, type: a.type });
 const fmtTime = (d: Date) => d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: process.env.APP_TIMEZONE || 'Asia/Kolkata' });

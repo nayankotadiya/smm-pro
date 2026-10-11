@@ -37,6 +37,8 @@ import {
   DriveFile,
   DriveFolder,
   WebhookEvent,
+  ClientUser,
+  ClientBrief,
 } from './models';
 import { DEFAULT_ROLE_PERMISSIONS, ROLES } from './config/constants';
 import { seedAutomations } from './services/automation';
@@ -90,6 +92,8 @@ export async function purgeDemoData() {
     Feedback.deleteMany({}),
     Campaign.deleteMany({}),
     Client.deleteMany({}),
+    ClientUser.deleteMany({}),
+    ClientBrief.deleteMany({}),
     CommunicationLog.deleteMany({}),
     Review.deleteMany({}),
     Notification.deleteMany({}),

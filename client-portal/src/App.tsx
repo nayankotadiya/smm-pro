@@ -58,7 +58,7 @@ function ProtectedLayout() {
   return (
     <div className="min-h-screen bg-canvas flex flex-col">
       <Navbar />
-      <main className="flex-1 w-full max-w-4xl mx-auto px-4 sm:px-6 pt-6">
+      <main className="flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 pt-6 pb-24 md:pb-12">
         <Suspense fallback={<div className="flex justify-center py-16"><Spinner /></div>}>
           <Routes>
             <Route index element={<DashboardPage />} />
