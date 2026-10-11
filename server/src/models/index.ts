@@ -4,3 +4,4 @@ export * from './content';
 export * from './work';
 export * from './media';
 export * from './comms';
+export * from './portal';

@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { Client, Campaign, CommunicationLog, Content, Approval, Media, ActivityLog, Script, ScriptVersion, Shoot, Task, ChatRoom, Message, ScheduledPost, Reminder } from '../models';
+import { Client, Campaign, CommunicationLog, Content, Approval, Media, ActivityLog, Script, ScriptVersion, Shoot, Task, ChatRoom, Message, ScheduledPost, Reminder, ClientUser } from '../models';
+import bcrypt from 'bcryptjs';
 import { ah } from '../utils/async';
-import { notFound } from '../utils/errors';
+import { notFound, AppError } from '../utils/errors';
 import { requirePerm } from '../middleware/auth';
 import { logActivity } from '../services/activity';
 import { ensureClientRoom } from '../services/chat';
@@ -131,4 +132,84 @@ r.post('/communication/:commId/resolve', requirePerm('approvals.send', 'approval
   const b = z.object({ action: z.enum(['MARK_APPROVED', 'CREATE_CHANGE_REQUEST']), approvalId: z.string(), comment: z.string().max(2000).optional() }).parse(req.body);
   res.json(await resolveFromCommunication(req.user!, req.params.commId, b.action, b.approvalId, b.comment));
 }));
+
+// ----- Client Portal User Accounts -----
+r.get('/:id/portal-users', requirePerm('clients.read'), ah(async (req, res) => {
+  const users = await ClientUser.find({ clientId: req.params.id })
+    .select('name email phone role active lastLoginAt createdAt')
+    .sort({ createdAt: -1 })
+    .lean();
+  res.json(users);
+}));
+
+r.post('/:id/portal-users', requirePerm('clients.write'), ah(async (req, res) => {
+  const b = z.object({
+    name: z.string().min(1).max(80),
+    email: z.string().email(),
+    phone: z.string().max(25).optional().nullable(),
+    password: z.string().min(6).max(100).optional().nullable(),
+    role: z.enum(['CLIENT_ADMIN', 'CLIENT_MEMBER']).default('CLIENT_ADMIN'),
+  }).parse(req.body);
+
+  const existing = await ClientUser.findOne({ email: b.email.toLowerCase() });
+  if (existing) throw new AppError(400, 'A client user with this email address already exists', 'EMAIL_TAKEN');
+
+  const user = await ClientUser.create({
+    clientId: req.params.id,
+    name: b.name.trim(),
+    email: b.email.toLowerCase().trim(),
+    phone: b.phone?.trim() || undefined,
+    passwordHash: b.password ? await bcrypt.hash(b.password, 12) : undefined,
+    role: b.role,
+    active: true,
+  });
+
+  await logActivity({
+    actorId: req.user!._id,
+    action: 'client.portal_user_created',
+    message: `${req.user!.name} created client portal access for ${b.name} (${b.email})`,
+    entityType: 'client',
+    entityId: req.params.id,
+    clientId: req.params.id,
+  });
+
+  res.status(201).json(user);
+}));
+
+r.patch('/:id/portal-users/:userId/password', requirePerm('clients.write'), ah(async (req, res) => {
+  const { password } = z.object({ password: z.string().min(6).max(100) }).parse(req.body);
+  const user = await ClientUser.findOne({ _id: req.params.userId, clientId: req.params.id });
+  if (!user) throw notFound('Client user');
+
+  user.passwordHash = await bcrypt.hash(password, 12);
+  await user.save();
+
+  await logActivity({
+    actorId: req.user!._id,
+    action: 'client.portal_user_password_reset',
+    message: `${req.user!.name} reset portal password for ${user.name}`,
+    entityType: 'client',
+    entityId: req.params.id,
+    clientId: req.params.id,
+  });
+
+  res.json({ ok: true });
+}));
+
+r.delete('/:id/portal-users/:userId', requirePerm('clients.write'), ah(async (req, res) => {
+  const user = await ClientUser.findOneAndDelete({ _id: req.params.userId, clientId: req.params.id });
+  if (!user) throw notFound('Client user');
+
+  await logActivity({
+    actorId: req.user!._id,
+    action: 'client.portal_user_deleted',
+    message: `${req.user!.name} deleted portal access for ${user.name}`,
+    entityType: 'client',
+    entityId: req.params.id,
+    clientId: req.params.id,
+  });
+
+  res.json({ ok: true });
+}));
+
 export default r;

@@ -332,7 +332,7 @@ function ClientForm({ open, onClose, client }: { open: boolean; onClose: () => v
   );
 }
 
-type CTab = 'overview' | 'campaigns' | 'content' | 'scripts' | 'reviews' | 'communication' | 'files' | 'calendar' | 'reports' | 'activity' | 'chat';
+type CTab = 'overview' | 'campaigns' | 'content' | 'scripts' | 'reviews' | 'communication' | 'files' | 'calendar' | 'reports' | 'activity' | 'chat' | 'portal';
 export function ClientDetail() {
   const { id } = useParams(); const [sp, setSp] = useSearchParams(); const can = useCan(); const tab = (sp.get('tab') as CTab) || 'overview';
   const { user } = useAuth(); const qc = useQueryClient();
@@ -366,7 +366,7 @@ export function ClientDetail() {
               </Button>
             )}
           </>} />
-        <Tabs value={tab} onChange={(k) => setSp(k === 'overview' ? {} : { tab: k }, { replace: true })} tabs={[{ key: 'overview', label: 'Overview' }, { key: 'campaigns', label: 'Campaigns' }, { key: 'content', label: 'Content', count: ov.data?.stats.active }, { key: 'scripts', label: 'Scripts' }, { key: 'reviews', label: 'Client Reviews', count: ov.data?.stats.approvalsOpen }, { key: 'communication', label: 'Communication' }, { key: 'files', label: 'Files' }, { key: 'calendar', label: 'Calendar' }, { key: 'reports', label: 'Reports' }, { key: 'activity', label: 'Activity' }, { key: 'chat', label: 'Internal Chat' }]} />
+        <Tabs value={tab} onChange={(k) => setSp(k === 'overview' ? {} : { tab: k }, { replace: true })} tabs={[{ key: 'overview', label: 'Overview' }, { key: 'campaigns', label: 'Campaigns' }, { key: 'content', label: 'Content', count: ov.data?.stats.active }, { key: 'scripts', label: 'Scripts' }, { key: 'reviews', label: 'Client Reviews', count: ov.data?.stats.approvalsOpen }, { key: 'communication', label: 'Communication' }, { key: 'files', label: 'Files' }, { key: 'calendar', label: 'Calendar' }, { key: 'reports', label: 'Reports' }, { key: 'activity', label: 'Activity' }, { key: 'chat', label: 'Internal Chat' }, { key: 'portal', label: 'Client Portal' }]} />
         {tab === 'overview' && <div className="grid gap-5 lg:grid-cols-3">
           <div className="space-y-5 lg:col-span-2">
             {ov.data && <div className="grid grid-cols-2 gap-3 sm:grid-cols-4"><Stat label="Active content" value={ov.data.stats.active} /><Stat label="Published" value={ov.data.stats.published} /><Stat label="Open client reviews" value={ov.data.stats.approvalsOpen} tone="amber" /><Stat label="Overdue" value={ov.data.stats.overdue} tone="red" /></div>}
@@ -443,6 +443,7 @@ export function ClientDetail() {
         {tab === 'reports' && <ClientReport clientId={c._id} />}
         {tab === 'activity' && <ClientActivity clientId={c._id} />}
         {tab === 'chat' && (ov.data ? <ChatThread roomId={ov.data.roomId} embedded /> : null)}
+        {tab === 'portal' && <ClientPortalUsersTab clientId={c._id} clientName={c.name} />}
         <ClientForm open={edit} onClose={() => setEdit(false)} client={c} />
         <ContentFormModal open={newContent} onClose={() => setNewContent(false)} clientId={c._id} />
         <Modal
@@ -745,4 +746,151 @@ function ClientReport({ clientId }: { clientId: string }) {
     </>
   );
 }
+
+function ClientPortalUsersTab({ clientId, clientName }: { clientId: string; clientName: string }) {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ['portal-users', clientId], queryFn: () => get<any[]>(`/clients/${clientId}/portal-users`) });
+  const cfg = useQuery({ queryKey: ['portal-config'], queryFn: () => get<any>('/portal/config') });
+
+  const [addOpen, setAddOpen] = useState(false);
+  const [resetOpen, setResetOpen] = useState<any>(null);
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [role, setRole] = useState<'CLIENT_ADMIN' | 'CLIENT_MEMBER'>('CLIENT_ADMIN');
+
+  const portalUrl = cfg.data?.portalUrl || 'http://localhost:5174';
+
+  const addMut = useMutation({
+    mutationFn: () => post(`/clients/${clientId}/portal-users`, { name, email, phone: phone || undefined, password: password || undefined, role }),
+    onSuccess: () => {
+      toast.success('Client portal user created successfully!');
+      setAddOpen(false);
+      setName(''); setEmail(''); setPhone(''); setPassword('');
+      qc.invalidateQueries({ queryKey: ['portal-users', clientId] });
+    },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+
+  const resetMut = useMutation({
+    mutationFn: (newPass: string) => patch(`/clients/${clientId}/portal-users/${resetOpen._id}/password`, { password: newPass }),
+    onSuccess: () => {
+      toast.success('Password updated successfully!');
+      setResetOpen(null);
+      setPassword('');
+      qc.invalidateQueries({ queryKey: ['portal-users', clientId] });
+    },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+
+  const delMut = useMutation({
+    mutationFn: (userId: string) => del(`/clients/${clientId}/portal-users/${userId}`),
+    onSuccess: () => {
+      toast.success('Client portal access revoked.');
+      qc.invalidateQueries({ queryKey: ['portal-users', clientId] });
+    },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+
+  const copyLink = () => {
+    navigator.clipboard.writeText(portalUrl);
+    toast.success('Client portal URL copied to clipboard!');
+  };
+
+  return (
+    <div className="space-y-5">
+      <Card
+        title={
+          <div className="flex flex-wrap items-center justify-between gap-2 w-full">
+            <span className="flex items-center gap-2">
+              <span>Client Portal Access</span>
+              <Badge t="blue">{clientName}</Badge>
+            </span>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="ghost" icon={<Copy size={13} />} onClick={copyLink}>
+                Copy Portal URL
+              </Button>
+              <Button size="sm" variant="primary" icon={<Plus size={14} />} onClick={() => setAddOpen(true)}>
+                Add Client User
+              </Button>
+            </div>
+          </div>
+        }
+      >
+        <p className="text-[13px] text-ink-2 mb-4 leading-relaxed">
+          Users created here can sign in to the dedicated <b>SMM PRO Client App</b> at <a href={portalUrl} target="_blank" rel="noopener noreferrer" className="link font-semibold">{portalUrl}</a> to review scripts, approve video cuts, track deliverables, and submit content briefs.
+        </p>
+
+        <Async q={q}>
+          {(users: any[]) => {
+            if (!users?.length) {
+              return (
+                <Empty
+                  title="No client portal accounts yet"
+                  hint="Create a client user account to grant them login access to their brand portal."
+                  action={<Button variant="primary" size="sm" onClick={() => setAddOpen(true)}>Create First Client Account</Button>}
+                />
+              );
+            }
+            return (
+              <div className="overflow-x-auto">
+                <Table
+                  head={['Name', 'Email', 'WhatsApp Phone', 'Role', 'Last Sign-in', 'Actions']}
+                >
+                  {users.map((u) => (
+                    <tr key={u._id} className="hover:bg-surface-2/40">
+                      <td className="td font-semibold text-ink">{u.name}</td>
+                      <td className="td text-ink-2 font-mono text-xs">{u.email}</td>
+                      <td className="td text-ink-2">{u.phone || '—'}</td>
+                      <td className="td">
+                        <Badge t={u.role === 'CLIENT_ADMIN' ? 'blue' : 'neutral'}>{u.role === 'CLIENT_ADMIN' ? 'Client Admin' : 'Client Member'}</Badge>
+                      </td>
+                      <td className="td text-ink-3 text-xs">{u.lastLoginAt ? ago(u.lastLoginAt) : 'Never'}</td>
+                      <td className="td">
+                        <div className="flex items-center gap-1.5">
+                          <Button size="sm" variant="ghost" icon={<KeyRound size={13} />} onClick={() => { setResetOpen(u); setPassword(''); }} title="Set or reset password">
+                            Password
+                          </Button>
+                          <Button size="sm" variant="danger" icon={<Trash2 size={13} />} onClick={() => { if (confirm(`Revoke portal access for ${u.name}?`)) delMut.mutate(u._id); }} title="Revoke access">
+                            Revoke
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </Table>
+              </div>
+            );
+          }}
+        </Async>
+      </Card>
+
+      {/* Add Client User Modal */}
+      <Modal open={addOpen} onClose={() => setAddOpen(false)} title={`Create Portal Access for ${clientName}`} footer={<><Button onClick={() => setAddOpen(false)}>Cancel</Button><Button variant="primary" disabled={!name.trim() || !email.trim()} loading={addMut.isPending} onClick={() => addMut.mutate()}>Create Account</Button></>}>
+        <div className="space-y-3">
+          <Field label="Contact Name"><Input placeholder="e.g. Pooja Sharma" value={name} onChange={(e) => setName(e.target.value)} autoFocus /></Field>
+          <Field label="Email Address"><Input type="email" placeholder="pooja@brand.com" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
+          <Field label="WhatsApp Number" hint="Optional, formatted with country code (e.g. +919876543210)"><Input placeholder="+91 98765 43210" value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
+          <Field label="Password" hint="At least 6 characters. The client can use this to sign in."><Input type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
+          <Field label="Role">
+            <Select value={role} onChange={(e) => setRole(e.target.value as any)}>
+              <option value="CLIENT_ADMIN">Client Admin (Can sign off, request changes, submit briefs)</option>
+              <option value="CLIENT_MEMBER">Client Member (Viewer &amp; commenter)</option>
+            </Select>
+          </Field>
+        </div>
+      </Modal>
+
+      {/* Reset Password Modal */}
+      <Modal open={!!resetOpen} onClose={() => setResetOpen(null)} title={`Reset Password for ${resetOpen?.name}`} footer={<><Button onClick={() => setResetOpen(null)}>Cancel</Button><Button variant="primary" disabled={!password || password.length < 6} loading={resetMut.isPending} onClick={() => resetMut.mutate(password)}>Save New Password</Button></>}>
+        <div className="space-y-3">
+          <p className="text-xs text-ink-2">Enter a new password for <b>{resetOpen?.email}</b>:</p>
+          <Field label="New Password" hint="At least 6 characters"><Input type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus /></Field>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
 export { ago, useClientReviewActions };

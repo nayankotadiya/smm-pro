@@ -18,6 +18,7 @@ import scripts from './routes/scripts';
 import tasks from './routes/tasks';
 import approvals from './routes/approvals';
 import publicRoutes from './routes/public';
+import portal from './routes/portal';
 import media from './routes/media';
 import drive from './routes/drive';
 import chat from './routes/chat';
@@ -83,6 +84,7 @@ export function createApp() {
 
   app.use('/api/auth', auth);
   app.use('/api/public', publicRoutes);
+  app.use('/api/portal', portal);
   app.use('/api/media', media); // handles its own auth (signed stream links)
   // Public push config (VAPID key) so devices/service workers can subscribe without 401 race condition
   app.get('/api/push/config', (_req, res) => {

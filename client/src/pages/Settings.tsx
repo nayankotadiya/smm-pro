@@ -907,12 +907,196 @@ function Integrations() {
         <Card title={<span className="flex items-center gap-2">Web Push<S ok={d.push.configured} /></span>}><p className="text-[13px] text-ink-2">{d.push.configured ? 'VAPID keys are set. Each person enables push per device under Notifications.' : 'Generate keys with "npx web-push generate-vapid-keys" and set VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY.'}</p></Card>
         <Card title={<span className="flex items-center gap-2">Email<S ok={d.email.configured} /></span>}><p className="text-[13px] text-ink-2">{d.email.configured ? 'SMTP is configured for password resets and email notifications.' : 'Set EMAIL_HOST, EMAIL_USER and EMAIL_PASSWORD. Without email, admins reset passwords from the Users tab.'}</p></Card>
         <Card title={<span className="flex items-center gap-2">Background jobs<S ok text={d.redis.scheduler} /></span>}><p className="text-[13px] text-ink-2">{d.redis.configured ? 'Reminders, deadline checks and approval follow-ups run on BullMQ with Redis.' : 'Running on the in-process scheduler. This is reliable for a single API instance; set REDIS_URL before running more than one.'}</p></Card>
+        <ClientPortalConfigCard />
         <AiContentStudioCard />
         <PurgeDemoDataCard />
         <SystemHealthCard />
         <p className="text-meta text-ink-3 lg:col-span-2">Credentials are stored only as server environment variables and are never shown here.</p>
       </div>
     )}</Async>
+  );
+}
+
+function ClientPortalConfigCard() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const canEdit = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
+
+  const q = useQuery({
+    queryKey: ['portal-config'],
+    queryFn: () => get<any>('/portal/config'),
+    enabled: canEdit,
+  });
+
+  const [authMethod, setAuthMethod] = useState<'PASSWORD_ONLY' | 'OTP_ONLY' | 'HYBRID'>('PASSWORD_ONLY');
+  const [portalUrl, setPortalUrl] = useState('');
+  const [magicLinkEnabled, setMagicLinkEnabled] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (q.data) {
+      setAuthMethod(q.data.authMethod || 'PASSWORD_ONLY');
+      setPortalUrl(q.data.portalUrl || window.location.origin.replace(/:5173$/, ':5174'));
+      setMagicLinkEnabled(q.data.magicLinkEnabled !== false);
+    }
+  }, [q.data]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await patch('/portal/config', {
+        authMethod,
+        portalUrl: portalUrl.trim(),
+        magicLinkEnabled,
+      });
+      toast.success('Client Portal login methods and settings updated!');
+      qc.invalidateQueries({ queryKey: ['portal-config'] });
+    } catch (e) {
+      toast.error(errMsg(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!canEdit) return null;
+
+  return (
+    <Card
+      title={
+        <span className="flex items-center gap-2">
+          <span>Client Portal Login & Authentication</span>
+          <Badge t={authMethod === 'PASSWORD_ONLY' ? 'blue' : authMethod === 'HYBRID' ? 'amber' : 'green'}>
+            {authMethod === 'PASSWORD_ONLY' ? 'Email & Password' : authMethod === 'HYBRID' ? 'Hybrid Mode' : 'WhatsApp OTP'}
+          </Badge>
+        </span>
+      }
+      className="lg:col-span-2 border-primary/30"
+    >
+      <Async q={q}>
+        {() => (
+          <div className="space-y-5 text-[13px]">
+            <div>
+              <p className="text-ink-2 mb-3">
+                Configure how your agency's clients authenticate when accessing the dedicated Client Portal.
+                Individual client credentials can be provisioned in each client's detail page under the <b>Portal Users</b> tab.
+              </p>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <button
+                  type="button"
+                  onClick={() => setAuthMethod('PASSWORD_ONLY')}
+                  className={`flex flex-col text-left p-3.5 rounded-xl border transition-all ${
+                    authMethod === 'PASSWORD_ONLY'
+                      ? 'border-primary bg-primary/10 ring-1 ring-primary'
+                      : 'border-line bg-surface-2 hover:border-line-hover'
+                  }`}
+                >
+                  <div className="flex items-center justify-between w-full mb-1">
+                    <span className="font-semibold text-ink flex items-center gap-1.5">
+                      🔑 Email & Password
+                    </span>
+                    {authMethod === 'PASSWORD_ONLY' && <Badge t="blue">Default</Badge>}
+                  </div>
+                  <p className="text-xs text-ink-3 leading-relaxed mt-1">
+                    Clients log in using their verified email and password. Standard enterprise security with zero third-party dependencies.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setAuthMethod('HYBRID')}
+                  className={`flex flex-col text-left p-3.5 rounded-xl border transition-all ${
+                    authMethod === 'HYBRID'
+                      ? 'border-primary bg-primary/10 ring-1 ring-primary'
+                      : 'border-line bg-surface-2 hover:border-line-hover'
+                  }`}
+                >
+                  <div className="flex items-center justify-between w-full mb-1">
+                    <span className="font-semibold text-ink flex items-center gap-1.5">
+                      ⚡ Hybrid Access
+                    </span>
+                    {authMethod === 'HYBRID' && <Badge t="amber">Active</Badge>}
+                  </div>
+                  <p className="text-xs text-ink-3 leading-relaxed mt-1">
+                    Clients can choose between Email/Password OR instant WhatsApp OTP on the login screen.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setAuthMethod('OTP_ONLY')}
+                  className={`flex flex-col text-left p-3.5 rounded-xl border transition-all ${
+                    authMethod === 'OTP_ONLY'
+                      ? 'border-primary bg-primary/10 ring-1 ring-primary'
+                      : 'border-line bg-surface-2 hover:border-line-hover'
+                  }`}
+                >
+                  <div className="flex items-center justify-between w-full mb-1">
+                    <span className="font-semibold text-ink flex items-center gap-1.5">
+                      💬 WhatsApp OTP
+                    </span>
+                    {authMethod === 'OTP_ONLY' && <Badge t="green">Active</Badge>}
+                  </div>
+                  <p className="text-xs text-ink-3 leading-relaxed mt-1">
+                    Clients receive a 6-digit verification code via WhatsApp. Requires active AiSensy WhatsApp integration.
+                  </p>
+                </button>
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2 pt-2 border-t border-line">
+              <Field label="Client Portal URL" hint="Public URL where clients access their portal">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="https://client.youragency.com"
+                    value={portalUrl}
+                    onChange={(e) => setPortalUrl(e.target.value)}
+                  />
+                  {portalUrl && (
+                    <a
+                      href={portalUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="shrink-0 inline-flex items-center gap-1 px-3 py-2 text-xs font-semibold rounded-lg bg-surface-2 border border-line hover:bg-surface-3 transition"
+                    >
+                      <ExternalLink size={13} /> Open
+                    </a>
+                  )}
+                </div>
+              </Field>
+
+              <div className="flex flex-col justify-center gap-2">
+                <label className="text-xs font-medium text-ink flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={magicLinkEnabled}
+                    onChange={(e) => setMagicLinkEnabled(e.target.checked)}
+                    className="rounded border-line text-primary focus:ring-primary h-4 w-4"
+                  />
+                  <span>Enable 1-Click WhatsApp Magic Login Links in notifications</span>
+                </label>
+                <p className="text-xs text-ink-3 pl-6">
+                  When enabled, WhatsApp review alerts allow client stakeholders to open the portal instantly without typing a password.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              <span className="text-xs text-ink-3">
+                Saved changes take effect immediately across all client login requests.
+              </span>
+              <Button
+                variant="primary"
+                loading={saving}
+                onClick={handleSave}
+              >
+                Save Portal Settings
+              </Button>
+            </div>
+          </div>
+        )}
+      </Async>
+    </Card>
   );
 }
 

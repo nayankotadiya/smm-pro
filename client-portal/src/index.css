@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* High-end clean executive palette */
+  --canvas: 248 250 252;
+  --surface: 255 255 255;
+  --surface-2: 241 245 249;
+  --surface-3: 226 232 240;
+  --surface-raised: 255 255 255;
+  
+  --line: 226 232 240;
+  --line-strong: 203 213 225;
+
+  --ink: 15 23 42;
+  --ink-2: 71 85 105;
+  --ink-3: 148 163 184;
+
+  --primary: 37 99 235;
+  --primary-hover: 29 78 216;
+  --primary-soft: 239 246 255;
+  --primary-ink: 29 78 216;
+
+  --success: 16 185 129;
+  --success-hover: 5 150 105;
+  --success-soft: 236 253 245;
+  --success-ink: 4 120 87;
+
+  --warning: 245 158 11;
+  --warning-soft: 254 243 199;
+  --warning-ink: 180 83 9;
+
+  --danger: 239 68 68;
+  --danger-soft: 254 242 242;
+  --danger-ink: 185 28 28;
+
+  --inverse: 15 23 42;
+  --on-inverse: 255 255 255;
+
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.05), 0 1px 2px -1px rgb(0 0 0 / 0.05);
+  --shadow-lift: 0 10px 15px -3px rgb(0 0 0 / 0.07), 0 4px 6px -4px rgb(0 0 0 / 0.05);
+  --shadow-pop: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.08);
+}
+
+.dark {
+  --canvas: 11 15 25;
+  --surface: 17 24 39;
+  --surface-2: 30 41 59;
+  --surface-3: 51 65 85;
+  --surface-raised: 24 33 53;
+
+  --line: 30 41 59;
+  --line-strong: 51 65 85;
+
+  --ink: 248 250 252;
+  --ink-2: 203 213 225;
+  --ink-3: 148 163 184;
+
+  --primary: 59 130 246;
+  --primary-hover: 96 165 250;
+  --primary-soft: 29 78 216 / 0.15;
+  --primary-ink: 96 165 250;
+
+  --success: 16 185 129;
+  --success-hover: 52 211 153;
+  --success-soft: 5 150 105 / 0.15;
+  --success-ink: 52 211 153;
+
+  --warning: 245 158 11;
+  --warning-soft: 217 119 6 / 0.15;
+  --warning-ink: 251 191 36;
+
+  --danger: 239 68 68;
+  --danger-soft: 220 38 38 / 0.15;
+  --danger-ink: 248 113 113;
+
+  --inverse: 248 250 252;
+  --on-inverse: 15 23 42;
+
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.4);
+  --shadow-lift: 0 10px 15px -3px rgb(0 0 0 / 0.5);
+  --shadow-pop: 0 20px 25px -5px rgb(0 0 0 / 0.6);
+}
+
+body {
+  font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--line-strong));
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--ink-3));
+}

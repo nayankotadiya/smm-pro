@@ -9,7 +9,7 @@ import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import { connectDb } from './config/db';
 import { env } from './config/env';
-import { User, RoleModel, Client, Content, Campaign } from './models';
+import { User, RoleModel, Client, Content, Campaign, ClientUser } from './models';
 import { DEFAULT_ROLE_PERMISSIONS, ROLES, Role } from './config/constants';
 import { seedAutomations, startAutomationEngine } from './services/automation';
 import { createContent } from './services/content';
@@ -74,6 +74,25 @@ async function main() {
         if (c.script === 'submit') await submitScript(String(doc.scriptId), writer);
       }
       console.log('content', doc.contentId, c.title);
+    }
+
+    if (C['Zemora Jewels']) {
+      await ClientUser.updateOne(
+        { email: 'client@zemora.local' },
+        {
+          $setOnInsert: {
+            name: 'Pooja (Zemora Jewels)',
+            email: 'client@zemora.local',
+            phone: '+919876543210',
+            clientId: C['Zemora Jewels']._id,
+            passwordHash: hash,
+            role: 'CLIENT_ADMIN',
+            active: true,
+          },
+        },
+        { upsert: true }
+      );
+      console.log('client user seeded: client@zemora.local / Phone: +919876543210');
     }
   } else {
     console.log('Skipping demo clients & content seeding (pass --demo if you wish to generate sample clients).');
