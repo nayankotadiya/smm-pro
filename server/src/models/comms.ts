@@ -57,7 +57,9 @@ notificationSchema.index({ userId: 1, createdAt: -1 });
 export const Notification = model('Notification', notificationSchema);
 
 const subSchema = new Schema({
-  userId: { type: ObjectId, ref: 'User', required: true, index: true },
+  userId: { type: ObjectId, ref: 'User', index: true },
+  clientUserId: { type: ObjectId, ref: 'ClientUser', index: true },
+  clientId: { type: ObjectId, ref: 'Client', index: true },
   endpoint: { type: String, required: true, unique: true },
   keys: { p256dh: String, auth: String },
   deviceType: String, platform: String, browser: String,

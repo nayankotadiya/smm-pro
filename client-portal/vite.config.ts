@@ -9,6 +9,7 @@ export default defineConfig({
     port: 5174,
     proxy: {
       '/api': { target: 'http://localhost:4000', changeOrigin: true },
+      '/socket.io': { target: 'http://localhost:4000', ws: true },
     },
   },
   preview: {
@@ -16,6 +17,7 @@ export default defineConfig({
     port: 5174,
     proxy: {
       '/api': { target: 'http://localhost:4000', changeOrigin: true },
+      '/socket.io': { target: 'http://localhost:4000', ws: true },
     },
   },
   build: {

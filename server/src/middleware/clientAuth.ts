@@ -57,8 +57,11 @@ export async function userFromPortalToken(token: string): Promise<PortalAuthUser
 export async function requirePortalAuth(req: Request, _res: Response, next: NextFunction) {
   try {
     const h = req.headers.authorization;
-    if (!h?.startsWith('Bearer ')) throw new AppError(401, 'Client authentication required', 'UNAUTHORIZED');
-    req.portalUser = await userFromPortalToken(h.slice(7));
+    const token = h?.startsWith('Bearer ')
+      ? h.slice(7)
+      : (typeof req.query.token === 'string' ? req.query.token : null);
+    if (!token) throw new AppError(401, 'Client authentication required', 'UNAUTHORIZED');
+    req.portalUser = await userFromPortalToken(token);
     next();
   } catch (e: any) {
     next(e instanceof AppError ? e : new AppError(401, 'Session expired. Please log in again.', 'UNAUTHORIZED'));

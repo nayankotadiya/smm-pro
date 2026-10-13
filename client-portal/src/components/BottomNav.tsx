@@ -33,7 +33,7 @@ export function BottomNav() {
               end={item.end}
               className={({ isActive }) =>
                 clsx(
-                  'flex flex-col items-center justify-center gap-1 py-1 px-2.5 rounded-xl transition-all select-none relative',
+                  'flex flex-col items-center justify-center gap-0.5 py-1 px-1 sm:px-2 rounded-xl transition-all select-none relative min-w-0',
                   isActive
                     ? 'text-primary font-semibold'
                     : 'text-ink-3 hover:text-ink font-medium'
@@ -45,14 +45,14 @@ export function BottomNav() {
                   <div
                     className={clsx(
                       'flex items-center justify-center p-1 rounded-lg transition-transform relative',
-                      isActive ? 'scale-110 bg-primary-soft' : ''
+                      isActive ? 'scale-105 bg-primary-soft' : ''
                     )}
                   >
-                    <Icon size={19} className={isActive ? 'text-primary' : 'text-current'} />
+                    <Icon size={18} className={isActive ? 'text-primary' : 'text-current'} />
                     {item.badge != null && (
                       <span
                         className={clsx(
-                          'absolute -top-1 -right-1.5 min-w-4 h-4 px-1 flex items-center justify-center text-[9px] font-black rounded-full text-white shadow-xs',
+                          'absolute -top-1 -right-1.5 min-w-3.5 h-3.5 px-0.5 flex items-center justify-center text-[8px] font-black rounded-full text-white shadow-xs',
                           item.badgeVariant === 'amber' ? 'bg-amber-500 animate-pulse' : 'bg-primary'
                         )}
                       >
@@ -60,7 +60,7 @@ export function BottomNav() {
                       </span>
                     )}
                   </div>
-                  <span className="text-[11px] tracking-tight">{item.label}</span>
+                  <span className="text-[10px] sm:text-[11px] tracking-tight truncate max-w-[54px] text-center">{item.label}</span>
                 </>
               )}
             </NavLink>

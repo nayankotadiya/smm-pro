@@ -10,6 +10,7 @@ import { emitDomain } from './events';
 import { closeTasks } from './tasks';
 import { emitOrg, emitToClient } from './realtime';
 import { aisensyConfigured, sendTemplate } from '../integrations/aisensy';
+import { notifyClientUsers } from './notify';
 
 const OPEN = ['PENDING', 'SENT', 'DELIVERED', 'OPENED', 'WAITING_FOR_CLIENT'];
 const push = (a: any, status: string, extra: any = {}) => a.history.push({ status, at: new Date(), ...extra });
@@ -152,6 +153,16 @@ export async function sendClientReview(u: AuthUser, b: { contentId: string; kind
   await postSystemEvent(content._id, 'client_review.sent', 'SENT FOR CLIENT REVIEW', [version, a.source === 'AISENSY' ? `WhatsApp to ${a.recipientName}` : 'Link ready to share', a.sendError ? `WhatsApp failed: ${a.sendError}` : '']);
   emitDomain('client_review.sent', { contentId: String(content._id), actorId: u._id, version, approvalId: String(a._id) });
   emitOrg('approval:new', { _id: String(a._id), contentId: String(content._id), status: a.status, type });
+  if (client._id) {
+    emitToClient(client._id, 'approval:new', { _id: String(a._id), contentId: String(content._id), status: a.status, type });
+    emitToClient(client._id, 'approval:updated', { _id: String(a._id), contentId: String(content._id), status: a.status, type });
+    void notifyClientUsers(client._id, {
+      title: 'Sign-off Needed: ' + (type === 'CLIENT_SCRIPT' ? 'Script' : 'Video Cut'),
+      message: `${content.title} (${version}) is ready for your review and sign-off.`,
+      url: `/approvals/${a._id}`,
+      tag: `approval-${a._id}`,
+    });
+  }
   return { approval: a, url };
 }
 

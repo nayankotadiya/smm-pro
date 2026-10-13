@@ -54,3 +54,41 @@ export async function managerIds() {
 export async function idsByRole(role: string) {
   return (await User.find({ role, active: true }).select('_id').lean()).map((x) => String(x._id));
 }
+
+/** Sends push notifications to all registered devices/browsers of a client (for when app is closed or background) */
+export async function notifyClientUsers(clientId: any, n: { title: string; message?: string; url?: string; tag?: string }) {
+  if (!clientId) return 0;
+  try {
+    const subs = await PushSubscription.find({ clientId });
+    if (!subs.length) return 0;
+    let ok = 0;
+    for (const s of subs) {
+      try {
+        const r = await sendPush(s, {
+          title: n.title,
+          body: n.message || '',
+          url: n.url || '/',
+          tag: n.tag || ('client-' + Date.now()),
+        });
+        if (r === 'SENT') {
+          ok++;
+          s.lastUsedAt = new Date();
+          s.failures = 0;
+          await s.save();
+        } else if (r === 'GONE') {
+          await s.deleteOne();
+        } else if (r === 'FAILED') {
+          s.failures = (s.failures || 0) + 1;
+          await s.save();
+        }
+      } catch (err) {
+        console.warn('[notifyClientUsers error]', err);
+      }
+    }
+    return ok;
+  } catch (e: any) {
+    console.warn('[notifyClientUsers error]', e?.message || e);
+    return 0;
+  }
+}
+

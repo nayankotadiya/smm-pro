@@ -1,6 +1,6 @@
 import { ChatRoom, Message, Content, Client, ChatActionMessage } from '../models';
 import { emitToRoom, emitToUsers, emitToClient } from './realtime';
-import { managerIds } from './notify';
+import { managerIds, notifyClientUsers } from './notify';
 
 export async function ensureContentRoom(content: any) {
   let room = await ChatRoom.findOne({ type: 'CONTENT', contentId: content._id });
@@ -31,6 +31,17 @@ export async function broadcastMessage(room: any, msg: any) {
   emitToRoom(`chat:${room._id}`, 'message:new', populated);
   if (room.clientId) {
     emitToClient(room.clientId, 'message:new', populated);
+    // If sent by agency, send background Web Push notification to client
+    if (msg.senderId) {
+      const senderName = (populated as any)?.senderId?.name || 'Agency Lead';
+      const msgText = (populated as any)?.message || 'Sent an attachment';
+      void notifyClientUsers(room.clientId, {
+        title: `Message from ${senderName}`,
+        message: String(msgText).slice(0, 150),
+        url: '/chat',
+        tag: `chat-${room._id}`,
+      });
+    }
   }
   emitToUsers(room.participants, 'chat:room_activity', { roomId: String(room._id), preview: room.lastMessagePreview, at: room.lastMessageAt, senderId: msg.senderId ? String(msg.senderId) : null });
   return populated;

@@ -1,18 +1,25 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, ArrowRight, CheckCircle2, Clock, Calendar, Sparkles, User, Video, FileText, ChevronRight, Send, MessageSquare } from 'lucide-react';
+import { AlertCircle, ArrowRight, CheckCircle2, Clock, Calendar, Sparkles, User, Video, FileText, ChevronRight, Send, MessageSquare, BellRing, Check } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/store/auth';
 import { PendingApproval, DashboardStats, UpcomingPost } from '@/lib/types';
 import { Card, Button, Badge, Spinner } from '@/components/Ui';
+import { getClientPushState, enableClientPush } from '@/lib/push';
+import { useNotifications } from '@/store/notifications';
 
 export function DashboardPage() {
   const { user, brand } = useAuth();
+  const { addToast } = useNotifications();
   const [loading, setLoading] = useState(true);
   const [approvals, setApprovals] = useState<PendingApproval[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [upcoming, setUpcoming] = useState<UpcomingPost[]>([]);
   const [accountManager, setAccountManager] = useState<{ name: string; title: string } | null>(null);
+
+  // Background Push status banner
+  const [pushSubscribed, setPushSubscribed] = useState(true);
+  const [enablingPush, setEnablingPush] = useState(false);
 
   useEffect(() => {
     api.get('/dashboard')
@@ -23,7 +30,34 @@ export function DashboardPage() {
         setAccountManager(res.data.accountManager || null);
       })
       .finally(() => setLoading(false));
+
+    getClientPushState().then((s) => {
+      setPushSubscribed(s.subscribed);
+    });
   }, []);
+
+  const handleEnablePush = async () => {
+    setEnablingPush(true);
+    try {
+      const res = await enableClientPush();
+      if (res.ok) {
+        setPushSubscribed(true);
+        addToast({
+          title: 'Background Alerts Enabled',
+          message: 'You will receive notifications even when the browser tab is closed.',
+          type: 'success',
+        });
+      } else {
+        addToast({
+          title: 'Permission Notice',
+          message: res.reason || 'Could not enable push.',
+          type: 'warning',
+        });
+      }
+    } finally {
+      setEnablingPush(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -41,21 +75,54 @@ export function DashboardPage() {
     <div className="space-y-6 pb-20">
       {/* Welcome Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-ink">
-            Welcome back, {user?.name?.split(' ')[0]} 👋
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-ink">
+            Welcome back, {user?.name?.split(' ')[0] || 'Client'} 👋
           </h1>
-          <p className="text-sm text-ink-2 mt-0.5">
-            Here is what’s happening with <b>{brand?.businessName || brand?.name}</b>’s content today.
+          <p className="text-xs sm:text-sm text-ink-2 mt-0.5 truncate">
+            Here is what’s happening with <b>{brand?.businessName || brand?.name || 'your brand'}</b>’s content today.
           </p>
         </div>
 
-        <Link to="/briefs">
+        <Link to="/briefs" className="shrink-0">
           <Button variant="primary" size="md" icon={<Send size={15} />}>
             Request Content
           </Button>
         </Link>
       </div>
+
+      {/* Background Push Alerts Promo (If not already enabled) */}
+      {!pushSubscribed && (
+        <Card className="p-4 sm:p-5 border-primary/30 bg-gradient-to-r from-primary-soft via-surface to-primary-soft/40 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-fade-in">
+          <div className="flex items-start sm:items-center gap-3 min-w-0">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-white shadow-xs">
+              <BellRing size={20} />
+            </span>
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold text-ink">Enable Background Push Alerts</h3>
+              <p className="text-xs text-ink-2 mt-0.5">
+                Receive instant notifications when new scripts or video cuts arrive for sign-off, even if this browser tab is closed.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={handleEnablePush}
+              disabled={enablingPush}
+              className="px-4 py-2 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <BellRing size={14} /> {enablingPush ? 'Enabling...' : 'Enable Alerts'}
+            </button>
+            <button
+              onClick={() => setPushSubscribed(true)}
+              className="px-2.5 py-2 rounded-xl text-xs font-semibold text-ink-3 hover:text-ink transition-colors cursor-pointer"
+            >
+              Dismiss
+            </button>
+          </div>
+        </Card>
+      )}
 
       {/* Action Needed Card (Highest Priority) */}
       {approvals.length > 0 && (
@@ -76,22 +143,22 @@ export function DashboardPage() {
                 className="border-amber-300/60 dark:border-amber-800/60 bg-amber-50/40 dark:bg-amber-950/20 p-4 hover:shadow-lift transition-all"
               >
                 <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">
                       {item.type === 'CLIENT_SCRIPT' ? <FileText size={16} /> : <Video size={16} />}
                     </span>
-                    <div>
+                    <div className="min-w-0">
                       <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">
                         {item.type === 'CLIENT_SCRIPT' ? 'Script Review' : 'Final Video Cut'} • {item.version}
                       </span>
-                      <h3 className="text-sm font-bold text-ink line-clamp-1">{item.title}</h3>
+                      <h3 className="text-sm font-bold text-ink truncate mt-0.5">{item.title}</h3>
                     </div>
                   </div>
                 </div>
 
                 <div className="mt-4 flex items-center justify-between pt-3 border-t border-amber-200/50 dark:border-amber-900/50">
                   <span className="text-[11px] text-ink-3 flex items-center gap-1">
-                    <Clock size={12} /> Pending your review
+                    <Clock size={12} /> Pending review
                   </span>
                   <Link to={`/approvals/${item._id}`}>
                     <Button variant="primary" size="sm" icon={<ArrowRight size={13} />}>
@@ -107,7 +174,7 @@ export function DashboardPage() {
 
       {/* Deliverable Pace Progress */}
       {stats && (
-        <Card className="p-5 sm:p-6 bg-gradient-to-br from-surface to-surface-2 border-line">
+        <Card className="p-4 sm:p-6 bg-gradient-to-br from-surface to-surface-2 border-line">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
             <div>
               <h2 className="text-sm font-bold text-ink flex items-center gap-2">
@@ -115,7 +182,7 @@ export function DashboardPage() {
               </h2>
               <p className="text-xs text-ink-3">Deliverables tracking for this cycle</p>
             </div>
-            <div className="text-right">
+            <div className="text-left sm:text-right">
               <span className="text-2xl font-extrabold text-ink">{stats.publishedCount}</span>
               <span className="text-xs text-ink-3 font-medium"> / {stats.totalThisMonth} Delivered</span>
             </div>
@@ -131,17 +198,17 @@ export function DashboardPage() {
 
           {/* Metrics Pill Grid */}
           <div className="mt-5 grid grid-cols-3 gap-2 text-center pt-4 border-t border-line/60">
-            <div className="p-2 rounded-xl bg-surface border border-line/50">
-              <div className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">Published</div>
-              <div className="text-lg font-bold text-ink mt-0.5">{stats.publishedCount}</div>
+            <div className="p-2 sm:p-3 rounded-xl bg-surface border border-line/50">
+              <div className="text-[11px] sm:text-xs font-semibold text-emerald-600 dark:text-emerald-400">Published</div>
+              <div className="text-base sm:text-lg font-bold text-ink mt-0.5">{stats.publishedCount}</div>
             </div>
-            <div className="p-2 rounded-xl bg-surface border border-line/50">
-              <div className="text-xs font-semibold text-primary">In Pipeline</div>
-              <div className="text-lg font-bold text-ink mt-0.5">{stats.inProductionCount}</div>
+            <div className="p-2 sm:p-3 rounded-xl bg-surface border border-line/50">
+              <div className="text-[11px] sm:text-xs font-semibold text-primary">In Pipeline</div>
+              <div className="text-base sm:text-lg font-bold text-ink mt-0.5">{stats.inProductionCount}</div>
             </div>
-            <div className="p-2 rounded-xl bg-surface border border-line/50">
-              <div className="text-xs font-semibold text-amber-600 dark:text-amber-400">Scheduled</div>
-              <div className="text-lg font-bold text-ink mt-0.5">{stats.scheduledCount}</div>
+            <div className="p-2 sm:p-3 rounded-xl bg-surface border border-line/50">
+              <div className="text-[11px] sm:text-xs font-semibold text-amber-600 dark:text-amber-400">Scheduled</div>
+              <div className="text-base sm:text-lg font-bold text-ink mt-0.5">{stats.scheduledCount}</div>
             </div>
           </div>
         </Card>
@@ -166,24 +233,24 @@ export function DashboardPage() {
           <div className="space-y-2">
             {upcoming.map((post) => (
               <Card key={post._id} className="p-3.5 flex items-center justify-between gap-3 hover:border-line-strong transition-all">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 min-w-0">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-2 text-primary">
                     <Video size={18} />
                   </div>
-                  <div>
-                    <h3 className="text-sm font-semibold text-ink line-clamp-1">{post.title}</h3>
-                    <div className="flex items-center gap-2 mt-0.5 text-xs text-ink-3">
-                      <span className="font-medium text-ink-2 uppercase text-[10px] bg-surface-2 px-1.5 py-0.5 rounded">
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-semibold text-ink truncate">{post.title}</h3>
+                    <div className="flex items-center gap-2 mt-0.5 text-xs text-ink-3 flex-wrap">
+                      <span className="font-medium text-ink-2 uppercase text-[10px] bg-surface-2 px-1.5 py-0.5 rounded shrink-0">
                         {post.platform || 'INSTAGRAM'}
                       </span>
                       {post.scheduledAt && (
-                        <span>Scheduled: {new Date(post.scheduledAt).toLocaleDateString()}</span>
+                        <span className="truncate">Scheduled: {new Date(post.scheduledAt).toLocaleDateString()}</span>
                       )}
                     </div>
                   </div>
                 </div>
 
-                <Badge variant={post.publishedAt ? 'success' : 'primary'}>
+                <Badge variant={post.publishedAt ? 'success' : 'primary'} className="shrink-0">
                   {post.publishedAt ? 'Live' : 'Ready'}
                 </Badge>
               </Card>
@@ -194,18 +261,18 @@ export function DashboardPage() {
 
       {/* Dedicated Account Manager */}
       {accountManager && (
-        <Card className="p-4 flex items-center justify-between gap-4 border-line">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary-soft text-primary-ink font-bold">
+        <Card className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-line">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary-ink font-bold">
               <User size={20} />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="text-xs font-medium text-ink-3">Your Dedicated Account Lead</div>
-              <div className="text-sm font-bold text-ink">{accountManager.name}</div>
-              <div className="text-[11px] text-ink-2">{accountManager.title}</div>
+              <div className="text-sm font-bold text-ink truncate">{accountManager.name}</div>
+              <div className="text-[11px] text-ink-2 truncate">{accountManager.title}</div>
             </div>
           </div>
-          <Link to="/chat">
+          <Link to="/chat" className="shrink-0">
             <Button variant="primary" size="sm" icon={<MessageSquare size={14} />}>
               Chat with Lead
             </Button>

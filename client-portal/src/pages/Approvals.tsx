@@ -1,9 +1,13 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Check, RotateCcw, Play, Clock, ArrowLeft, MessageSquare, Video, FileText, CheckCircle2 } from 'lucide-react';
-import { api } from '@/lib/api';
+import { Check, RotateCcw, Play, Pause, Clock, ArrowLeft, MessageSquare, Video, FileText, CheckCircle2, AlertCircle, ExternalLink, RefreshCw } from 'lucide-react';
+import { api, API_URL } from '@/lib/api';
 import { ApprovalDetail } from '@/lib/types';
 import { Card, Button, Badge, Spinner, Textarea } from '@/components/Ui';
+import clsx from 'clsx';
+
+// High-reliability sample video cut for instantaneous testing & fallback preview
+const SAMPLE_TEST_VIDEO = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4';
 
 export function ApprovalsPage() {
   const { id } = useParams();
@@ -21,6 +25,12 @@ export function ApprovalsPage() {
   // Video and Comments
   const videoRef = useRef<HTMLVideoElement>(null);
   const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
+  const [videoError, setVideoError] = useState(false);
+  const [customVideoSrc, setCustomVideoSrc] = useState<string | null>(null);
+
   const [commentText, setCommentText] = useState('');
   const [useTimestamp, setUseTimestamp] = useState(true);
   const [comments, setComments] = useState<Array<{ comment: string; timestampSec?: number }>>([]);
@@ -47,6 +57,9 @@ export function ApprovalsPage() {
       setComments([]);
       setCommentText('');
       setActionDone(null);
+      setVideoError(false);
+      setCustomVideoSrc(null);
+      setIsPlaying(false);
 
       api.get(`/approvals/${id}`)
         .then((res) => {
@@ -61,6 +74,53 @@ export function ApprovalsPage() {
         .finally(() => setDetailLoading(false));
     }
   }, [id]);
+
+  // Construct authenticated video URL
+  const activeVideoSrc = useMemo(() => {
+    if (customVideoSrc) return customVideoSrc;
+    if (!detail?.videoUrl) return '';
+    const token = localStorage.getItem('smm_client_token') || '';
+    const raw = detail.videoUrl;
+    const base = raw.startsWith('http') ? raw : `${API_URL || ''}${raw}`;
+    return token ? `${base}${base.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}` : base;
+  }, [detail?.videoUrl, customVideoSrc]);
+
+  const togglePlay = () => {
+    if (!videoRef.current) return;
+    if (videoRef.current.paused) {
+      videoRef.current.play().catch((err) => {
+        console.warn('Play prevented:', err);
+      });
+    } else {
+      videoRef.current.pause();
+    }
+  };
+
+  const seekTo = (sec: number) => {
+    if (!videoRef.current) return;
+    videoRef.current.currentTime = sec;
+    setCurrentTime(sec);
+    videoRef.current.play().catch(() => {});
+  };
+
+  const retryStream = () => {
+    setVideoError(false);
+    setCustomVideoSrc(null);
+    if (videoRef.current) {
+      videoRef.current.load();
+      videoRef.current.play().catch(() => {});
+    }
+  };
+
+  const useSampleCut = () => {
+    setVideoError(false);
+    setCustomVideoSrc(SAMPLE_TEST_VIDEO);
+    setTimeout(() => {
+      if (videoRef.current) {
+        videoRef.current.play().catch(() => {});
+      }
+    }, 100);
+  };
 
   const addComment = () => {
     if (!commentText.trim()) return;
@@ -101,6 +161,7 @@ export function ApprovalsPage() {
   };
 
   const fmtTime = (s: number) => {
+    if (isNaN(s)) return '0:00';
     const mins = Math.floor(s / 60);
     const secs = Math.floor(s % 60);
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
@@ -130,12 +191,12 @@ export function ApprovalsPage() {
             {list.map((item) => (
               <Link key={item._id} to={`/approvals/${item._id}`}>
                 <Card className="p-4 hover:shadow-lift hover:border-line-strong transition-all flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface-2 text-primary">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface-2 text-primary">
                       {item.type === 'CLIENT_SCRIPT' ? <FileText size={20} /> : <Video size={20} />}
                     </span>
-                    <div>
-                      <div className="flex items-center gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs font-bold text-primary uppercase">
                           {item.type === 'CLIENT_SCRIPT' ? 'Script' : 'Video Cut'} • {item.version}
                         </span>
@@ -145,11 +206,11 @@ export function ApprovalsPage() {
                           <Badge variant="primary">Needs Action</Badge>
                         )}
                       </div>
-                      <h3 className="text-sm font-bold text-ink mt-0.5">{item.title}</h3>
+                      <h3 className="text-sm font-bold text-ink mt-0.5 truncate">{item.title}</h3>
                     </div>
                   </div>
 
-                  <Button variant="secondary" size="sm">
+                  <Button variant="secondary" size="sm" className="shrink-0">
                     Open
                   </Button>
                 </Card>
@@ -185,7 +246,7 @@ export function ApprovalsPage() {
   return (
     <div className="space-y-6 pb-36">
       {/* Header */}
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <button
           onClick={() => navigate('/approvals')}
           className="flex items-center gap-1.5 text-xs font-semibold text-ink-2 hover:text-ink transition-colors"
@@ -202,7 +263,7 @@ export function ApprovalsPage() {
         <div className="text-xs font-bold uppercase tracking-wider text-primary">
           {detail.type === 'CLIENT_SCRIPT' ? 'Script for Review' : 'Video Cut for Sign-off'} • {detail.version}
         </div>
-        <h1 className="text-2xl font-extrabold text-ink mt-1 tracking-tight">{detail.title}</h1>
+        <h1 className="text-xl sm:text-2xl font-extrabold text-ink mt-1 tracking-tight break-words">{detail.title}</h1>
       </div>
 
       {/* Celebratory Approved Banner */}
@@ -230,28 +291,109 @@ export function ApprovalsPage() {
       {/* VIDEO PLAYER (If Video) */}
       {detail.hasVideo && (
         <section className="space-y-2">
-          <div className="relative rounded-2xl overflow-hidden bg-black shadow-lift aspect-video flex items-center justify-center">
+          <div className="relative rounded-2xl overflow-hidden bg-black shadow-lift aspect-video flex items-center justify-center group select-none">
             <video
               ref={videoRef}
               controls
               playsInline
-              preload="metadata"
-              src={detail.videoUrl}
+              crossOrigin="anonymous"
+              preload="auto"
+              src={activeVideoSrc}
               onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-              className="w-full h-full object-contain"
+              onDurationChange={(e) => setDuration(e.currentTarget.duration)}
+              onPlay={() => setIsPlaying(true)}
+              onPause={() => setIsPlaying(false)}
+              onWaiting={() => setIsBuffering(true)}
+              onPlaying={() => setIsBuffering(false)}
+              onError={(e) => {
+                console.warn('[Video playback error]', e);
+                setVideoError(true);
+                setIsBuffering(false);
+              }}
+              className="w-full h-full object-contain cursor-pointer"
+              onClick={togglePlay}
             />
+
+            {/* Custom Center Play Button Overlay (when paused and no error) */}
+            {!isPlaying && !videoError && (
+              <button
+                onClick={togglePlay}
+                title="Play video"
+                className="absolute inset-0 flex items-center justify-center bg-black/30 backdrop-blur-[2px] transition-opacity cursor-pointer group-hover:bg-black/20"
+              >
+                <div className="flex h-16 w-16 sm:h-20 sm:w-20 items-center justify-center rounded-full bg-primary/90 text-white shadow-pop hover:scale-110 transition-transform">
+                  <Play size={32} className="ml-1 fill-white" />
+                </div>
+              </button>
+            )}
+
+            {/* Buffering Spinner */}
+            {isBuffering && !videoError && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40 pointer-events-none">
+                <Spinner size={36} />
+              </div>
+            )}
+
+            {/* Error / Fallback Card Overlay */}
+            {videoError && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 p-6 text-center text-white space-y-3 z-20">
+                <AlertCircle size={36} className="text-amber-400 mx-auto animate-bounce" />
+                <div>
+                  <h3 className="font-bold text-sm sm:text-base">Video Stream Connection</h3>
+                  <p className="text-xs text-white/70 max-w-sm mt-1">
+                    The direct stream is unreachable or awaiting cloud sync. You can retry, open the direct link, or preview with a sample cut.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                  <button
+                    onClick={retryStream}
+                    className="px-3 py-1.5 rounded-xl bg-white/20 hover:bg-white/30 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <RefreshCw size={13} /> Retry Stream
+                  </button>
+
+                  {detail.webViewLink && (
+                    <a
+                      href={detail.webViewLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-1.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
+                    >
+                      <ExternalLink size={13} /> Cloud Player
+                    </a>
+                  )}
+
+                  <button
+                    onClick={useSampleCut}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <Play size={13} className="fill-white" /> Test Sample Cut
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
+          {/* Time & Stream Controls */}
           <div className="flex items-center justify-between text-xs text-ink-3 px-1">
-            <span className="font-mono font-medium">Time: {fmtTime(currentTime)}</span>
-            <span>HD Direct Stream</span>
+            <span className="font-mono font-medium text-ink">
+              Time: {fmtTime(currentTime)} {duration > 0 && ` / ${fmtTime(duration)}`}
+            </span>
+            <div className="flex items-center gap-3">
+              {customVideoSrc && (
+                <span className="text-emerald-600 dark:text-emerald-400 font-semibold text-[11px]">
+                  Sample Preview Mode
+                </span>
+              )}
+              <span className="text-[11px]">HD Direct Stream</span>
+            </div>
           </div>
         </section>
       )}
 
       {/* SCRIPT VIEWER (If Script) */}
       {detail.script && (
-        <Card className="p-6 space-y-5">
+        <Card className="p-4 sm:p-6 space-y-5">
           <div className="flex items-center justify-between border-b border-line pb-3">
             <h2 className="text-sm font-bold text-ink uppercase tracking-wider flex items-center gap-1.5">
               <FileText size={16} className="text-primary" /> Full Script Breakdown
@@ -320,10 +462,18 @@ export function ApprovalsPage() {
           <div className="space-y-2">
             {detail.feedback.map((fb, idx) => (
               <Card key={idx} className="p-3 text-xs flex items-start gap-3 bg-surface-2">
-                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-surface text-ink-2 shrink-0 font-mono text-[10px]">
+                <button
+                  type="button"
+                  onClick={() => fb.timestampSec != null && seekTo(fb.timestampSec)}
+                  title={fb.timestampSec != null ? `Jump to ${fmtTime(fb.timestampSec)}` : ''}
+                  className={clsx(
+                    'flex h-6 px-2 items-center justify-center rounded-lg bg-surface text-ink-2 shrink-0 font-mono text-[10px] font-bold border border-line transition-colors',
+                    fb.timestampSec != null && 'hover:bg-primary-soft hover:text-primary hover:border-primary/40 cursor-pointer'
+                  )}
+                >
                   {fb.timestampSec != null ? fmtTime(fb.timestampSec) : 'Note'}
-                </span>
-                <div>
+                </button>
+                <div className="pt-0.5">
                   <span className="font-semibold text-ink">{fb.authorName}:</span> {fb.comment}
                 </div>
               </Card>
@@ -335,7 +485,7 @@ export function ApprovalsPage() {
       {/* Interactive Change Request Composer (when mode === 'changes') */}
       {mode === 'changes' && !actionDone && (
         <Card className="p-5 border-amber-300 dark:border-amber-800 space-y-4 animate-fade-in shadow-lift">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <h3 className="text-sm font-bold text-ink flex items-center gap-2">
               <MessageSquare size={16} className="text-amber-500" /> What changes are needed?
             </h3>
@@ -352,7 +502,7 @@ export function ApprovalsPage() {
             onChange={(e) => setCommentText(e.target.value)}
           />
 
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
             {detail.hasVideo && (
               <label className="flex items-center gap-2 text-xs font-medium text-ink cursor-pointer select-none">
                 <input
@@ -377,10 +527,18 @@ export function ApprovalsPage() {
               {comments.map((c, i) => (
                 <div key={i} className="flex items-center justify-between p-2 rounded-xl bg-surface-2 text-xs">
                   <span>
-                    {c.timestampSec != null && <b className="font-mono text-primary mr-1.5">[{fmtTime(c.timestampSec)}]</b>}
+                    {c.timestampSec != null && (
+                      <button
+                        type="button"
+                        onClick={() => seekTo(c.timestampSec!)}
+                        className="font-mono text-primary font-bold mr-1.5 hover:underline cursor-pointer"
+                      >
+                        [{fmtTime(c.timestampSec)}]
+                      </button>
+                    )}
                     {c.comment}
                   </span>
-                  <button onClick={() => removeComment(i)} className="text-danger hover:underline text-[11px] font-bold">
+                  <button onClick={() => removeComment(i)} className="text-danger hover:underline text-[11px] font-bold cursor-pointer">
                     Remove
                   </button>
                 </div>

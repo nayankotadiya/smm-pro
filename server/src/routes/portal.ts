@@ -5,7 +5,7 @@ import rateLimit from 'express-rate-limit';
 import { ah } from '../utils/async';
 import { AppError, badRequest, notFound, forbidden } from '../utils/errors';
 import { randomToken, sha256 } from '../utils/crypto';
-import { ClientUser, Client, Content, Approval, ScriptVersion, Media, ClientBrief, Feedback, PortalConfig, ChatRoom, Message, Notification } from '../models';
+import { ClientUser, Client, Content, Approval, ScriptVersion, Media, ClientBrief, Feedback, PortalConfig, ChatRoom, Message, Notification, PushSubscription } from '../models';
 import { requirePortalAuth, signPortalAccess } from '../middleware/clientAuth';
 import { requireAuth } from '../middleware/auth';
 import { clientDecision } from '../services/approvals';
@@ -15,6 +15,7 @@ import { aisensyConfigured, sendTemplate } from '../integrations/aisensy';
 import { sendEmail } from '../integrations/email';
 import { logger } from '../utils/logger';
 import { notify, managerIds } from '../services/notify';
+import { pushConfigured, sendPush, getVapidPublicKey } from '../integrations/push';
 
 const r = Router();
 
@@ -471,7 +472,7 @@ r.get('/approvals/:id', ah(async (req, res) => {
     }
   }
 
-  const media = a.mediaId ? await Media.findById(a.mediaId).select('mimeType fileName size').lean() : null;
+  const media = a.mediaId ? await Media.findById(a.mediaId).select('mimeType fileName size webViewLink').lean() : null;
   const thumb = await Media.findOne({ contentId: a.contentId, category: 'THUMBNAIL' }).select('_id').lean();
 
   // Feedback list for this approval
@@ -497,6 +498,8 @@ r.get('/approvals/:id', ah(async (req, res) => {
     hasThumbnail: !!thumb,
     videoUrl: `/api/portal/approvals/${a._id}/video`,
     thumbnailUrl: thumb ? `/api/portal/approvals/${a._id}/thumbnail` : null,
+    webViewLink: media?.webViewLink || null,
+    fileName: media?.fileName || null,
     feedback: feedbackList,
     createdAt: a.createdAt,
     decidedAt: a.decidedAt,
@@ -537,7 +540,14 @@ r.get('/approvals/:id/video', ah(async (req, res) => {
   res.setHeader('Cache-Control', 'private, no-store');
   res.setHeader('Content-Disposition', 'inline');
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-  await pipeMedia(media, res, req.headers.range);
+  try {
+    await pipeMedia(media, res, req.headers.range);
+  } catch (err: any) {
+    if (media.webViewLink) {
+      return res.redirect(media.webViewLink);
+    }
+    throw err;
+  }
 }));
 
 /** Stream Approval Thumbnail */
@@ -829,6 +839,92 @@ r.post('/chat/messages', ah(async (req, res) => {
     isMe: true,
     isClient: true,
     createdAt: msg.createdAt,
+  });
+}));
+
+// ----------------------------------------------------
+// Client Portal Web Push Notifications
+// ----------------------------------------------------
+
+/** Get Web Push VAPID configuration for client devices */
+r.get('/push/config', (_req, res) => {
+  res.json({ enabled: pushConfigured(), publicKey: getVapidPublicKey() });
+});
+
+/** Subscribe client browser/device to Web Push notifications */
+r.post('/push/subscribe', ah(async (req, res) => {
+  const b = z.object({
+    endpoint: z.string().url().max(1000),
+    keys: z.object({ p256dh: z.string().max(300), auth: z.string().max(300) }),
+    deviceType: z.string().max(30).optional(),
+    platform: z.string().max(40).optional(),
+    browser: z.string().max(40).optional(),
+  }).parse(req.body);
+
+  await PushSubscription.findOneAndUpdate(
+    { endpoint: b.endpoint },
+    {
+      ...b,
+      clientUserId: req.portalUser!._id,
+      clientId: req.portalUser!.clientId,
+      lastUsedAt: new Date(),
+      failures: 0,
+    },
+    { upsert: true }
+  );
+
+  res.status(201).json({ ok: true });
+}));
+
+/** Unsubscribe client device */
+r.post('/push/unsubscribe', ah(async (req, res) => {
+  const { endpoint } = z.object({ endpoint: z.string() }).parse(req.body);
+  await PushSubscription.deleteOne({ endpoint, clientId: req.portalUser!.clientId });
+  res.json({ ok: true });
+}));
+
+/** Test Push Notification directly to verify it works in background/when closed */
+r.post('/push/test', ah(async (req, res) => {
+  const configured = pushConfigured();
+  if (!configured) {
+    return res.status(400).json({
+      ok: false,
+      configured: false,
+      message: 'Push notifications are not configured on the server (missing VAPID keys).',
+    });
+  }
+
+  const subs = await PushSubscription.find({
+    $or: [
+      { clientUserId: req.portalUser!._id },
+      { clientId: req.portalUser!.clientId },
+    ],
+  });
+
+  if (!subs.length) {
+    return res.json({
+      ok: false,
+      message: 'No push subscription found for this browser. Please enable notifications first.',
+      sentCount: 0,
+    });
+  }
+
+  let sent = 0;
+  for (const s of subs) {
+    const status = await sendPush(s, {
+      title: '⚡ Bulletproof Portal Alert',
+      body: 'Real-time background notifications are active! You will receive alerts even when the tab is closed.',
+      url: '/approvals',
+      tag: 'test-' + Date.now(),
+    });
+    if (status === 'SENT') sent++;
+  }
+
+  res.json({
+    ok: true,
+    sentCount: sent,
+    totalSubs: subs.length,
+    message: sent > 0 ? 'Test notification sent successfully!' : 'Delivery attempted, check device permissions.',
   });
 }));
 

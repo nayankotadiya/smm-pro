@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { api } from '@/lib/api';
 import { getPortalSocket } from '@/lib/socket';
+import { showLocalNotification } from '@/lib/push';
 
 export interface ToastItem {
   id: string;
@@ -60,6 +61,7 @@ export const useNotifications = create<NotificationState>((set, get) => ({
 
     socket.off('message:new');
     socket.off('approval:updated');
+    socket.off('approval:new');
 
     socket.on('message:new', (msg: any) => {
       // If agency sent the message
@@ -67,24 +69,52 @@ export const useNotifications = create<NotificationState>((set, get) => ({
         const isChatOpen = window.location.pathname.startsWith('/chat');
         if (!isChatOpen) {
           set((state) => ({ unreadChat: state.unreadChat + 1 }));
+          const title = `Message from ${msg.senderId?.name || msg.senderName || 'Agency Lead'}`;
+          const body = msg.message || 'Sent a new message';
+
           get().addToast({
-            title: `Message from ${msg.senderId?.name || msg.senderName || 'Agency Lead'}`,
-            message: msg.message || 'Sent a new message',
+            title,
+            message: body,
             type: 'info',
           });
+
+          // Show background OS/browser notification if user is on another tab or app is minimized
+          if (document.hidden) {
+            void showLocalNotification(title, {
+              body,
+              tag: `chat-${msg._id || Date.now()}`,
+              data: { url: '/chat' },
+            });
+          }
         }
       }
     });
 
-    socket.on('approval:updated', (data: any) => {
+    const handleApprovalEvent = (data: any) => {
       get().fetchCounts();
-      if (data.status === 'PENDING' || data.status === 'SENT') {
+      const needsAction = ['PENDING', 'SENT', 'WAITING_FOR_CLIENT'].includes(data.status);
+      if (needsAction) {
+        const title = 'Sign-off Needed';
+        const body = 'A new creative script or cut has been submitted for your sign-off.';
+
         get().addToast({
-          title: 'Sign-off Needed',
-          message: 'A new creative script or cut has been submitted for your sign-off.',
+          title,
+          message: body,
           type: 'warning',
         });
+
+        // Show background OS/browser notification if user is on another tab or app is minimized
+        if (document.hidden) {
+          void showLocalNotification(title, {
+            body,
+            tag: `approval-${data._id || Date.now()}`,
+            data: { url: `/approvals/${data._id || ''}` },
+          });
+        }
       }
-    });
+    };
+
+    socket.on('approval:updated', handleApprovalEvent);
+    socket.on('approval:new', handleApprovalEvent);
   },
 }));

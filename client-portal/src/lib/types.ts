@@ -82,6 +82,8 @@ export interface ApprovalDetail {
   hasThumbnail: boolean;
   videoUrl?: string;
   thumbnailUrl?: string | null;
+  webViewLink?: string | null;
+  fileName?: string | null;
   feedback?: Array<{
     comment: string;
     timestampSec?: number;
