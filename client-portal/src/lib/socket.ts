@@ -1,5 +1,5 @@
 import { io, Socket } from 'socket.io-client';
-import { API_URL } from './api';
+import { API_URL, DIRECT_URL } from './api';
 
 let socket: Socket | null = null;
 
@@ -26,8 +26,8 @@ export function getPortalSocket(): Socket | null {
     return socket;
   }
 
-  // When API_URL is empty (proxied on localhost:5174 or same origin), connect to current host
-  const socketUrl = API_URL || window.location.origin;
+  // Connect to direct backend host for WebSockets (Vercel serverless rewrites do not support WebSocket proxying)
+  const socketUrl = DIRECT_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? window.location.origin : 'https://smm-pro-api.onrender.com');
 
   socket = io(socketUrl, {
     auth: { token },
