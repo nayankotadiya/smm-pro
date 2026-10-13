@@ -9,7 +9,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { ClientUser, Client, Content, Approval, Script, ScriptVersion, Media, ClientBrief, Feedback, PortalConfig, ChatRoom, Message, Notification, PushSubscription } from '../models';
-import { requirePortalAuth, signPortalAccess, userFromPortalToken } from '../middleware/clientAuth';
+import { requirePortalAuth, signPortalAccess, userFromPortalToken, signPortal2FATemp, verifyPortal2FATemp } from '../middleware/clientAuth';
 import { requireAuth } from '../middleware/auth';
 import { clientDecision } from '../services/approvals';
 import { pipeMedia, inferMimeType, safeMoveFile } from '../services/media';
@@ -117,19 +117,27 @@ r.patch('/config', requireAuth, ah(async (req, res) => {
   res.json(cfg);
 }));
 
-/** Email & Password Login */
+function maskEmail(email: string) {
+  const [name, domain] = email.split('@');
+  if (!domain) return email;
+  const maskedName = name.length <= 2 ? name[0] + '*' : name[0] + '*'.repeat(Math.max(1, name.length - 2)) + name[name.length - 1];
+  return `${maskedName}@${domain}`;
+}
+
+/** Email & Password Login with Keep Signed In & 2FA */
 r.post('/auth/login', authLimiter, ah(async (req, res) => {
   const cfg = await PortalConfig.findOne({ key: 'global' });
   if (cfg && cfg.authMethod === 'OTP_ONLY') {
     throw new AppError(400, 'Password login is disabled by agency administrator. Please use WhatsApp OTP to log in.', 'AUTH_METHOD_DISABLED');
   }
 
-  const { email, password } = z.object({
+  const { email, password, remember } = z.object({
     email: z.string().email(),
     password: z.string().min(1),
+    remember: z.boolean().optional().default(true),
   }).parse(req.body);
 
-  const user = await ClientUser.findOne({ email: email.toLowerCase() }).select('+passwordHash');
+  const user = await ClientUser.findOne({ email: email.toLowerCase() }).select('+passwordHash +twoFactorCodeHash +twoFactorExpiresAt +twoFactorAttempts');
   if (!user || !user.active) {
     throw new AppError(401, 'Invalid email or password', 'INVALID_CREDENTIALS');
   }
@@ -148,10 +156,50 @@ r.post('/auth/login', authLimiter, ah(async (req, res) => {
     throw new AppError(403, 'Client account is suspended or archived', 'ACCOUNT_SUSPENDED');
   }
 
+  // If Two-Factor Authentication is enabled on this client account
+  if (user.twoFactorEnabled) {
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    user.twoFactorCodeHash = sha256(code);
+    user.twoFactorExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    user.twoFactorAttempts = 0;
+    await user.save();
+
+    // Dispatch 2FA verification email
+    const subject = `${code} is your Bulletproof Portal 2FA Verification Code`;
+    const emailBody = `Hello ${user.name},\n\nYour Two-Factor Authentication security code is:\n\n${code}\n\nThis code will expire in 10 minutes.\nIf you did not request this login, please contact your account manager immediately.`;
+    await sendEmail(user.email, subject, emailBody);
+
+    // If phone exists & AiSensy configured, dispatch to WhatsApp as well
+    if (user.phone && aisensyConfigured()) {
+      try {
+        await sendTemplate({
+          campaignName: 'client_portal_otp',
+          phone: user.phone,
+          userName: user.name,
+          params: [user.name, code, '10 minutes'],
+        });
+      } catch (err: any) {
+        logger.warn('Failed to send WhatsApp 2FA OTP', { error: err.message });
+      }
+    }
+
+    logger.info(`[2FA Security] Generated 2FA verification code for ${user.email}: ${code}`);
+
+    const tempToken = signPortal2FATemp({ _id: user._id, clientId: user.clientId, role: user.role });
+    return res.json({
+      requires2FA: true,
+      tempToken,
+      method: user.twoFactorMethod || 'EMAIL',
+      destination: maskEmail(user.email),
+      message: `A 6-digit verification code has been sent to ${maskEmail(user.email)}.`,
+    });
+  }
+
   user.lastLoginAt = new Date();
+  user.rememberMe = remember;
   await user.save();
 
-  const token = signPortalAccess({ _id: user._id, clientId: user.clientId, role: user.role });
+  const token = signPortalAccess({ _id: user._id, clientId: user.clientId, role: user.role }, remember);
   res.json({
     token,
     user: {
@@ -160,12 +208,111 @@ r.post('/auth/login', authLimiter, ah(async (req, res) => {
       email: user.email,
       phone: user.phone,
       role: user.role,
+      twoFactorEnabled: false,
       client: {
         _id: String(client._id),
         name: client.businessName || client.name,
       },
     },
   });
+}));
+
+/** Verify 2FA Code to Complete Login */
+r.post('/auth/2fa/verify', authLimiter, ah(async (req, res) => {
+  const { tempToken, code, remember } = z.object({
+    tempToken: z.string(),
+    code: z.string().length(6),
+    remember: z.boolean().optional().default(true),
+  }).parse(req.body);
+
+  const payload = verifyPortal2FATemp(tempToken);
+  const user = await ClientUser.findById(payload.sub).select('+twoFactorCodeHash +twoFactorExpiresAt +twoFactorAttempts');
+  if (!user || !user.active) {
+    throw new AppError(401, 'User account is inactive or not found', 'UNAUTHORIZED');
+  }
+
+  if (!user.twoFactorCodeHash || !user.twoFactorExpiresAt) {
+    throw new AppError(400, 'Invalid or expired 2FA session. Please log in again.', 'INVALID_2FA');
+  }
+
+  if (user.twoFactorExpiresAt < new Date()) {
+    throw new AppError(400, 'This verification code has expired. Please request a new code.', '2FA_EXPIRED');
+  }
+
+  if ((user.twoFactorAttempts || 0) >= 5) {
+    throw new AppError(429, 'Too many invalid verification attempts. Please log in again.', '2FA_LOCKED');
+  }
+
+  if (sha256(code) !== user.twoFactorCodeHash) {
+    user.twoFactorAttempts = (user.twoFactorAttempts || 0) + 1;
+    await user.save();
+    throw new AppError(400, 'Incorrect verification code. Please try again.', 'INVALID_2FA');
+  }
+
+  // Clear 2FA Challenge on successful verification
+  user.twoFactorCodeHash = undefined;
+  user.twoFactorExpiresAt = undefined;
+  user.twoFactorAttempts = 0;
+  user.lastLoginAt = new Date();
+  user.rememberMe = remember;
+  await user.save();
+
+  const client = await Client.findById(user.clientId).select('name businessName status');
+  const token = signPortalAccess({ _id: user._id, clientId: user.clientId, role: user.role }, remember);
+
+  res.json({
+    token,
+    user: {
+      _id: String(user._id),
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+      twoFactorEnabled: true,
+      client: {
+        _id: String(client?._id),
+        name: client?.businessName || client?.name,
+      },
+    },
+  });
+}));
+
+/** Resend 2FA Verification Code */
+r.post('/auth/2fa/resend', authLimiter, ah(async (req, res) => {
+  const { tempToken } = z.object({ tempToken: z.string() }).parse(req.body);
+  const payload = verifyPortal2FATemp(tempToken);
+
+  const user = await ClientUser.findById(payload.sub).select('+twoFactorCodeHash +twoFactorExpiresAt +twoFactorAttempts');
+  if (!user || !user.active) {
+    throw new AppError(401, 'Account inactive or not found', 'UNAUTHORIZED');
+  }
+
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  user.twoFactorCodeHash = sha256(code);
+  user.twoFactorExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+  user.twoFactorAttempts = 0;
+  await user.save();
+
+  // Dispatch email
+  await sendEmail(
+    user.email,
+    `${code} is your Bulletproof Portal 2FA Verification Code`,
+    `Hello ${user.name},\n\nYour fresh Two-Factor Authentication security code is:\n\n${code}\n\nThis code will expire in 10 minutes.`
+  );
+
+  if (user.phone && aisensyConfigured()) {
+    try {
+      await sendTemplate({
+        campaignName: 'client_portal_otp',
+        phone: user.phone,
+        userName: user.name,
+        params: [user.name, code, '10 minutes'],
+      });
+    } catch {}
+  }
+
+  logger.info(`[2FA Resend] Sent fresh code for ${user.email}: ${code}`);
+  res.json({ ok: true, message: `New code sent to ${maskEmail(user.email)}.` });
 }));
 
 /** Send WhatsApp OTP (6 digits) */
@@ -215,9 +362,10 @@ r.post('/auth/otp/send', authLimiter, ah(async (req, res) => {
 
 /** Verify WhatsApp OTP */
 r.post('/auth/otp/verify', authLimiter, ah(async (req, res) => {
-  const { phone, code } = z.object({
+  const { phone, code, remember } = z.object({
     phone: z.string().min(8),
     code: z.string().length(6),
+    remember: z.boolean().optional().default(true),
   }).parse(req.body);
 
   const cleanPhone = phone.replace(/[^\d+]/g, '');
@@ -249,10 +397,11 @@ r.post('/auth/otp/verify', authLimiter, ah(async (req, res) => {
   user.otpExpiresAt = undefined;
   user.otpAttempts = 0;
   user.lastLoginAt = new Date();
+  user.rememberMe = remember;
   await user.save();
 
   const client = await Client.findById(user.clientId).select('name businessName status');
-  const token = signPortalAccess({ _id: user._id, clientId: user.clientId, role: user.role });
+  const token = signPortalAccess({ _id: user._id, clientId: user.clientId, role: user.role }, remember);
 
   res.json({
     token,
@@ -262,6 +411,7 @@ r.post('/auth/otp/verify', authLimiter, ah(async (req, res) => {
       email: user.email,
       phone: user.phone,
       role: user.role,
+      twoFactorEnabled: !!user.twoFactorEnabled,
       client: {
         _id: String(client?._id),
         name: client?.businessName || client?.name,
@@ -361,6 +511,31 @@ r.get('/auth/me', ah(async (req, res) => {
         title: 'Account Manager & SMM',
       } : null,
     },
+  });
+}));
+
+/** Toggle Two-Factor Authentication for Client Portal Account */
+r.post('/auth/2fa/toggle', ah(async (req, res) => {
+  const user = await ClientUser.findById(req.portalUser!._id);
+  if (!user) throw notFound('User');
+
+  user.twoFactorEnabled = !user.twoFactorEnabled;
+  await user.save();
+
+  if (user.twoFactorEnabled) {
+    void sendEmail(
+      user.email,
+      '2FA Enabled for your Bulletproof Client Portal Account',
+      `Hello ${user.name},\n\nTwo-Factor Authentication (2FA) is now ACTIVE for your account. You will receive a verification code on each sign-in to keep your workspace secure.\n\nBulletproof Brands Security`
+    ).catch(() => null);
+  }
+
+  res.json({
+    ok: true,
+    twoFactorEnabled: user.twoFactorEnabled,
+    message: user.twoFactorEnabled
+      ? 'Two-Factor Authentication enabled successfully!'
+      : 'Two-Factor Authentication disabled.',
   });
 }));
 

@@ -74,7 +74,9 @@ export async function notifyClientUsers(clientId: any, n: { title: string; messa
     emitToClient(clientId, 'notification:new', notif.toJSON());
 
     // 3. Dispatch Web Push notification to client devices (Android, iOS PWA, Desktop)
-    const subs = await PushSubscription.find({ clientId });
+    const subs = await PushSubscription.find({
+      $or: [{ clientId }, { clientUserId: clientId }],
+    });
     if (!subs.length) return 0;
     let ok = 0;
     for (const s of subs) {

@@ -4,6 +4,8 @@ export interface ClientUser {
   email: string;
   phone?: string;
   role: 'CLIENT_ADMIN' | 'CLIENT_MEMBER';
+  twoFactorEnabled?: boolean;
+  rememberMe?: boolean;
   client: {
     _id: string;
     name: string;

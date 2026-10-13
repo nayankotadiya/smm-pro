@@ -12,6 +12,7 @@ export interface PortalAuthUser {
   email: string;
   phone?: string;
   role: 'CLIENT_ADMIN' | 'CLIENT_MEMBER';
+  twoFactorEnabled?: boolean;
 }
 
 declare global {
@@ -31,8 +32,30 @@ export function signPortalAccess(user: { _id: any; clientId: any; role: string }
       aud: 'smm-portal',
     },
     env.jwtSecret,
-    { expiresIn: remember ? '30d' : '7d' }
+    { expiresIn: remember ? '90d' : '1d' } // 90 days for Keep Signed In, 1 day otherwise
   );
+}
+
+export function signPortal2FATemp(user: { _id: any; clientId: any; role: string }) {
+  return jwt.sign(
+    {
+      sub: String(user._id),
+      cid: String(user.clientId),
+      role: user.role,
+      stage: '2fa_pending',
+      aud: 'smm-portal-2fa',
+    },
+    env.jwtSecret,
+    { expiresIn: '10m' } // 10 minutes to verify 2FA
+  );
+}
+
+export function verifyPortal2FATemp(token: string): { sub: string; cid: string; role: string } {
+  try {
+    return jwt.verify(token, env.jwtSecret, { audience: 'smm-portal-2fa' }) as any;
+  } catch {
+    throw new AppError(401, '2FA verification session has expired. Please sign in again.', '2FA_SESSION_EXPIRED');
+  }
 }
 
 export async function userFromPortalToken(token: string): Promise<PortalAuthUser> {
@@ -51,6 +74,7 @@ export async function userFromPortalToken(token: string): Promise<PortalAuthUser
     email: u.email,
     phone: u.phone || undefined,
     role: u.role as 'CLIENT_ADMIN' | 'CLIENT_MEMBER',
+    twoFactorEnabled: !!u.twoFactorEnabled,
   };
 }
 

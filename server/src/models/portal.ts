@@ -17,6 +17,12 @@ const clientUserSchema = new Schema({
   otpAttempts: { type: Number, default: 0, select: false },
   magicTokenHash: { type: String, select: false },
   magicTokenExpiresAt: { type: Date, select: false },
+  twoFactorEnabled: { type: Boolean, default: false },
+  twoFactorMethod: { type: String, enum: ['EMAIL', 'WHATSAPP'], default: 'EMAIL' },
+  twoFactorCodeHash: { type: String, select: false },
+  twoFactorExpiresAt: { type: Date, select: false },
+  twoFactorAttempts: { type: Number, default: 0, select: false },
+  rememberMe: { type: Boolean, default: true },
   notificationPrefs: {
     whatsapp: { type: Boolean, default: true },
     email: { type: Boolean, default: true },
@@ -36,6 +42,9 @@ clientUserSchema.set('toJSON', {
     delete r.otpAttempts;
     delete r.magicTokenHash;
     delete r.magicTokenExpiresAt;
+    delete r.twoFactorCodeHash;
+    delete r.twoFactorExpiresAt;
+    delete r.twoFactorAttempts;
     return r;
   },
 });

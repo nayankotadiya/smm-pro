@@ -7,9 +7,10 @@ interface AuthState {
   user: ClientUser | null;
   brand: BrandInfo | null;
   ready: boolean;
-  login: (token: string, user: ClientUser) => void;
+  login: (token: string, user: ClientUser, remember?: boolean) => void;
   logout: () => void;
   fetchProfile: () => Promise<void>;
+  toggle2FA: () => Promise<boolean>;
 }
 
 export const useAuth = create<AuthState>((set) => ({
@@ -18,8 +19,9 @@ export const useAuth = create<AuthState>((set) => ({
   brand: null,
   ready: false,
 
-  login: (token: string, user: ClientUser) => {
+  login: (token: string, user: ClientUser, remember = true) => {
     localStorage.setItem('smm_client_token', token);
+    localStorage.setItem('smm_remember_me', remember ? 'true' : 'false');
     set({ token, user, ready: true });
   },
 
@@ -45,5 +47,14 @@ export const useAuth = create<AuthState>((set) => ({
       localStorage.removeItem('smm_client_token');
       set({ token: null, user: null, brand: null, ready: true });
     }
+  },
+
+  toggle2FA: async () => {
+    const res = await api.post('/auth/2fa/toggle');
+    const enabled = !!res.data.twoFactorEnabled;
+    set((state) => ({
+      user: state.user ? { ...state.user, twoFactorEnabled: enabled } : null,
+    }));
+    return enabled;
   },
 }));

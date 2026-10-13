@@ -28,18 +28,19 @@ self.addEventListener('push', (e) => {
   }
 
   const title = d.title || 'Bulletproof Client Portal';
-  const url = d.url || '/';
+  const url = d.url || (d.data && d.data.url) || '/';
+  const tag = d.tag || ('portal-' + Date.now());
 
-  // Base options supported by all platforms including iOS Safari 16.4+
+  // Base options supported universally (iOS Safari 16.4+, Android Chrome, Desktop)
   const baseOptions = {
     body: d.body || 'New update waiting for your review.',
-    icon: '/brand/bulletproof-shield.png',
-    badge: '/brand/bulletproof-shield.png',
-    tag: d.tag || ('portal-' + Date.now()),
+    icon: d.icon || '/brand/bulletproof-shield.png',
+    badge: d.badge || '/brand/bulletproof-shield.png',
+    tag,
     data: { url },
   };
 
-  // Extended options for desktop and Android Chrome
+  // Extended options for Android & Desktop to wake screen & buzz
   const extendedOptions = {
     ...baseOptions,
     renotify: true,
@@ -54,9 +55,13 @@ self.addEventListener('push', (e) => {
 
   e.waitUntil(
     self.registration.showNotification(title, extendedOptions).catch(() => {
-      // Fallback: strip vibrate, renotify, and actions for iOS Safari/WebKit
-      return self.registration.showNotification(title, baseOptions).catch((err) => {
-        console.warn('[SW Push Display Fallback Error]', err);
+      // Tier 2 Fallback: Strip actions & vibrate for iOS WebKit
+      return self.registration.showNotification(title, baseOptions).catch(() => {
+        // Tier 3 Fallback: Bare minimal notification if image caching is blocked
+        return self.registration.showNotification(title, {
+          body: d.body || 'New update waiting for you.',
+          data: { url },
+        });
       });
     })
   );
