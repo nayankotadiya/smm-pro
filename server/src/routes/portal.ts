@@ -66,6 +66,11 @@ r.get('/auth/config', ah(async (_req, res) => {
   });
 }));
 
+/** Public: Get Web Push VAPID configuration for client devices */
+r.get('/push/config', (_req, res) => {
+  res.json({ enabled: pushConfigured(), publicKey: getVapidPublicKey() });
+});
+
 /** Super Admin: Get Portal Settings */
 r.get('/config', requireAuth, ah(async (req, res) => {
   let cfg = await PortalConfig.findOne({ key: 'global' }).lean();
