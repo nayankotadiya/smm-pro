@@ -299,6 +299,7 @@ function PendingReviewsDetail({ dateFrom, dateTo, mine: _mine }: { dateFrom: str
 function WaitingFor() {
   const q = useQuery(dq('waiting-for')); const nav = useNavigate();
   const items: [string, string, string][] = [
+    ['clientRequests', 'Client Requests', '/content?stage=IDEA'],
     ['clientReviews', 'Client Reviews', '/approvals?tab=client'],
     ['internalReviews', 'Internal Reviews', '/approvals?tab=internal'],
     ['rawFootage', 'Raw Footage', '/shooting'],
@@ -311,7 +312,7 @@ function WaitingFor() {
     <Card title="Waiting for">
       <Async q={q}>
         {(d: any) => (
-          <div className="stagger grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7">
+          <div className="stagger grid grid-cols-2 gap-2.5 sm:grid-cols-4 md:grid-cols-4 lg:grid-cols-8">
             {items.map(([k, l, to]) => {
               const count = d[k] || 0;
               const hasItems = count > 0;

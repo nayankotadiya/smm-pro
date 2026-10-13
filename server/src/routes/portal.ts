@@ -5,12 +5,17 @@ import rateLimit from 'express-rate-limit';
 import { ah } from '../utils/async';
 import { AppError, badRequest, notFound, forbidden } from '../utils/errors';
 import { randomToken, sha256 } from '../utils/crypto';
-import { ClientUser, Client, Content, Approval, ScriptVersion, Media, ClientBrief, Feedback, PortalConfig, ChatRoom, Message, Notification, PushSubscription } from '../models';
+import { ClientUser, Client, Content, Approval, Script, ScriptVersion, Media, ClientBrief, Feedback, PortalConfig, ChatRoom, Message, Notification, PushSubscription } from '../models';
 import { requirePortalAuth, signPortalAccess } from '../middleware/clientAuth';
 import { requireAuth } from '../middleware/auth';
 import { clientDecision } from '../services/approvals';
 import { pipeMedia } from '../services/media';
-import { ensureClientRoom, broadcastMessage } from '../services/chat';
+import { ensureClientRoom, ensureContentRoom, broadcastMessage, postSystemEvent } from '../services/chat';
+import { nextContentCode, applyStage, setLastAction, broadcastContent } from '../services/content';
+import { ensureContentFolders } from '../services/storage';
+import { logActivity } from '../services/activity';
+import { emitDomain } from '../services/events';
+import { emitOrg, emitToRoom } from '../services/realtime';
 import { aisensyConfigured, sendTemplate } from '../integrations/aisensy';
 import { sendEmail } from '../integrations/email';
 import { logger } from '../utils/logger';
@@ -389,7 +394,20 @@ r.get('/dashboard', ah(async (req, res) => {
     .select('contentId title type platform scheduledAt publishedAt caption')
     .lean();
 
-  // 4. Client's Brand info
+  // 4. Recent Client Briefs & Content Requests
+  const recentBriefs = await ClientBrief.find({ clientId })
+    .sort({ createdAt: -1 })
+    .limit(5)
+    .populate('contentId', 'contentId stage status progress title currentVideoVersion currentScriptVersion scheduledAt publishedAt')
+    .populate('submittedBy', 'name email')
+    .lean();
+
+  const openRequestsCount = await ClientBrief.countDocuments({
+    clientId,
+    status: { $in: ['SUBMITTED', 'IN_REVIEW'] },
+  });
+
+  // 5. Client's Brand info
   const client = await Client.findById(clientId)
     .populate('defaultTeam.smm', 'name email title')
     .select('name businessName defaultTeam')
@@ -413,7 +431,9 @@ r.get('/dashboard', ah(async (req, res) => {
       scheduledCount,
       inProductionCount,
       pendingApprovalCount: pendingApprovals.length,
+      openRequestsCount,
     },
+    recentBriefs,
     upcomingPosts,
     accountManager: client?.defaultTeam?.smm ? {
       name: (client.defaultTeam.smm as any).name,
@@ -671,6 +691,7 @@ r.get('/briefs', ah(async (req, res) => {
   const briefs = await ClientBrief.find({ clientId })
     .sort({ createdAt: -1 })
     .populate('submittedBy', 'name email')
+    .populate('contentId', 'contentId stage status progress title currentVideoVersion currentScriptVersion scheduledAt publishedAt')
     .lean();
 
   res.json(briefs);
@@ -687,30 +708,164 @@ r.post('/briefs', ah(async (req, res) => {
     referenceUrls: z.array(z.string().url()).optional(),
   }).parse(req.body);
 
+  const client = await Client.findById(clientId);
+  if (!client) throw notFound('Client');
+
+  const dt = (client.defaultTeam || {}) as any;
+  const code = await nextContentCode(b.contentType);
+
+  // Compile formatted description with client inputs
+  const descParts = [
+    `Client Creative Request: ${b.title}`,
+    b.objective ? `🎯 Objective / Goal:\n${b.objective}` : '',
+    b.notes ? `📝 Client Notes & Directions:\n${b.notes}` : '',
+    b.referenceUrls?.length ? `🔗 Reference URLs:\n${b.referenceUrls.join('\n')}` : '',
+    `👤 Requested by: ${req.portalUser!.name} (${req.portalUser!.email})`,
+  ].filter(Boolean);
+
+  // Create tracked Content item in production workflow (Stage: IDEA)
+  const content = new Content({
+    contentId: code,
+    title: b.title,
+    clientId,
+    type: b.contentType,
+    platform: b.targetPlatform,
+    stage: 'IDEA',
+    status: 'ACTIVE',
+    progress: 8,
+    priority: 'HIGH',
+    description: descParts.join('\n\n'),
+    assignedWriter: dt.writer || null,
+    assignedShooter: dt.shooter || null,
+    assignedEditor: dt.editor || null,
+    assignedSMM: dt.smm || null,
+    assignedReviewer: dt.reviewer || null,
+    currentOwner: dt.writer || dt.smm || null,
+    nextOwner: dt.reviewer || null,
+    nextAction: 'Review client brief and draft script outline',
+    stageHistory: [{ stage: 'IDEA', enteredAt: new Date() }],
+    createdBy: dt.smm || dt.writer || null,
+  });
+
+  applyStage(content, 'IDEA');
+  await setLastAction(content, `Client requested creative brief: "${b.title}"`);
+  await content.save();
+
+  // Create initial Script document for writer
+  const script = await Script.create({
+    contentId: content._id,
+    clientId: content.clientId,
+    writerId: content.assignedWriter,
+    status: 'DRAFT',
+  });
+  content.scriptId = script._id;
+  await content.save();
+
+  // Ensure content communication channels & storage
+  await ensureContentRoom(content);
+  ensureContentFolders(content).catch((e: any) => logger.warn('[drive] content folders', e?.message));
+
+  // Create the ClientBrief linked directly to the newly spawned Content item
   const brief = await ClientBrief.create({
     clientId,
     submittedBy: req.portalUser!._id,
+    contentId: content._id,
+    status: 'IN_REVIEW',
     ...b,
   });
 
+  // Post announcement to the client's shared workspace chat room
   try {
-    const client = await Client.findById(clientId);
-    const assignedTeam = client?.assignedTeam || [];
-    const targets = assignedTeam.length ? assignedTeam : await managerIds();
-    await notify(targets, {
+    const clientRoom = await ensureClientRoom(client);
+    const announceMsg = await Message.create({
+      roomId: clientRoom._id,
+      senderClientUserId: req.portalUser!._id,
+      kind: 'TEXT',
+      message: `✨ New Content Request: "${b.title}" (${b.contentType} · ${b.targetPlatform})\n\nTracking Code: ${content.contentId}\nObjective: ${b.objective || 'Not specified'}`,
+    });
+    clientRoom.lastMessageAt = new Date();
+    clientRoom.lastMessagePreview = `New Request: ${b.title}`;
+    await clientRoom.save();
+    await broadcastMessage(clientRoom, announceMsg);
+  } catch (err: any) {
+    logger.warn('[portal brief client chat announcement]', err?.message);
+  }
+
+  // Post system event in the content chat room
+  try {
+    await postSystemEvent(
+      content._id,
+      'CLIENT_BRIEF_SUBMITTED',
+      `Client Creative Request: ${content.contentId}`,
+      [
+        `Title: ${b.title}`,
+        `Requested by: ${req.portalUser!.name}`,
+        b.objective ? `Objective: ${b.objective}` : '',
+      ].filter(Boolean),
+      { link: `/content/${content._id}` }
+    );
+  } catch (err: any) {
+    logger.warn('[portal brief postSystemEvent]', err?.message);
+  }
+
+  // Log activity
+  try {
+    await logActivity({
+      actorType: 'CLIENT',
+      actorName: req.portalUser!.name,
+      action: 'brief.created',
+      message: `Client requested ${content.contentId} · "${b.title}"`,
+      entityType: 'content',
+      entityId: content._id,
+      contentId: content._id,
+      clientId,
+    });
+  } catch (err: any) {
+    logger.warn('[portal brief logActivity]', err?.message);
+  }
+
+  // Emit domain events & realtime updates across agency and client portal
+  try {
+    emitDomain('content.created', { contentId: String(content._id) });
+    await broadcastContent(content);
+    emitOrg('brief:new', { brief, content });
+    emitToRoom(`client:${clientId}`, 'brief:new', { brief, content });
+  } catch (err: any) {
+    logger.warn('[portal brief emit]', err?.message);
+  }
+
+  // Dispatch notifications to the client's assigned team & managers
+  try {
+    const teamTargets = [
+      content.assignedWriter,
+      content.assignedSMM,
+      ...(client.assignedTeam || []),
+      ...(await managerIds()),
+    ].filter(Boolean);
+    const uniqueTargets = [...new Set(teamTargets.map(String))];
+    await notify(uniqueTargets, {
       type: 'client.brief',
       category: 'WORKFLOW',
-      title: `New Brief from ${client?.businessName || client?.name || 'Client'}`,
-      message: b.title,
-      link: `/clients/${clientId}?tab=briefs`,
-      entityType: 'client',
-      entityId: String(clientId),
+      title: `New Content Request: ${client.businessName || client.name || 'Client'}`,
+      message: `"${b.title}" (${content.contentId}) is in Idea stage and ready for script drafting.`,
+      link: `/content/${content._id}`,
+      entityType: 'content',
+      entityId: String(content._id),
     });
   } catch (err: any) {
     logger.warn('[portal brief notification]', err?.message);
   }
 
-  res.status(201).json(brief);
+  res.status(201).json({
+    ...brief.toObject(),
+    contentId: {
+      _id: content._id,
+      contentId: content.contentId,
+      stage: content.stage,
+      progress: content.progress,
+      title: content.title,
+    },
+  });
 }));
 
 /** Client Portal Chat: Get or Ensure Room & Team Info */

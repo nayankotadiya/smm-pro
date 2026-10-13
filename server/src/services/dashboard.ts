@@ -1,4 +1,4 @@
-import { Content, Client, Task, Approval, Media, ActivityLog, Reminder, User, Presence, AutomationRun, Automation, ScheduledPost, Shoot } from '../models';
+import { Content, Client, Task, Approval, Media, ActivityLog, Reminder, User, Presence, AutomationRun, Automation, ScheduledPost, Shoot, ClientBrief } from '../models';
 import { AuthUser, can } from '../middleware/auth';
 import { visibilityFilter } from './content';
 import { STAGES } from '../config/constants';
@@ -10,15 +10,16 @@ const OPEN_CLIENT = ['SENT', 'DELIVERED', 'OPENED', 'WAITING_FOR_CLIENT'];
 export async function summary(u: AuthUser) {
   const vis = visibilityFilter(u);
   const c = (q: any) => Content.countDocuments({ $and: [vis, q] });
-  const [totalClients, totalContent, pendingScripts, shooting, editing, clientReviews, needsReview, scheduled, published, overdueTasks, blocked] = await Promise.all([
+  const [totalClients, totalContent, pendingScripts, shooting, editing, clientReviews, needsReview, scheduled, published, overdueTasks, blocked, clientRequests] = await Promise.all([
     Client.countDocuments({}), c({ status: { $ne: 'CANCELLED' } }), c({ stage: { $in: ['IDEA', 'SCRIPT', 'INTERNAL_REVIEW'] } }), c({ stage: 'SHOOTING' }), c({ stage: { $in: ['RAW_FOOTAGE', 'EDITING'] } }),
     Approval.countDocuments({ type: { $in: ['CLIENT_SCRIPT', 'CLIENT_FINAL'] }, status: { $in: OPEN_CLIENT } }),
     Approval.countDocuments({ type: { $in: ['INTERNAL_SCRIPT', 'SMM', 'FINAL'] }, status: 'PENDING' }),
     c({ stage: 'SCHEDULE' }), c({ stage: 'PUBLISHED' }),
     Task.countDocuments({ ...(can(u, 'tasks.read.all') ? {} : { assignedTo: u._id }), status: { $ne: 'COMPLETED' }, dueAt: { $lt: new Date() } }),
     c({ status: 'BLOCKED' }),
+    ClientBrief.countDocuments({ status: { $in: ['SUBMITTED', 'IN_REVIEW'] } }),
   ]);
-  return { totalClients, totalContent, pendingScripts, shooting, editing, clientReviews, needsReview, scheduled, published, overdue: overdueTasks, blocked };
+  return { totalClients, totalContent, pendingScripts, shooting, editing, clientReviews, needsReview, scheduled, published, overdue: overdueTasks, blocked, clientRequests };
 }
 
 export async function mySummary(u: AuthUser) {
@@ -90,8 +91,22 @@ export async function needsAttention(u: AuthUser) {
   unassigned.forEach((t: any) => add(`Unassigned task: ${t.title}`, 2, t.contentId, null, t.createdAt, `/tasks/${t._id}`));
   const failedAuto = await Automation.find({ lastResult: 'FAILED', active: true }).lean();
   failedAuto.forEach((a: any) => add(`Automation failed: ${a.name}`, 2, null, null, a.lastRunAt, '/automation'));
-  const failedUploads = await Media.find({ status: 'FAILED', updatedAt: { $gt: new Date(now - 3 * DAY) } }).populate({ path: 'contentId', select: 'contentId title clientId', populate: { path: 'clientId', select: 'name' } }).populate('uploadedBy', 'name').limit(10).lean();
-  failedUploads.forEach((m: any) => add(`Failed upload: ${m.fileName}`, 1, m.contentId, m.uploadedBy, m.updatedAt, `/media`));
+  const clientBriefs = await ClientBrief.find({ status: { $in: ['SUBMITTED', 'IN_REVIEW'] } })
+    .populate({ path: 'contentId', select: 'contentId title clientId currentOwner', populate: { path: 'clientId', select: 'name' } })
+    .populate('clientId', 'name')
+    .limit(10)
+    .lean();
+  clientBriefs.forEach((b: any) => {
+    const c = b.contentId;
+    add(
+      `Client content request: "${b.title}"`,
+      3,
+      c || null,
+      c?.currentOwner || null,
+      b.createdAt,
+      c ? `/content/${c._id}` : `/clients/${b.clientId?._id || ''}`
+    );
+  });
   if (!can(u, 'dashboard.org')) return rows.filter((r) => r.owner === u.name).sort((a, b) => b.severity - a.severity || (b.ageHours || 0) - (a.ageHours || 0));
   return rows.sort((a, b) => b.severity - a.severity || (b.ageHours || 0) - (a.ageHours || 0));
 }
@@ -99,6 +114,7 @@ export async function needsAttention(u: AuthUser) {
 export async function waitingFor() {
   const c = (q: any) => Content.countDocuments({ status: { $nin: ['COMPLETED', 'CANCELLED'] }, ...q });
   return {
+    clientRequests: await ClientBrief.countDocuments({ status: { $in: ['SUBMITTED', 'IN_REVIEW'] } }),
     clientReviews: await Approval.countDocuments({ type: { $in: ['CLIENT_SCRIPT', 'CLIENT_FINAL'] }, status: { $in: OPEN_CLIENT } }),
     internalReviews: await Approval.countDocuments({ type: 'INTERNAL_SCRIPT', status: 'PENDING' }),
     rawFootage: await c({ stage: 'SHOOTING' }),

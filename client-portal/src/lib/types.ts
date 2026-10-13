@@ -43,6 +43,7 @@ export interface DashboardStats {
   scheduledCount: number;
   inProductionCount: number;
   pendingApprovalCount: number;
+  openRequestsCount?: number;
 }
 
 export interface UpcomingPost {
@@ -119,5 +120,21 @@ export interface ClientBrief {
   notes?: string;
   referenceUrls?: string[];
   status: 'SUBMITTED' | 'IN_REVIEW' | 'ACCEPTED' | 'DECLINED';
+  contentId?: {
+    _id: string;
+    contentId: string;
+    stage: string;
+    progress: number;
+    title: string;
+    currentVideoVersion?: string;
+    currentScriptVersion?: number;
+    scheduledAt?: string;
+    publishedAt?: string;
+  } | null;
+  submittedBy?: {
+    _id: string;
+    name: string;
+    email?: string;
+  } | null;
   createdAt: string;
 }
