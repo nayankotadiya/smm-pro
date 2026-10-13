@@ -13,7 +13,7 @@ export function pushConfigured() {
   if (!pub || !priv) return false;
   if (!ready) {
     try {
-      webpush.setVapidDetails(env.vapid.subject || 'mailto:admin@example.com', pub, priv);
+      webpush.setVapidDetails(env.vapid.subject || 'mailto:bulletproofbrands137@gmail.com', pub, priv);
       ready = true;
     } catch (e) {
       console.error('[push] Failed to set VAPID details', e);

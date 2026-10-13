@@ -64,7 +64,7 @@ MAX_UPLOAD_MB=2048
 # ---------- PUSH NOTIFICATIONS (Web Push - 100% Free Browser Standards) ----------
 VAPID_PUBLIC_KEY=${vapidKeys.publicKey}
 VAPID_PRIVATE_KEY=${vapidKeys.privateKey}
-VAPID_SUBJECT=mailto:admin@example.com
+VAPID_SUBJECT=mailto:bulletproofbrands137@gmail.com
 
 # ---------- BACKGROUND SCHEDULER ($0 Built-in Scheduler) ----------
 # Keep REDIS_URL empty to use the zero-cost in-process scheduler!
