@@ -14,7 +14,8 @@
     "create-admin": "tsx src/createAdmin.ts",
     "backup": "tsx src/scripts/backup.ts",
     "restore": "tsx src/scripts/restore.ts",
-    "setup:free": "tsx src/scripts/setup-free-tier.ts"
+    "setup:free": "tsx src/scripts/setup-free-tier.ts",
+    "test:drive": "tsx src/scripts/test-drive.ts"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",
