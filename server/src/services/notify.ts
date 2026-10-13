@@ -30,11 +30,13 @@ export async function notify(userIds: any[], n: NotifyInput, opts: { excludeUser
   return created;
 }
 async function deliverPush(doc: any, userId: any) {
-  const subs = await PushSubscription.find({ userId });
+  const rawSubs = await PushSubscription.find({ userId });
+  // Deduplicate by endpoint to ensure the exact same browser never gets pushed twice
+  const subs = Array.from(new Map(rawSubs.map((s) => [s.endpoint, s])).values());
   if (!subs.length) { await Notification.updateOne({ _id: doc._id }, { 'delivery.push': 'NO_SUBSCRIPTION' }); return; }
   let ok = 0;
   for (const s of subs) {
-    const r = await sendPush(s, { title: doc.title, body: doc.message || '', url: doc.link || '/notifications', tag: String(doc._id) });
+    const r = await sendPush(s, { title: doc.title, body: doc.message || '', url: doc.link || '/notifications', tag: String(doc._id || 'smm-alert') });
     if (r === 'SENT') { ok++; s.lastUsedAt = new Date(); s.failures = 0; await s.save(); }
     else if (r === 'GONE') await s.deleteOne();
     else if (r === 'FAILED') { s.failures = (s.failures || 0) + 1; await s.save(); }
@@ -76,22 +78,25 @@ export async function notifyClientUsers(clientId: any, n: { title: string; messa
     // 3. Dispatch Web Push notification to client devices (Android, iOS PWA, Desktop)
     const clientUserDocs = await ClientUser.find({ clientId }).select('_id').lean();
     const clientUserIds = clientUserDocs.map((u) => u._id);
-    const subs = await PushSubscription.find({
+    const rawSubs = await PushSubscription.find({
       $or: [
         { clientId },
         { clientUserId: { $in: clientUserIds } },
       ],
     });
-    console.log(`[notifyClientUsers] Found ${subs.length} push subscription(s) for client ${clientId}`);
+    // Deduplicate subscriptions by endpoint so same device never receives duplicate push
+    const subs = Array.from(new Map(rawSubs.map((s) => [s.endpoint, s])).values());
+    console.log(`[notifyClientUsers] Found ${subs.length} unique push subscription(s) for client ${clientId}`);
     if (!subs.length) return 0;
     let ok = 0;
+    const stableTag = n.tag || (`client-${notif._id}`);
     for (const s of subs) {
       try {
         const r = await sendPush(s, {
           title: n.title,
           body: n.message || '',
           url: n.url || '/',
-          tag: n.tag || ('client-' + Date.now()),
+          tag: stableTag,
         });
         console.log(`[notifyClientUsers] Push result for device [${s.platform || s.deviceType || 'mobile'}]: ${r}`);
         if (r === 'SENT') {

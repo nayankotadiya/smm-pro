@@ -83,6 +83,8 @@ export interface DeviceNotificationOptions {
   vibrate?: boolean;
 }
 
+const recentDeviceNotifications = new Map<string, number>();
+
 /**
  * Displays a system-level notification on the device's notification panel
  * (Windows Action Center, macOS Notification Center, Android Notification Shade).
@@ -90,6 +92,22 @@ export interface DeviceNotificationOptions {
 export async function showDeviceNotification(opts: DeviceNotificationOptions) {
   if (typeof window === 'undefined' || !('Notification' in window)) return false;
   if (Notification.permission !== 'granted') return false;
+
+  // If user is actively focused on the app window, let in-app toast handle it; avoid duplicate OS popup
+  if (document.visibilityState === 'visible' && document.hasFocus()) return false;
+
+  const dedupeKey = opts.tag || `${opts.title}:${opts.message || ''}`;
+  const now = Date.now();
+  const lastTime = recentDeviceNotifications.get(dedupeKey);
+  if (lastTime && now - lastTime < 4500) {
+    return false; // Drop duplicate!
+  }
+  recentDeviceNotifications.set(dedupeKey, now);
+  if (recentDeviceNotifications.size > 80) {
+    for (const [k, time] of recentDeviceNotifications) {
+      if (now - time > 10000) recentDeviceNotifications.delete(k);
+    }
+  }
 
   if (opts.sound !== false) {
     playNotificationChime();
@@ -100,7 +118,7 @@ export async function showDeviceNotification(opts: DeviceNotificationOptions) {
 
   const title = opts.title || 'SMM PRO';
   const body = opts.message || 'New update in SMM PRO';
-  const tag = opts.tag || `smm-${Date.now()}`;
+  const tag = opts.tag || ('smm-' + title.slice(0, 20).replace(/[^\w-]/g, '_').toLowerCase());
   const icon = '/icons/icon-192.png';
   const badge = '/icons/icon-192.png';
   const url = opts.link || '/';

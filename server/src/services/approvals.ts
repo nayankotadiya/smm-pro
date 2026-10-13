@@ -155,7 +155,6 @@ export async function sendClientReview(u: AuthUser, b: { contentId: string; kind
   emitOrg('approval:new', { _id: String(a._id), contentId: String(content._id), status: a.status, type });
   if (client._id) {
     emitToClient(client._id, 'approval:new', { _id: String(a._id), contentId: String(content._id), status: a.status, type });
-    emitToClient(client._id, 'approval:updated', { _id: String(a._id), contentId: String(content._id), status: a.status, type });
     void notifyClientUsers(client._id, {
       title: 'Sign-off Needed: ' + (type === 'CLIENT_SCRIPT' ? 'Script' : 'Video Cut'),
       message: `${content.title} (${version}) is ready for your review and sign-off.`,

@@ -241,10 +241,28 @@ export async function sendTestClientPush(): Promise<{ ok: boolean; message: stri
   }
 }
 
+const recentLocalNotifications = new Map<string, number>();
+
 /** Show local desktop notification if app is open but tab is in background / blurred */
 export async function showLocalNotification(title: string, options: NotificationOptions = {}) {
   if (typeof window === 'undefined' || !('Notification' in window)) return;
   if (Notification.permission !== 'granted') return;
+
+  // If user is actively focused on the app window, let in-app toast handle it; avoid annoying duplicate OS popup
+  if (document.visibilityState === 'visible' && document.hasFocus()) return;
+
+  const dedupeKey = (options.tag as string) || `${title}:${options.body || ''}`;
+  const now = Date.now();
+  const lastShown = recentLocalNotifications.get(dedupeKey);
+  if (lastShown && now - lastShown < 4500) {
+    return; // Drop duplicate!
+  }
+  recentLocalNotifications.set(dedupeKey, now);
+  if (recentLocalNotifications.size > 80) {
+    for (const [k, time] of recentLocalNotifications) {
+      if (now - time > 10000) recentLocalNotifications.delete(k);
+    }
+  }
 
   try {
     const reg = await navigator.serviceWorker.getRegistration();

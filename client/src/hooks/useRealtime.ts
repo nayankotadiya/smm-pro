@@ -53,7 +53,7 @@ export function useRealtime() {
           title: '📋 New Task Assigned',
           message: t?.title || 'You have been assigned to a task',
           link: '/tasks',
-          tag: `task-${t?._id || Date.now()}`,
+          tag: `task-${t?._id || 'assigned'}`,
         });
       },
       'task:updated': () => inv('tasks', 'dashboard', 'content-detail'),
@@ -64,7 +64,7 @@ export function useRealtime() {
           title: '🛡️ New Approval Required',
           message: a?.title || 'A new review requires your approval',
           link: '/approvals',
-          tag: `approval-${a?._id || Date.now()}`,
+          tag: `approval-${a?._id || 'new'}`,
         });
       },
       'approval:updated': () => inv('approvals', 'dashboard', 'content-detail'),
@@ -77,7 +77,7 @@ export function useRealtime() {
           title: '⏰ Reminder Due',
           message: r?.title || 'You have a scheduled reminder due now',
           link: '/reminders',
-          tag: `reminder-${r?._id || Date.now()}`,
+          tag: `reminder-${r?._id || 'due'}`,
         });
       },
       'automation:executed': () => inv('automations', 'dashboard'),

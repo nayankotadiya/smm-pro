@@ -35,15 +35,20 @@ self.addEventListener('push', (e) => {
   const title = d.title || 'Bulletproof Client Portal';
   const body = d.body || 'New update waiting for your review.';
   const url = d.url || (d.data && d.data.url) || '/';
-  const tag = d.tag || ('bp-alert-' + Date.now());
+  const tag = d.tag || ('bp-' + (d.title || 'alert').slice(0, 25).replace(/[^\w-]/g, '_').toLowerCase());
 
   // Detect iOS WebKit PWA
   const isIOS = /iPad|iPhone|iPod/.test(self.navigator.userAgent) ||
     (self.navigator.platform === 'MacIntel' && self.navigator.maxTouchPoints > 1);
 
-  // iOS Safari WebKit supports only standard notification properties
-  // Passing unsupported options (like 'actions' or 'vibrate') can throw or silently drop notifications on iOS
   const notificationPromise = (async () => {
+    // If user is actively focused on the app right now, in-app UI handles it; avoid duplicate OS popups
+    try {
+      const windowClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      const isFocused = windowClients.some((c) => c.focused);
+      if (isFocused) return;
+    } catch {}
+
     if (isIOS) {
       try {
         return await self.registration.showNotification(title, {

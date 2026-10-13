@@ -15,6 +15,7 @@ export interface NotificationItem {
   title: string;
   message: string;
   type: string;
+  category?: string;
   actionUrl?: string;
   read: boolean;
   createdAt: string;
@@ -124,11 +125,28 @@ export const useNotifications = create<NotificationState>((set, get) => ({
     socket.off('approval:new');
     socket.off('notification:new');
 
+    const recentEvents = new Map<string, number>();
+    const isDuplicateEvent = (key: string, cooldown = 4500) => {
+      const now = Date.now();
+      const last = recentEvents.get(key);
+      if (last && now - last < cooldown) return true;
+      recentEvents.set(key, now);
+      return false;
+    };
+
     socket.on('notification:new', (notif: NotificationItem) => {
       set((state) => ({
         notifications: [notif, ...state.notifications],
         unreadNotifications: state.unreadNotifications + 1,
       }));
+
+      // If notification is about a chat message, socket.on('message:new') already handles it
+      if (notif.category === 'CHAT' || notif.type === 'chat' || notif.type?.includes('chat')) {
+        return;
+      }
+
+      const dedupeKey = `notif-${notif._id || notif.title}`;
+      if (isDuplicateEvent(dedupeKey)) return;
 
       get().addToast({
         title: notif.title || 'New Notification',
@@ -136,10 +154,10 @@ export const useNotifications = create<NotificationState>((set, get) => ({
         type: 'info',
       });
 
-      if (document.hidden) {
+      if (document.hidden || !document.hasFocus()) {
         void showLocalNotification(notif.title || 'Bulletproof Portal', {
           body: notif.message,
-          tag: `notif-${notif._id || Date.now()}`,
+          tag: dedupeKey,
           data: { url: notif.actionUrl || '/' },
         });
       }
@@ -150,6 +168,9 @@ export const useNotifications = create<NotificationState>((set, get) => ({
       if (msg.senderType === 'AGENCY' || msg.senderId) {
         const isChatOpen = window.location.pathname.startsWith('/chat');
         if (!isChatOpen) {
+          const dedupeKey = `msg-${msg._id || msg.roomId}`;
+          if (isDuplicateEvent(dedupeKey)) return;
+
           set((state) => ({ unreadChat: state.unreadChat + 1 }));
           const title = `Message from ${msg.senderId?.name || msg.senderName || 'Agency Lead'}`;
           const body = msg.message || 'Sent a new message';
@@ -161,10 +182,10 @@ export const useNotifications = create<NotificationState>((set, get) => ({
           });
 
           // Show background OS/browser notification if user is on another tab or app is minimized
-          if (document.hidden) {
+          if (document.hidden || !document.hasFocus()) {
             void showLocalNotification(title, {
               body,
-              tag: `chat-${msg._id || Date.now()}`,
+              tag: `chat-${msg.roomId || msg._id}`,
               data: { url: '/chat' },
             });
           }
@@ -177,6 +198,9 @@ export const useNotifications = create<NotificationState>((set, get) => ({
       get().fetchNotifications();
       const needsAction = ['PENDING', 'SENT', 'WAITING_FOR_CLIENT'].includes(data.status);
       if (needsAction) {
+        const dedupeKey = `approval-${data._id || ''}`;
+        if (isDuplicateEvent(dedupeKey)) return;
+
         const title = 'Sign-off Needed';
         const body = 'A new creative script or cut has been submitted for your sign-off.';
 
@@ -187,10 +211,10 @@ export const useNotifications = create<NotificationState>((set, get) => ({
         });
 
         // Show background OS/browser notification if user is on another tab or app is minimized
-        if (document.hidden) {
+        if (document.hidden || !document.hasFocus()) {
           void showLocalNotification(title, {
             body,
-            tag: `approval-${data._id || Date.now()}`,
+            tag: dedupeKey,
             data: { url: `/approvals/${data._id || ''}` },
           });
         }

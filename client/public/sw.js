@@ -38,12 +38,13 @@ self.addEventListener('push', (e) => {
   const title = d.title || 'SMM PRO';
   const url = d.url || '/';
   const vibratePattern = [300, 100, 400, 100, 300];
+  const tag = d.tag || ('smm-' + (d.title || 'alert').slice(0, 25).replace(/[^\w-]/g, '_').toLowerCase());
 
   const fullOptions = {
     body: d.body || 'You have a new update in SMM PRO',
     icon: '/icons/icon-192.png',
     badge: '/icons/icon-192.png',
-    tag: d.tag || ('smm-' + Date.now()),
+    tag,
     renotify: true,
     silent: false,
     requireInteraction: true,
@@ -53,18 +54,26 @@ self.addEventListener('push', (e) => {
     data: { url },
   };
 
-  e.waitUntil(
-    self.registration.showNotification(title, {
-      ...fullOptions,
-      actions: [
-        { action: 'open', title: 'Open' },
-        { action: 'dismiss', title: 'Dismiss' }
-      ]
-    }).catch(() => {
-      // Fallback for mobile browsers that do not support action buttons (e.g. mobile Chrome/Safari PWA)
-      return self.registration.showNotification(title, fullOptions);
-    })
-  );
+  e.waitUntil((async () => {
+    // If user is actively focused on the app right now, in-app UI handles it; avoid duplicate OS popups
+    try {
+      const windowClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      const isFocused = windowClients.some((c) => c.focused);
+      if (isFocused) return;
+    } catch {}
+
+    try {
+      return await self.registration.showNotification(title, {
+        ...fullOptions,
+        actions: [
+          { action: 'open', title: 'Open' },
+          { action: 'dismiss', title: 'Dismiss' }
+        ]
+      });
+    } catch {
+      return await self.registration.showNotification(title, fullOptions);
+    }
+  })());
 });
 
 self.addEventListener('notificationclick', (e) => {
