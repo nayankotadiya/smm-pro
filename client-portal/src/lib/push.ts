@@ -7,7 +7,7 @@ export function isPushSupported(): boolean {
 }
 
 export function registerClientSW() {
-  if (!isPushSupported()) return;
+  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
   const doRegister = () => {
     navigator.serviceWorker
       .register('/sw.js', { scope: '/' })

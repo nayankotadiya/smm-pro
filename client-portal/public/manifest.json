@@ -1,0 +1,25 @@
+{
+  "name": "Bulletproof Client Portal",
+  "short_name": "Bulletproof",
+  "description": "Direct Client Portal for Bulletproof Brands - Script Reviews, Video Approvals, and Real-time Agency Chat.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "/brand/bulletproof-shield.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/brand/bulletproof-shield.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

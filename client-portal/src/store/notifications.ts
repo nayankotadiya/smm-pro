@@ -10,12 +10,29 @@ export interface ToastItem {
   type?: 'info' | 'success' | 'warning';
 }
 
+export interface NotificationItem {
+  _id: string;
+  title: string;
+  message: string;
+  type: string;
+  actionUrl?: string;
+  read: boolean;
+  createdAt: string;
+  meta?: any;
+}
+
 interface NotificationState {
   pendingApprovals: number;
   unreadChat: number;
+  notifications: NotificationItem[];
+  unreadNotifications: number;
+  loadingNotifications: boolean;
   toasts: ToastItem[];
   initRealtime: () => void;
   fetchCounts: () => Promise<void>;
+  fetchNotifications: () => Promise<void>;
+  markNotificationRead: (id: string) => Promise<void>;
+  markAllNotificationsRead: () => Promise<void>;
   addToast: (t: Omit<ToastItem, 'id'>) => void;
   removeToast: (id: string) => void;
   clearUnreadChat: () => void;
@@ -24,6 +41,9 @@ interface NotificationState {
 export const useNotifications = create<NotificationState>((set, get) => ({
   pendingApprovals: 0,
   unreadChat: 0,
+  notifications: [],
+  unreadNotifications: 0,
+  loadingNotifications: false,
   toasts: [],
 
   addToast: (t) => {
@@ -48,13 +68,53 @@ export const useNotifications = create<NotificationState>((set, get) => ({
       const res = await api.get('/dashboard');
       const count = res.data?.pendingApprovals?.length || 0;
       set({ pendingApprovals: count });
-    } catch (err) {
+    } catch {
       // Ignore initial background fetch error
+    }
+  },
+
+  fetchNotifications: async () => {
+    set({ loadingNotifications: true });
+    try {
+      const res = await api.get('/notifications');
+      set({
+        notifications: res.data?.notifications || [],
+        unreadNotifications: res.data?.unreadCount || 0,
+      });
+    } catch {
+      // Ignore initial background fetch error
+    } finally {
+      set({ loadingNotifications: false });
+    }
+  },
+
+  markNotificationRead: async (id: string) => {
+    try {
+      set((state) => ({
+        notifications: state.notifications.map((n) => (n._id === id ? { ...n, read: true } : n)),
+        unreadNotifications: Math.max(0, state.unreadNotifications - 1),
+      }));
+      await api.patch(`/notifications/${id}/read`);
+    } catch (err) {
+      console.warn('[markNotificationRead]', err);
+    }
+  },
+
+  markAllNotificationsRead: async () => {
+    try {
+      set((state) => ({
+        notifications: state.notifications.map((n) => ({ ...n, read: true })),
+        unreadNotifications: 0,
+      }));
+      await api.post('/notifications/mark-all-read');
+    } catch (err) {
+      console.warn('[markAllNotificationsRead]', err);
     }
   },
 
   initRealtime: () => {
     get().fetchCounts();
+    get().fetchNotifications();
 
     const socket = getPortalSocket();
     if (!socket) return;
@@ -62,6 +122,28 @@ export const useNotifications = create<NotificationState>((set, get) => ({
     socket.off('message:new');
     socket.off('approval:updated');
     socket.off('approval:new');
+    socket.off('notification:new');
+
+    socket.on('notification:new', (notif: NotificationItem) => {
+      set((state) => ({
+        notifications: [notif, ...state.notifications],
+        unreadNotifications: state.unreadNotifications + 1,
+      }));
+
+      get().addToast({
+        title: notif.title || 'New Notification',
+        message: notif.message,
+        type: 'info',
+      });
+
+      if (document.hidden) {
+        void showLocalNotification(notif.title || 'Bulletproof Portal', {
+          body: notif.message,
+          tag: `notif-${notif._id || Date.now()}`,
+          data: { url: notif.actionUrl || '/' },
+        });
+      }
+    });
 
     socket.on('message:new', (msg: any) => {
       // If agency sent the message
@@ -92,6 +174,7 @@ export const useNotifications = create<NotificationState>((set, get) => ({
 
     const handleApprovalEvent = (data: any) => {
       get().fetchCounts();
+      get().fetchNotifications();
       const needsAction = ['PENDING', 'SENT', 'WAITING_FOR_CLIENT'].includes(data.status);
       if (needsAction) {
         const title = 'Sign-off Needed';

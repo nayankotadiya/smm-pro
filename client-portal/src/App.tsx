@@ -71,11 +71,19 @@ function ProtectedLayout() {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 
+  const isChat = location.pathname.startsWith('/chat');
+
   return (
     <div className="min-h-screen bg-canvas flex flex-col">
       <ToastsContainer />
       <Navbar />
-      <main className="flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 pt-6 pb-24 md:pb-12">
+      <main
+        className={
+          isChat
+            ? 'flex-1 w-full max-w-4xl mx-auto px-2 sm:px-4 pt-2 md:pt-4 pb-20 md:pb-6 flex flex-col min-h-0'
+            : 'flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 pt-6 pb-24 md:pb-12'
+        }
+      >
         <Suspense fallback={<div className="flex justify-center py-16"><Spinner /></div>}>
           <Routes>
             <Route index element={<DashboardPage />} />

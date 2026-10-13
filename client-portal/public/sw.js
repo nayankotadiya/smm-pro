@@ -29,19 +29,23 @@ self.addEventListener('push', (e) => {
 
   const title = d.title || 'Bulletproof Client Portal';
   const url = d.url || '/';
-  const vibratePattern = [300, 100, 400, 100, 300];
 
-  const options = {
+  // Base options supported by all platforms including iOS Safari 16.4+
+  const baseOptions = {
     body: d.body || 'New update waiting for your review.',
     icon: '/brand/bulletproof-shield.png',
     badge: '/brand/bulletproof-shield.png',
     tag: d.tag || ('portal-' + Date.now()),
+    data: { url },
+  };
+
+  // Extended options for desktop and Android Chrome
+  const extendedOptions = {
+    ...baseOptions,
     renotify: true,
     silent: false,
-    requireInteraction: true,
-    vibrate: vibratePattern,
+    vibrate: [300, 100, 400, 100, 300],
     timestamp: Date.now(),
-    data: { url },
     actions: [
       { action: 'open', title: 'Open Portal' },
       { action: 'dismiss', title: 'Dismiss' },
@@ -49,10 +53,11 @@ self.addEventListener('push', (e) => {
   };
 
   e.waitUntil(
-    self.registration.showNotification(title, options).catch(() => {
-      // Fallback for browsers that do not support actions
-      const { actions, ...fallbackOpts } = options;
-      return self.registration.showNotification(title, fallbackOpts);
+    self.registration.showNotification(title, extendedOptions).catch(() => {
+      // Fallback: strip vibrate, renotify, and actions for iOS Safari/WebKit
+      return self.registration.showNotification(title, baseOptions).catch((err) => {
+        console.warn('[SW Push Display Fallback Error]', err);
+      });
     })
   );
 });

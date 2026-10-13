@@ -5,14 +5,17 @@ import rateLimit from 'express-rate-limit';
 import { ah } from '../utils/async';
 import { AppError, badRequest, notFound, forbidden } from '../utils/errors';
 import { randomToken, sha256 } from '../utils/crypto';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 import { ClientUser, Client, Content, Approval, Script, ScriptVersion, Media, ClientBrief, Feedback, PortalConfig, ChatRoom, Message, Notification, PushSubscription } from '../models';
-import { requirePortalAuth, signPortalAccess } from '../middleware/clientAuth';
+import { requirePortalAuth, signPortalAccess, userFromPortalToken } from '../middleware/clientAuth';
 import { requireAuth } from '../middleware/auth';
 import { clientDecision } from '../services/approvals';
-import { pipeMedia } from '../services/media';
+import { pipeMedia, inferMimeType, safeMoveFile } from '../services/media';
 import { ensureClientRoom, ensureContentRoom, broadcastMessage, postSystemEvent } from '../services/chat';
 import { nextContentCode, applyStage, setLastAction, broadcastContent } from '../services/content';
-import { ensureContentFolders } from '../services/storage';
+import { ensureContentFolders, LOCAL_DIR, localPathFor } from '../services/storage';
 import { logActivity } from '../services/activity';
 import { emitDomain } from '../services/events';
 import { emitOrg, emitToRoom } from '../services/realtime';
@@ -23,6 +26,13 @@ import { notify, managerIds } from '../services/notify';
 import { pushConfigured, sendPush, getVapidPublicKey } from '../integrations/push';
 
 const r = Router();
+
+const CHAT_UPLOAD_TMP = path.join(LOCAL_DIR, 'tmp');
+try { fs.mkdirSync(CHAT_UPLOAD_TMP, { recursive: true }); } catch {}
+const portalUpload = multer({
+  dest: CHAT_UPLOAD_TMP,
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB limit for chat attachments
+});
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60_000,
@@ -913,7 +923,7 @@ r.get('/chat/messages', ah(async (req, res) => {
     .limit(100)
     .populate('senderId', 'name role')
     .populate('senderClientUserId', 'name email')
-    .populate('attachments', 'fileName url mimeType size')
+    .populate('attachments', 'fileName originalName mimeType size category')
     .lean();
 
   const currentUserId = String(req.portalUser!._id);
@@ -932,14 +942,63 @@ r.get('/chat/messages', ah(async (req, res) => {
       isMe,
       isClient,
       createdAt: m.createdAt,
-      attachments: m.attachments,
+      attachments: (m.attachments || []).map((att: any) => ({
+        _id: String(att._id),
+        fileName: att.fileName,
+        originalName: att.originalName || att.fileName,
+        mimeType: att.mimeType,
+        size: att.size,
+        category: att.category,
+        url: `/api/portal/media/${att._id}/stream`,
+        downloadUrl: `/api/portal/media/${att._id}/download`,
+      })),
     };
   });
 
   res.json(formatted);
 }));
 
-/** Client Portal Chat: Send Message */
+/** Client Portal Chat: Upload Attachment (Photo, Video, Audio, Document) */
+r.post('/chat/upload', portalUpload.single('file'), ah(async (req, res) => {
+  if (!req.file) throw badRequest('No file provided');
+  const clientId = req.portalUser!.clientId;
+  const originalName = req.file.originalname || 'attachment';
+  const mimeType = inferMimeType(originalName, req.file.mimetype || 'application/octet-stream');
+  const dest = localPathFor(originalName);
+  safeMoveFile(req.file.path, dest);
+
+  let category: any = 'CHAT';
+  if (mimeType.startsWith('image/')) category = 'IMAGE';
+  else if (mimeType.startsWith('video/')) category = 'RAW';
+  else if (mimeType.startsWith('audio/')) category = 'AUDIO';
+  else category = 'DOCUMENT';
+
+  const media = await Media.create({
+    clientId,
+    storage: 'LOCAL',
+    localPath: dest,
+    fileName: originalName,
+    originalName,
+    mimeType,
+    size: req.file.size,
+    category,
+    status: 'READY',
+    uploadedAt: new Date(),
+  });
+
+  res.status(201).json({
+    _id: String(media._id),
+    fileName: media.fileName,
+    originalName: media.originalName,
+    mimeType: media.mimeType,
+    size: media.size,
+    category: media.category,
+    url: `/api/portal/media/${media._id}/stream`,
+    downloadUrl: `/api/portal/media/${media._id}/download`,
+  });
+}));
+
+/** Client Portal Chat: Send Message (With text and/or attachments) */
 r.post('/chat/messages', ah(async (req, res) => {
   const clientId = req.portalUser!.clientId;
   const client = await Client.findById(clientId);
@@ -948,11 +1007,17 @@ r.post('/chat/messages', ah(async (req, res) => {
   let room = await ChatRoom.findOne({ type: 'CLIENT', clientId });
   if (!room) room = await ensureClientRoom(client);
 
-  const { message } = z.object({
-    message: z.string().min(1).max(3000),
+  const b = z.object({
+    message: z.string().max(4000).optional().default(''),
+    attachments: z.array(z.string()).optional().default([]),
   }).parse(req.body);
 
+  if (!b.message?.trim() && !b.attachments?.length) {
+    throw badRequest('Please provide a message or attachment');
+  }
+
   const senderName = req.portalUser!.name || client.contactPerson || client.name;
+  const text = b.message?.trim() || '';
 
   const msg = await Message.create({
     roomId: room._id,
@@ -960,11 +1025,12 @@ r.post('/chat/messages', ah(async (req, res) => {
     senderClientUserId: req.portalUser!._id,
     senderName,
     kind: 'USER',
-    message: message.trim(),
+    message: text,
+    attachments: b.attachments,
   });
 
   room.lastMessageAt = new Date();
-  room.lastMessagePreview = `${senderName}: ${message.trim().slice(0, 60)}`;
+  room.lastMessagePreview = `${senderName}: ${text || (b.attachments.length ? 'Sent an attachment' : '')}`.slice(0, 100);
   await room.save();
 
   // Broadcast to agency socket room & participants
@@ -977,7 +1043,7 @@ r.post('/chat/messages', ah(async (req, res) => {
       type: 'client.message',
       category: 'CHAT',
       title: `Message from ${senderName} (${client.name})`,
-      message: message.trim().slice(0, 100),
+      message: (text || 'Sent an attachment').slice(0, 100),
       link: `/clients/${client._id}?tab=chat`,
       entityType: 'client',
       entityId: String(client._id),
@@ -985,6 +1051,8 @@ r.post('/chat/messages', ah(async (req, res) => {
   } catch (err: any) {
     logger.warn('[portal chat notification]', err?.message);
   }
+
+  const populated = await Message.findById(msg._id).populate('attachments', 'fileName originalName mimeType size category').lean();
 
   res.status(201).json({
     _id: String(msg._id),
@@ -994,7 +1062,111 @@ r.post('/chat/messages', ah(async (req, res) => {
     isMe: true,
     isClient: true,
     createdAt: msg.createdAt,
+    attachments: ((populated as any)?.attachments || []).map((att: any) => ({
+      _id: String(att._id),
+      fileName: att.fileName,
+      originalName: att.originalName || att.fileName,
+      mimeType: att.mimeType,
+      size: att.size,
+      category: att.category,
+      url: `/api/portal/media/${att._id}/stream`,
+      downloadUrl: `/api/portal/media/${att._id}/download`,
+    })),
   });
+}));
+
+/** Stream Media for Client Portal (Photos, Videos, Audio, Documents) */
+r.get('/media/:id/stream', ah(async (req, res) => {
+  let clientId = req.portalUser?.clientId;
+  if (!clientId && req.query.token) {
+    try {
+      const user = await userFromPortalToken(String(req.query.token));
+      clientId = user.clientId;
+    } catch {}
+  }
+  if (!clientId) throw forbidden('Authentication required');
+
+  const media = await Media.findById(req.params.id).select('+localPath');
+  if (!media) throw notFound('Media file');
+
+  res.setHeader('Cache-Control', 'private, max-age=86400');
+  res.setHeader('Content-Disposition', 'inline');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  try {
+    await pipeMedia(media, res, req.headers.range);
+  } catch (err: any) {
+    if (media.webViewLink) return res.redirect(media.webViewLink);
+    throw err;
+  }
+}));
+
+/** Download Media File for Client Portal (Documents, ZIP, etc.) */
+r.get('/media/:id/download', ah(async (req, res) => {
+  let clientId = req.portalUser?.clientId;
+  if (!clientId && req.query.token) {
+    try {
+      const user = await userFromPortalToken(String(req.query.token));
+      clientId = user.clientId;
+    } catch {}
+  }
+  if (!clientId) throw forbidden('Authentication required');
+
+  const media = await Media.findById(req.params.id).select('+localPath');
+  if (!media) throw notFound('Media file');
+
+  const safeFileName = encodeURIComponent(media.fileName || 'download');
+  res.setHeader('Content-Disposition', `attachment; filename="${safeFileName}"; filename*=UTF-8''${safeFileName}`);
+  try {
+    await pipeMedia(media, res, req.headers.range);
+  } catch (err: any) {
+    if (media.webViewLink) return res.redirect(media.webViewLink);
+    throw err;
+  }
+}));
+
+/** Client Portal Notifications Feed */
+r.get('/notifications', ah(async (req, res) => {
+  const clientId = req.portalUser!.clientId;
+  const notifications = await Notification.find({ clientId })
+    .sort({ createdAt: -1 })
+    .limit(40)
+    .lean();
+
+  const unreadCount = await Notification.countDocuments({ clientId, read: false });
+
+  res.json({
+    notifications: notifications.map((n) => ({
+      _id: String(n._id),
+      type: n.type,
+      category: n.category,
+      title: n.title,
+      message: n.message,
+      link: n.link,
+      read: n.read,
+      createdAt: n.createdAt,
+    })),
+    unreadCount,
+  });
+}));
+
+/** Mark Single Client Notification as Read */
+r.patch('/notifications/:id/read', ah(async (req, res) => {
+  const clientId = req.portalUser!.clientId;
+  await Notification.updateOne(
+    { _id: req.params.id, clientId },
+    { $set: { read: true, readAt: new Date() } }
+  );
+  res.json({ ok: true });
+}));
+
+/** Mark All Client Notifications as Read */
+r.post('/notifications/mark-all-read', ah(async (req, res) => {
+  const clientId = req.portalUser!.clientId;
+  await Notification.updateMany(
+    { clientId, read: false },
+    { $set: { read: true, readAt: new Date() } }
+  );
+  res.json({ ok: true });
 }));
 
 // ----------------------------------------------------

@@ -4,11 +4,13 @@ import { LogOut, Sparkles, Home, CheckSquare, Calendar, FolderArchive, PlusCircl
 import { useAuth } from '@/store/auth';
 import { useNotifications } from '@/store/notifications';
 import { getClientPushState, enableClientPush, disableClientPush, sendTestClientPush } from '@/lib/push';
+import { NotificationPanel } from './NotificationPanel';
 import clsx from 'clsx';
 
 export function Navbar() {
   const { user, brand, logout } = useAuth();
-  const { pendingApprovals, unreadChat, addToast } = useNotifications();
+  const { pendingApprovals, unreadChat, unreadNotifications, addToast } = useNotifications();
+  const [showNotifications, setShowNotifications] = useState(false);
   const [showPushModal, setShowPushModal] = useState(false);
   const [pushStatus, setPushStatus] = useState<{ supported: boolean; permission: NotificationPermission; subscribed: boolean }>({
     supported: true,
@@ -134,19 +136,25 @@ export function Navbar() {
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {/* Realtime Notification Bell */}
             <button
-              onClick={() => setShowPushModal(true)}
-              title={pushStatus.subscribed ? 'Background alerts active' : 'Enable background notifications'}
+              onClick={() => setShowNotifications(true)}
+              title={pushStatus.subscribed ? 'Notifications (Device alerts active)' : 'Open Notifications'}
               className={clsx(
                 'relative flex h-9 w-9 items-center justify-center rounded-xl border transition-all',
-                pushStatus.subscribed
+                unreadNotifications > 0
+                  ? 'border-primary/40 bg-primary-soft text-primary'
+                  : pushStatus.subscribed
                   ? 'border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400'
                   : 'border-line bg-surface-2/60 text-ink-2 hover:text-primary hover:border-primary/30'
               )}
             >
               {pushStatus.subscribed ? <BellRing size={16} /> : <Bell size={16} />}
-              {pushStatus.subscribed && (
+              {unreadNotifications > 0 ? (
+                <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[9px] font-black text-white shadow-xs">
+                  {unreadNotifications > 99 ? '99+' : unreadNotifications}
+                </span>
+              ) : pushStatus.subscribed ? (
                 <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-surface animate-pulse" />
-              )}
+              ) : null}
             </button>
 
             {/* User Profile Info */}
@@ -239,6 +247,9 @@ export function Navbar() {
           </div>
         </div>
       )}
+
+      {/* In-App Activity & Notification Panel */}
+      <NotificationPanel isOpen={showNotifications} onClose={() => setShowNotifications(false)} />
     </>
   );
 }

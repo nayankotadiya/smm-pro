@@ -37,7 +37,9 @@ messageSchema.index({ roomId: 1, createdAt: -1 });
 export const Message = model('Message', messageSchema);
 
 const notificationSchema = new Schema({
-  userId: { type: ObjectId, ref: 'User', required: true, index: true },
+  userId: { type: ObjectId, ref: 'User', index: true },
+  clientUserId: { type: ObjectId, ref: 'ClientUser', index: true },
+  clientId: { type: ObjectId, ref: 'Client', index: true },
   type: { type: String, required: true },
   category: { type: String, required: true, index: true },
   title: { type: String, required: true },
@@ -54,6 +56,8 @@ const notificationSchema = new Schema({
   },
 }, ts);
 notificationSchema.index({ userId: 1, createdAt: -1 });
+notificationSchema.index({ clientId: 1, createdAt: -1 });
+notificationSchema.index({ clientUserId: 1, createdAt: -1 });
 export const Notification = model('Notification', notificationSchema);
 
 const subSchema = new Schema({

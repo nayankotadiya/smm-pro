@@ -1,5 +1,5 @@
 import { Notification, User, PushSubscription } from '../models';
-import { emitToUser } from './realtime';
+import { emitToUser, emitToClient } from './realtime';
 import { sendPush } from '../integrations/push';
 import { sendEmail } from '../integrations/email';
 import { NotificationCategory } from '../config/constants';
@@ -55,10 +55,25 @@ export async function idsByRole(role: string) {
   return (await User.find({ role, active: true }).select('_id').lean()).map((x) => String(x._id));
 }
 
-/** Sends push notifications to all registered devices/browsers of a client (for when app is closed or background) */
-export async function notifyClientUsers(clientId: any, n: { title: string; message?: string; url?: string; tag?: string }) {
+/** Sends notifications and push alerts to all registered devices/browsers of a client */
+export async function notifyClientUsers(clientId: any, n: { title: string; message?: string; url?: string; tag?: string; type?: string; category?: string }) {
   if (!clientId) return 0;
   try {
+    // 1. Persist notification in database for the Client User's In-App Notification Panel
+    const notif = await Notification.create({
+      clientId,
+      type: n.type || 'client.alert',
+      category: (n.category as any) || 'WORKFLOW',
+      title: n.title,
+      message: n.message || '',
+      link: n.url || '/',
+      read: false,
+    });
+
+    // 2. Emit live notification event to client socket room
+    emitToClient(clientId, 'notification:new', notif.toJSON());
+
+    // 3. Dispatch Web Push notification to client devices (Android, iOS PWA, Desktop)
     const subs = await PushSubscription.find({ clientId });
     if (!subs.length) return 0;
     let ok = 0;
