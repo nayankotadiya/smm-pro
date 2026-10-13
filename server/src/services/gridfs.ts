@@ -19,6 +19,9 @@ export function getGridFSBucket(): mongoose.mongo.GridFSBucket {
   return bucketInstance;
 }
 
+export const MAX_GRIDFS_MB = Number(process.env.MAX_GRIDFS_MB || 15);
+export const MAX_GRIDFS_BYTES = MAX_GRIDFS_MB * 1024 * 1024;
+
 export interface GridFSUploadOptions {
   contentType?: string;
   metadata?: Record<string, any>;
@@ -27,12 +30,19 @@ export interface GridFSUploadOptions {
 /**
  * Saves a local file into MongoDB GridFS so it persists permanently
  * across container restarts and redeployments.
+ * Skips files larger than MAX_GRIDFS_MB (default 15MB) to protect the 512MB MongoDB Atlas free tier!
  */
 export async function saveFileToGridFS(
   localFilePath: string,
   filename: string,
   options: GridFSUploadOptions = {}
-): Promise<mongoose.Types.ObjectId> {
+): Promise<mongoose.Types.ObjectId | null> {
+  if (fs.existsSync(localFilePath) && fs.statSync(localFilePath).size > MAX_GRIDFS_BYTES) {
+    const mb = (fs.statSync(localFilePath).size / (1024 * 1024)).toFixed(1);
+    console.log(`[GridFS] File ${filename} (${mb} MB) exceeds ${MAX_GRIDFS_MB} MB Atlas safety cap. Skipping GridFS to preserve MongoDB 512 MB quota.`);
+    return null;
+  }
+
   const bucket = getGridFSBucket();
   const cleanFilename = filename.replace(/[^\w.-]/g, '_');
   const uploadStream = bucket.openUploadStream(cleanFilename, {
@@ -61,7 +71,10 @@ export async function saveBufferToGridFS(
   buffer: Buffer,
   filename: string,
   options: GridFSUploadOptions = {}
-): Promise<mongoose.Types.ObjectId> {
+): Promise<mongoose.Types.ObjectId | null> {
+  if (buffer.length > MAX_GRIDFS_BYTES) {
+    return null;
+  }
   const bucket = getGridFSBucket();
   const cleanFilename = filename.replace(/[^\w.-]/g, '_');
   const uploadStream = bucket.openUploadStream(cleanFilename, {
@@ -179,8 +192,10 @@ export async function migrateExistingLocalFilesToGridFS(): Promise<number> {
             contentType: m.mimeType || undefined,
             metadata: { mediaId: m._id, contentId: m.contentId, clientId: m.clientId },
           });
-          await Media.updateOne({ _id: m._id }, { gridFsId });
-          count++;
+          if (gridFsId) {
+            await Media.updateOne({ _id: m._id }, { gridFsId });
+            count++;
+          }
         } catch (e: any) {
           console.warn(`[GridFS Migration] Error backing up ${m.fileName}:`, e?.message || e);
         }
