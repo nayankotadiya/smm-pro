@@ -1,4 +1,5 @@
-import { driveConfigured, drive, rootFolders } from '../integrations/drive';
+import { driveConfigured, drive } from '../integrations/drive';
+import { rootFolders } from '../services/storage';
 import { env } from '../config/env';
 
 async function testDrive() {
