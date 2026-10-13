@@ -7,6 +7,8 @@ import { ToastsContainer } from '@/components/Toasts';
 import { Spinner } from '@/components/Ui';
 import { useNotifications } from '@/store/notifications';
 import { api } from '@/lib/api';
+import { syncClientPush } from '@/lib/push';
+import { MobileNotificationBanner } from '@/components/MobileNotificationBanner';
 
 const AuthPage = lazy(() => import('@/pages/Auth').then((m) => ({ default: m.AuthPage })));
 const DashboardPage = lazy(() => import('@/pages/Dashboard').then((m) => ({ default: m.DashboardPage })));
@@ -50,6 +52,7 @@ function ProtectedLayout() {
   useEffect(() => {
     if (user) {
       initRealtime();
+      syncClientPush().catch(() => null);
     }
   }, [user, initRealtime]);
 
@@ -84,6 +87,7 @@ function ProtectedLayout() {
             : 'flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 pt-6 pb-24 md:pb-12'
         }
       >
+        <MobileNotificationBanner />
         <Suspense fallback={<div className="flex justify-center py-16"><Spinner /></div>}>
           <Routes>
             <Route index element={<DashboardPage />} />

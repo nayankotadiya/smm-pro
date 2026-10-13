@@ -6,6 +6,7 @@ import {
   MessageSquare,
   ShieldCheck,
   CheckCheck,
+  Check,
   RefreshCw,
   Paperclip,
   Image as ImageIcon,
@@ -51,6 +52,9 @@ interface ChatMessage {
   isMe: boolean;
   isClient: boolean;
   createdAt: string;
+  clientReadAt?: string;
+  clientDeliveredAt?: string;
+  agencyRead?: boolean;
   attachments?: ChatAttachment[];
 }
 
@@ -652,7 +656,17 @@ export function ChatPage() {
                         minute: '2-digit',
                       })}
                     </span>
-                    {isMe && <CheckCheck size={13} className="text-white/90" />}
+                    {isMe && (
+                      m.agencyRead ? (
+                        <span title="Seen by Agency Lead" className="inline-flex items-center text-emerald-300">
+                          <CheckCheck size={13} />
+                        </span>
+                      ) : (
+                        <span title="Delivered to Agency" className="inline-flex items-center text-white/80">
+                          <Check size={13} />
+                        </span>
+                      )
+                    )}
                   </div>
                 </div>
               </div>

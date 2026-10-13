@@ -30,10 +30,14 @@ const messageSchema = new Schema({
   reactions: [{ userId: { type: ObjectId, ref: 'User' }, key: String, _id: false }],
   deliveredTo: [{ type: ObjectId, ref: 'User' }],
   readBy: [{ type: ObjectId, ref: 'User' }],
+  clientDeliveredAt: Date,
+  clientReadAt: Date,
+  clientReadBy: { type: ObjectId, ref: 'ClientUser' },
   editedAt: Date,
   deletedAt: Date,
 }, ts);
 messageSchema.index({ roomId: 1, createdAt: -1 });
+messageSchema.index({ roomId: 1, clientReadAt: 1 });
 export const Message = model('Message', messageSchema);
 
 const notificationSchema = new Schema({

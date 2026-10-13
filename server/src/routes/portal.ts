@@ -18,7 +18,7 @@ import { nextContentCode, applyStage, setLastAction, broadcastContent } from '..
 import { ensureContentFolders, LOCAL_DIR, localPathFor } from '../services/storage';
 import { logActivity } from '../services/activity';
 import { emitDomain } from '../services/events';
-import { emitOrg, emitToRoom } from '../services/realtime';
+import { emitOrg, emitToRoom, emitToUser } from '../services/realtime';
 import { aisensyConfigured, sendTemplate } from '../integrations/aisensy';
 import { sendEmail } from '../integrations/email';
 import { logger } from '../utils/logger';
@@ -1092,11 +1092,31 @@ r.get('/chat', ah(async (req, res) => {
   });
 }));
 
-/** Client Portal Chat: Get Messages */
+/** Client Portal Chat: Get Messages & Auto-mark Seen by Client */
 r.get('/chat/messages', ah(async (req, res) => {
   const clientId = req.portalUser!.clientId;
   const room = await ChatRoom.findOne({ type: 'CLIENT', clientId });
   if (!room) return res.json([]);
+
+  const now = new Date();
+  // Mark all unread agency messages in this room as seen by client
+  const unreadUpdated = await Message.updateMany(
+    { roomId: room._id, senderType: { $ne: 'CLIENT' }, clientReadAt: null },
+    { $set: { clientReadAt: now, clientDeliveredAt: now, clientReadBy: req.portalUser!._id } }
+  );
+
+  if (unreadUpdated.modifiedCount > 0) {
+    const payload = {
+      roomId: String(room._id),
+      clientId: String(clientId),
+      clientName: req.portalUser!.name,
+      readAt: now,
+    };
+    emitToRoom(`chat:${room._id}`, 'message:client_read', payload);
+    for (const p of room.participants || []) {
+      emitToUser(p, 'message:client_read', payload);
+    }
+  }
 
   const messages = await Message.find({ roomId: room._id, deletedAt: null })
     .sort({ createdAt: 1 })
@@ -1122,6 +1142,9 @@ r.get('/chat/messages', ah(async (req, res) => {
       isMe,
       isClient,
       createdAt: m.createdAt,
+      clientReadAt: m.clientReadAt || null,
+      clientDeliveredAt: m.clientDeliveredAt || null,
+      agencyRead: (m.readBy || []).length > 0,
       attachments: (m.attachments || []).map((att: any) => ({
         _id: String(att._id),
         fileName: att.fileName,
@@ -1136,6 +1159,34 @@ r.get('/chat/messages', ah(async (req, res) => {
   });
 
   res.json(formatted);
+}));
+
+/** Client Portal Chat: Explicitly mark messages as Read/Seen */
+r.post('/chat/read', ah(async (req, res) => {
+  const clientId = req.portalUser!.clientId;
+  const room = await ChatRoom.findOne({ type: 'CLIENT', clientId });
+  if (!room) return res.json({ ok: true });
+
+  const now = new Date();
+  const unreadUpdated = await Message.updateMany(
+    { roomId: room._id, senderType: { $ne: 'CLIENT' }, clientReadAt: null },
+    { $set: { clientReadAt: now, clientDeliveredAt: now, clientReadBy: req.portalUser!._id } }
+  );
+
+  if (unreadUpdated.modifiedCount > 0) {
+    const payload = {
+      roomId: String(room._id),
+      clientId: String(clientId),
+      clientName: req.portalUser!.name,
+      readAt: now,
+    };
+    emitToRoom(`chat:${room._id}`, 'message:client_read', payload);
+    for (const p of room.participants || []) {
+      emitToUser(p, 'message:client_read', payload);
+    }
+  }
+
+  res.json({ ok: true, marked: unreadUpdated.modifiedCount });
 }));
 
 /** Client Portal Chat: Upload Attachment (Photo, Video, Audio, Document) */

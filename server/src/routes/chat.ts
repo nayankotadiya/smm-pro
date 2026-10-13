@@ -24,7 +24,11 @@ async function room(req: any, id: string) {
 
 r.get('/rooms', ah(async (req, res) => {
   const uid = req.user!._id;
-  const rooms = await ChatRoom.find({ participants: uid }).sort({ lastMessageAt: -1, createdAt: -1 }).populate('participants', 'name role').populate('contentId', 'contentId title').populate('clientId', 'name').lean();
+  const rooms = await ChatRoom.find({ participants: uid }).sort({ lastMessageAt: -1, createdAt: -1 })
+    .populate('participants', 'name role email phone')
+    .populate('contentId', 'contentId title')
+    .populate('clientId', 'name businessName primaryContact email phone status')
+    .lean();
   const unread = await Message.aggregate([{ $match: { roomId: { $in: rooms.map((x) => x._id) }, readBy: { $ne: new (require('mongoose').Types.ObjectId)(uid) }, senderId: { $ne: new (require('mongoose').Types.ObjectId)(uid) }, deletedAt: null, kind: 'USER' } }, { $group: { _id: '$roomId', n: { $sum: 1 } } }]);
   res.json(rooms.map((x) => ({ ...x, unread: unread.find((u) => String(u._id) === String(x._id))?.n || 0 })));
 }));
@@ -71,7 +75,12 @@ r.get('/:roomId/messages', ah(async (req, res) => {
     }
     emitToUser(req.user!._id, 'chat:unread_changed', { roomId: String(rm._id) });
   }
-  res.json({ room: await ChatRoom.findById(rm._id).populate('participants', 'name role').populate('contentId', 'contentId title').populate('clientId', 'name').lean(), messages: msgs.reverse(), pinned });
+  const populatedRoom = await ChatRoom.findById(rm._id)
+    .populate('participants', 'name role email phone')
+    .populate('contentId', 'contentId title')
+    .populate('clientId', 'name businessName primaryContact email phone status')
+    .lean();
+  res.json({ room: populatedRoom, messages: msgs.reverse(), pinned });
 }));
 
 r.post('/:roomId/messages', ah(async (req, res) => {

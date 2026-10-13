@@ -1018,9 +1018,22 @@ export function ChatThread({ roomId, embedded }: { roomId: string; embedded?: bo
     const onPinned = (d: any) => {
       if (d.roomId === roomId) qc.invalidateQueries({ queryKey: ['chat', roomId] });
     };
+    const onClientRead = (d: any) => {
+      if (d.roomId === roomId) {
+        setMsgs((cur) => cur.map((m) => {
+          if (m.senderType === 'CLIENT') return m;
+          return {
+            ...m,
+            clientReadAt: m.clientReadAt || d.readAt || new Date().toISOString(),
+            clientDeliveredAt: m.clientDeliveredAt || d.readAt || new Date().toISOString(),
+          };
+        }));
+      }
+    };
     s.on('message:new', onNew);
     s.on('message:typing', onTyping);
     s.on('message:read', onRead);
+    s.on('message:client_read', onClientRead);
     s.on('message:delivered', onDelivered);
     s.on('message:reaction', onReaction);
     s.on('message:deleted', onDeleted);
@@ -1035,6 +1048,7 @@ export function ChatThread({ roomId, embedded }: { roomId: string; embedded?: bo
       s.off('message:new', onNew);
       s.off('message:typing', onTyping);
       s.off('message:read', onRead);
+      s.off('message:client_read', onClientRead);
       s.off('message:delivered', onDelivered);
       s.off('message:reaction', onReaction);
       s.off('message:deleted', onDeleted);
@@ -1245,28 +1259,46 @@ export function ChatThread({ roomId, embedded }: { roomId: string; embedded?: bo
   const stateOf = (m: any) => {
     if (m.failed) return 'Not sent';
     if (m.sending) return 'Sending';
+    // For CLIENT rooms, if the client saw it, return 'Read'
+    if (room?.type === 'CLIENT') {
+      if (m.clientReadAt) return 'Read';
+      if (m.clientDeliveredAt) return 'Delivered';
+    }
     const readIds = (m.readBy || []).map((x: any) => String(x?._id || x));
     const delivIds = (m.deliveredTo || []).map((x: any) => String(x?._id || x));
     const o = others.map((p: any) => String(p?._id || p));
-    if (!o.length) return 'Sent';
-    if (o.every((id: string) => readIds.includes(id))) return 'Read';
-    if (o.some((id: string) => delivIds.includes(id) || readIds.includes(id))) return 'Delivered';
+    if (!o.length) return m.clientReadAt ? 'Read' : 'Sent';
+    if (m.clientReadAt || o.every((id: string) => readIds.includes(id))) return 'Read';
+    if (m.clientDeliveredAt || o.some((id: string) => delivIds.includes(id) || readIds.includes(id))) return 'Delivered';
     return 'Sent';
   };
   const seenTitle = (m: any) => {
     if (m.failed) return 'Failed to send';
     if (m.sending) return 'Sending...';
+    if (room?.type === 'CLIENT') {
+      const clientName = room.clientId?.name || 'Client';
+      if (m.clientReadAt) {
+        return `Seen by ${clientName} (${fmtTime(m.clientReadAt)})`;
+      }
+      if (m.clientDeliveredAt) {
+        return `Delivered to ${clientName}`;
+      }
+    }
     const readIds = (m.readBy || []).map((x: any) => String(x?._id || x));
     const delivIds = (m.deliveredTo || []).map((x: any) => String(x?._id || x));
     const readOthers = others.filter((p: any) => readIds.includes(String(p?._id || p)));
-    if (readOthers.length > 0) {
+    if (readOthers.length > 0 || m.clientReadAt) {
       if (room?.type === 'DIRECT') return 'Seen';
-      return `Seen by ${readOthers.map((p: any) => p.name || 'Member').join(', ')}`;
+      const names = readOthers.map((p: any) => p.name || 'Member');
+      if (m.clientReadAt) names.push(`${room?.clientId?.name || 'Client'} (${fmtTime(m.clientReadAt)})`);
+      return `Seen by ${names.join(', ')}`;
     }
     const delivOthers = others.filter((p: any) => delivIds.includes(String(p?._id || p)));
-    if (delivOthers.length > 0) {
+    if (delivOthers.length > 0 || m.clientDeliveredAt) {
       if (room?.type === 'DIRECT') return 'Delivered';
-      return `Delivered to ${delivOthers.map((p: any) => p.name || 'Member').join(', ')}`;
+      const names = delivOthers.map((p: any) => p.name || 'Member');
+      if (m.clientDeliveredAt) names.push('Client');
+      return `Delivered to ${names.join(', ')}`;
     }
     return 'Sent';
   };

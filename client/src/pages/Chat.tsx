@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import clsx from 'clsx';
-import { ArrowLeft, Plus, Users, Clapperboard, Building2, Search, MessageSquarePlus, MoreVertical, CheckCheck, Check, ExternalLink, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, Users, Clapperboard, Building2, Search, MessageSquarePlus, MoreVertical, CheckCheck, Check, ExternalLink, Trash2, Mail, Phone, Info, MessageSquare } from 'lucide-react';
 import { get, post, del, errMsg } from '@/lib/api';
 import { useAuth, useCan } from '@/store/auth';
 import { toast, useUI } from '@/store/ui';
@@ -18,6 +18,7 @@ export default function Chat() {
   const me = useAuth((s) => s.user)!;
   const [tab, setTab] = useState<'ALL' | 'DIRECT' | 'TEAM' | 'CONTENT' | 'CLIENT'>('ALL');
   const [open, setOpen] = useState(false);
+  const [showMembers, setShowMembers] = useState(false);
   const [f, setF] = useState('');
 
   const typing = useUI((s) => s.typing);
@@ -186,29 +187,47 @@ export default function Chat() {
                 >
                   <ArrowLeft size={20} />
                 </button>
-                <div className="relative shrink-0">
-                  {cur && (
-                    cur.type === 'DIRECT' ? (
-                      <Avatar name={roomTitle(cur, me._id)} size={40} />
-                    ) : (
-                      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-tr from-emerald-500 to-teal-600 text-white shadow-xs">
-                        {cur.type === 'CONTENT' ? <Clapperboard size={18} /> : cur.type === 'CLIENT' ? <Building2 size={18} /> : <Users size={18} />}
-                      </span>
-                    )
-                  )}
-                </div>
-                <div className="min-w-0">
-                  <div className="truncate text-[15.5px] font-bold text-ink">
-                    {cur ? roomTitle(cur, me._id) : 'Chat'}
+                <div
+                  onClick={() => setShowMembers(true)}
+                  role="button"
+                  tabIndex={0}
+                  title="Click to view workspace and members details"
+                  className="flex items-center gap-3 min-w-0 cursor-pointer hover:opacity-85 transition-opacity select-none group"
+                >
+                  <div className="relative shrink-0">
+                    {cur && (
+                      cur.type === 'DIRECT' ? (
+                        <Avatar name={roomTitle(cur, me._id)} size={40} />
+                      ) : (
+                        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-tr from-emerald-500 to-teal-600 text-white shadow-xs group-hover:scale-105 transition-transform">
+                          {cur.type === 'CONTENT' ? <Clapperboard size={18} /> : cur.type === 'CLIENT' ? <Building2 size={18} /> : <Users size={18} />}
+                        </span>
+                      )
+                    )}
                   </div>
-                  <div className="truncate text-[12px] text-ink-2">
-                    {cur && <RoomSub r={cur} meId={me._id} />}
+                  <div className="min-w-0">
+                    <div className="truncate text-[15.5px] font-bold text-ink group-hover:text-primary transition-colors flex items-center gap-1.5">
+                      <span>{cur ? roomTitle(cur, me._id) : 'Chat'}</span>
+                    </div>
+                    <div className="truncate text-[12px] text-ink-2 group-hover:text-ink transition-colors">
+                      {cur && <RoomSub r={cur} meId={me._id} />}
+                    </div>
                   </div>
                 </div>
               </div>
 
               {/* Chat header action buttons */}
               <div className="flex items-center gap-2 text-ink-2">
+                {cur && (
+                  <button
+                    aria-label="Workspace & members details"
+                    title="View 3 members & workspace details"
+                    onClick={() => setShowMembers(true)}
+                    className="flex h-9 w-9 items-center justify-center rounded-xl text-ink-2 hover:bg-surface-3 hover:text-primary transition-colors"
+                  >
+                    <Users size={18} />
+                  </button>
+                )}
                 {cur?.type === 'CONTENT' && cur.contentId && (
                   <Link
                     to={`/content/${cur.contentId._id || cur.contentId}`}
@@ -271,6 +290,24 @@ export default function Chat() {
       </section>
 
       <NewChat open={open} onClose={() => setOpen(false)} />
+      {cur && (
+        <RoomMembersModal
+          open={showMembers}
+          onClose={() => setShowMembers(false)}
+          room={cur}
+          meId={me._id}
+          onStartDirect={async (targetUserId) => {
+            try {
+              const r: any = await post('/chat/rooms', { type: 'DIRECT', userId: targetUserId });
+              qc.invalidateQueries({ queryKey: ['chat-rooms'] });
+              setShowMembers(false);
+              nav(`/chat/${r._id}`);
+            } catch (e: any) {
+              toast.error(errMsg(e));
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -359,6 +396,194 @@ function NewChat({ open, onClose }: { open: boolean; onClose: () => void }) {
           </li>
         ))}
       </ul>
+    </Modal>
+  );
+}
+
+function RoomMembersModal({
+  open,
+  onClose,
+  room,
+  meId,
+  onStartDirect,
+}: {
+  open: boolean;
+  onClose: () => void;
+  room: any;
+  meId: string;
+  onStartDirect: (userId: string) => void;
+}) {
+  const presence = useUI((s) => s.presence);
+  if (!room) return null;
+
+  const isClient = room.type === 'CLIENT';
+  const isContent = room.type === 'CONTENT';
+  const client = room.clientId;
+  const participants: any[] = room.participants || [];
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary-ink">
+            {isClient ? <Building2 size={18} /> : isContent ? <Clapperboard size={18} /> : <Users size={18} />}
+          </span>
+          <span className="font-bold text-[16px] text-ink truncate">
+            {isClient ? 'Client Workspace & Members' : isContent ? 'Content Chat Details' : 'Conversation Members'}
+          </span>
+        </div>
+      }
+      wide
+    >
+      <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
+        {/* Workspace / Client Summary Card */}
+        {isClient && (
+          <div className="rounded-2xl border border-line bg-surface-2/60 p-4 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-[16px] font-bold text-ink">
+                    {client?.name || client?.businessName || room.name}
+                  </h3>
+                  <span className="rounded-full bg-primary/10 border border-primary/20 px-2.5 py-0.5 text-[11px] font-bold text-primary-ink">
+                    Client Workspace
+                  </span>
+                </div>
+                {client?.businessName && client.businessName !== client.name && (
+                  <p className="text-xs text-ink-2 mt-0.5">{client.businessName}</p>
+                )}
+              </div>
+
+              {client?._id && (
+                <Link
+                  to={`/clients/${client._id}`}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-1 text-xs font-semibold text-ink hover:text-primary-ink hover:border-primary transition-colors"
+                >
+                  View Client <ExternalLink size={12} />
+                </Link>
+              )}
+            </div>
+
+            {/* Client Primary Contact Info */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-line/60">
+              <div className="flex items-center gap-2 text-xs text-ink-2">
+                <Mail size={14} className="text-ink-3 shrink-0" />
+                <span className="text-ink-3">Email:</span>
+                <span className="text-ink font-medium truncate">
+                  {client?.primaryContact?.email || client?.email || 'Not specified'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-ink-2">
+                <Phone size={14} className="text-ink-3 shrink-0" />
+                <span className="text-ink-3">Phone:</span>
+                <span className="text-ink font-medium">
+                  {client?.primaryContact?.phone || client?.phone || 'Not specified'}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Content Item Summary Card */}
+        {isContent && room.contentId && (
+          <div className="rounded-2xl border border-line bg-surface-2/60 p-4 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="rounded-md bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                  {room.contentId.contentId || 'REEL'}
+                </span>
+                <h3 className="text-sm font-bold text-ink truncate">{room.contentId.title || room.name}</h3>
+              </div>
+              <Link
+                to={`/content/${room.contentId._id || room.contentId}`}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+              >
+                Open <ExternalLink size={12} />
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {/* Members List Section */}
+        <div>
+          <div className="flex items-center justify-between mb-2.5 px-0.5">
+            <h4 className="text-[13px] font-bold uppercase tracking-wider text-ink-2">
+              Assigned Members ({participants.length})
+            </h4>
+            <span className="text-xs text-ink-3">
+              {participants.filter((p: any) => presence[String(p._id || p)]?.status === 'ONLINE').length} online now
+            </span>
+          </div>
+
+          <div className="divide-y divide-line rounded-2xl border border-line bg-surface overflow-hidden">
+            {participants.length === 0 ? (
+              <div className="p-4 text-center text-xs text-ink-3">No members assigned</div>
+            ) : (
+              participants.map((p: any) => {
+                const pId = String(p._id || p);
+                const isMe = pId === meId;
+                const pres = presence[pId];
+                const isOnline = pres?.status === 'ONLINE';
+
+                return (
+                  <div key={pId} className="flex items-center justify-between gap-3 p-3 hover:bg-surface-2/50 transition-colors">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="relative shrink-0">
+                        <Avatar name={p.name || 'Member'} size={42} />
+                        <PresenceDot userId={pId} className="absolute -bottom-0.5 -right-0.5 ring-2 ring-surface" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-[14px] text-ink truncate">
+                            {p.name || 'Team Member'}
+                          </span>
+                          {isMe && (
+                            <span className="rounded-full bg-surface-3 px-1.5 py-0.2 text-[10px] font-bold text-ink-2">
+                              You
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                          <span className="rounded-md bg-primary/10 border border-primary/20 px-1.5 py-0.2 text-[10.5px] font-semibold text-primary-ink">
+                            {roleLabel(p.role || 'MEMBER')}
+                          </span>
+                          {p.email && (
+                            <span className="text-[11.5px] text-ink-3 truncate hidden sm:inline">
+                              {p.email}
+                            </span>
+                          )}
+                          <span className="text-[11px] text-ink-3">
+                            {isOnline ? (
+                              <span className="text-emerald-500 font-medium">● Online</span>
+                            ) : pres?.lastSeen ? (
+                              `Active ${ago(pres.lastSeen)}`
+                            ) : (
+                              'Offline'
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {!isMe && (
+                      <button
+                        onClick={() => onStartDirect(pId)}
+                        title={`Message ${p.name}`}
+                        className="shrink-0 flex items-center gap-1.5 rounded-xl border border-line bg-surface-2 hover:bg-surface-3 px-3 py-1.5 text-xs font-semibold text-ink transition-colors shadow-xs"
+                      >
+                        <MessageSquare size={14} className="text-primary" />
+                        <span className="hidden sm:inline">Chat</span>
+                      </button>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </div>
     </Modal>
   );
 }

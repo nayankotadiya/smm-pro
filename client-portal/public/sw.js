@@ -1,21 +1,26 @@
-/* Bulletproof Client Portal Service Worker
- * - Handles Web Push Notifications even when app is closed / in background
- * - Deep-links to Approvals or Chat upon clicking notifications
+/* Bulletproof Client Portal Service Worker v2
+ * - High-priority background Web Push notifications for iOS (iPhone PWA 16.4+) & Android
+ * - Guaranteed wake-up when app is closed / screen is off
+ * - Universal fallback for WebKit and Blink engines
  */
-const VERSION = 'bulletproof-portal-v1';
+const VERSION = 'bulletproof-portal-v2';
 const SHELL = ['/', '/brand/bulletproof-shield.png'];
 
 self.addEventListener('install', (e) => {
+  self.skipWaiting();
   e.waitUntil(
-    caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())
+    caches.open(VERSION).then((c) => c.addAll(SHELL).catch(() => null))
   );
 });
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    Promise.all([
+      self.clients.claim(),
+      caches.keys().then((keys) =>
+        Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k)))
+      ),
+    ])
   );
 });
 
@@ -28,43 +33,71 @@ self.addEventListener('push', (e) => {
   }
 
   const title = d.title || 'Bulletproof Client Portal';
+  const body = d.body || 'New update waiting for your review.';
   const url = d.url || (d.data && d.data.url) || '/';
-  const tag = d.tag || ('portal-' + Date.now());
+  const tag = d.tag || ('bp-alert-' + Date.now());
 
-  // Base options supported universally (iOS Safari 16.4+, Android Chrome, Desktop)
-  const baseOptions = {
-    body: d.body || 'New update waiting for your review.',
-    icon: d.icon || '/brand/bulletproof-shield.png',
-    badge: d.badge || '/brand/bulletproof-shield.png',
-    tag,
-    data: { url },
-  };
+  // Detect iOS WebKit PWA
+  const isIOS = /iPad|iPhone|iPod/.test(self.navigator.userAgent) ||
+    (self.navigator.platform === 'MacIntel' && self.navigator.maxTouchPoints > 1);
 
-  // Extended options for Android & Desktop to wake screen & buzz
-  const extendedOptions = {
-    ...baseOptions,
-    renotify: true,
-    silent: false,
-    vibrate: [300, 100, 400, 100, 300],
-    timestamp: Date.now(),
-    actions: [
-      { action: 'open', title: 'Open Portal' },
-      { action: 'dismiss', title: 'Dismiss' },
-    ],
-  };
-
-  e.waitUntil(
-    self.registration.showNotification(title, extendedOptions).catch(() => {
-      // Tier 2 Fallback: Strip actions & vibrate for iOS WebKit
-      return self.registration.showNotification(title, baseOptions).catch(() => {
-        // Tier 3 Fallback: Bare minimal notification if image caching is blocked
-        return self.registration.showNotification(title, {
-          body: d.body || 'New update waiting for you.',
+  // iOS Safari WebKit supports only standard notification properties
+  // Passing unsupported options (like 'actions' or 'vibrate') can throw or silently drop notifications on iOS
+  const notificationPromise = (async () => {
+    if (isIOS) {
+      try {
+        return await self.registration.showNotification(title, {
+          body,
+          icon: '/brand/bulletproof-shield.png',
+          badge: '/brand/bulletproof-shield.png',
+          tag,
           data: { url },
         });
+      } catch (err) {
+        console.warn('[SW iOS push fallback]', err);
+        return await self.registration.showNotification(title, {
+          body,
+          data: { url },
+        });
+      }
+    }
+
+    // Android & Desktop Chrome / Edge / Firefox
+    try {
+      return await self.registration.showNotification(title, {
+        body,
+        icon: '/brand/bulletproof-shield.png',
+        badge: '/brand/bulletproof-shield.png',
+        tag,
+        renotify: true,
+        silent: false,
+        vibrate: [300, 100, 400, 100, 300],
+        timestamp: Date.now(),
+        data: { url },
+        actions: [
+          { action: 'open', title: 'Open Portal' },
+          { action: 'dismiss', title: 'Dismiss' },
+        ],
       });
-    })
-  );
+    } catch {
+      try {
+        return await self.registration.showNotification(title, {
+          body,
+          icon: '/brand/bulletproof-shield.png',
+          badge: '/brand/bulletproof-shield.png',
+          tag,
+          data: { url },
+        });
+      } catch {
+        return await self.registration.showNotification(title, {
+          body,
+          data: { url },
+        });
+      }
+    }
+  })();
+
+  e.waitUntil(notificationPromise);
 });
 
 self.addEventListener('notificationclick', (e) => {
@@ -86,7 +119,9 @@ self.addEventListener('notificationclick', (e) => {
 });
 
 self.addEventListener('message', (e) => {
-  if (e.data === 'logout') {
+  if (e.data === 'skipWaiting') {
+    self.skipWaiting();
+  } else if (e.data === 'logout') {
     caches.delete(VERSION);
   } else if (e.data?.type === 'SHOW_NOTIFICATION') {
     const { title, options } = e.data;

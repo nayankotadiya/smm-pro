@@ -1,4 +1,4 @@
-import { Notification, User, PushSubscription } from '../models';
+import { Notification, User, PushSubscription, ClientUser } from '../models';
 import { emitToUser, emitToClient } from './realtime';
 import { sendPush } from '../integrations/push';
 import { sendEmail } from '../integrations/email';
@@ -74,9 +74,15 @@ export async function notifyClientUsers(clientId: any, n: { title: string; messa
     emitToClient(clientId, 'notification:new', notif.toJSON());
 
     // 3. Dispatch Web Push notification to client devices (Android, iOS PWA, Desktop)
+    const clientUserDocs = await ClientUser.find({ clientId }).select('_id').lean();
+    const clientUserIds = clientUserDocs.map((u) => u._id);
     const subs = await PushSubscription.find({
-      $or: [{ clientId }, { clientUserId: clientId }],
+      $or: [
+        { clientId },
+        { clientUserId: { $in: clientUserIds } },
+      ],
     });
+    console.log(`[notifyClientUsers] Found ${subs.length} push subscription(s) for client ${clientId}`);
     if (!subs.length) return 0;
     let ok = 0;
     for (const s of subs) {
@@ -87,6 +93,7 @@ export async function notifyClientUsers(clientId: any, n: { title: string; messa
           url: n.url || '/',
           tag: n.tag || ('client-' + Date.now()),
         });
+        console.log(`[notifyClientUsers] Push result for device [${s.platform || s.deviceType || 'mobile'}]: ${r}`);
         if (r === 'SENT') {
           ok++;
           s.lastUsedAt = new Date();
@@ -99,7 +106,7 @@ export async function notifyClientUsers(clientId: any, n: { title: string; messa
           await s.save();
         }
       } catch (err) {
-        console.warn('[notifyClientUsers error]', err);
+        console.warn('[notifyClientUsers sendPush error]', err);
       }
     }
     return ok;

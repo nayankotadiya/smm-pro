@@ -62,8 +62,11 @@ export async function sendPush(
     await webpush.sendNotification(subscription, JSON.stringify(richPayload), options);
     return 'SENT';
   } catch (e: any) {
-    if (e.statusCode === 404 || e.statusCode === 410) return 'GONE';
-    console.warn('[push] failed statusCode:', e.statusCode, 'body:', e.body);
+    if (e.statusCode === 404 || e.statusCode === 410 || e.statusCode === 401 || e.statusCode === 400) {
+      console.warn(`[push] Subscription expired/invalid (${e.statusCode}):`, e.body || e.message);
+      return 'GONE';
+    }
+    console.warn('[push] failed statusCode:', e.statusCode, 'message:', e.message, 'body:', e.body);
     return 'FAILED';
   }
 }
