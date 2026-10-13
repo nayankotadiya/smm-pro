@@ -58,6 +58,20 @@ export function createApp() {
   app.use(express.json({ limit: '1mb' }));
   app.use((req, _res, next) => { stripOperators(req.body); next(); });
 
+  // Root status endpoint
+  app.get('/', (_req, res) => {
+    res.json({
+      name: 'Bulletproof SMM PRO API',
+      status: 'ONLINE',
+      system: 'OPERATIONAL',
+      version: '1.0.0',
+      time: new Date().toISOString(),
+      health: '/api/health',
+      portal: env.clientPortalUrl,
+      agency: env.appUrl,
+    });
+  });
+
   // Liveness check (process alive)
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'UP', time: new Date().toISOString(), uptime: Math.floor(process.uptime()) });
