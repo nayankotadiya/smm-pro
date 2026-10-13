@@ -25,7 +25,8 @@ import {
   FileCheck,
   FileSpreadsheet
 } from 'lucide-react';
-import { api, API_URL } from '@/lib/api';
+import { api, API_URL, DIRECT_URL } from '@/lib/api';
+import axios from 'axios';
 import { useAuth } from '@/store/auth';
 import { Card, Button, Spinner } from '@/components/Ui';
 import clsx from 'clsx';
@@ -156,8 +157,14 @@ export function ChatPage() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const res = await api.post('/chat/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+      // Upload directly to backend to bypass Vercel serverless 4.5MB request limit
+      const uploadUrl = DIRECT_URL ? `${DIRECT_URL}/api/portal/chat/upload` : `${API_URL}/api/portal/chat/upload`;
+      const clientToken = localStorage.getItem('smm_client_token');
+      const res = await axios.post(uploadUrl, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          ...(clientToken ? { Authorization: `Bearer ${clientToken}` } : {}),
+        },
       });
 
       setPendingUploads((prev) =>
@@ -320,7 +327,8 @@ export function ChatPage() {
   // Helper to build authenticated media URLs for <img>, <video>, <audio>, <a>
   const getMediaUrl = (url?: string) => {
     if (!url) return '';
-    const full = url.startsWith('http') ? url : `${API_URL}${url}`;
+    const base = DIRECT_URL || API_URL || '';
+    const full = url.startsWith('http') ? url : `${base}${url}`;
     const separator = full.includes('?') ? '&' : '?';
     return `${full}${separator}token=${encodeURIComponent(token || '')}`;
   };
@@ -499,8 +507,10 @@ export function ChatPage() {
                   {m.attachments && m.attachments.length > 0 && (
                     <div className="space-y-2">
                       {m.attachments.map((att) => {
-                        const streamUrl = getMediaUrl(att.streamUrl || att.url);
-                        const downloadUrl = getMediaUrl(att.downloadUrl);
+                        const fallbackStream = att._id ? `/api/portal/media/${att._id}/stream` : '';
+                        const fallbackDownload = att._id ? `/api/portal/media/${att._id}/download` : '';
+                        const streamUrl = getMediaUrl(att.streamUrl || att.url || fallbackStream);
+                        const downloadUrl = getMediaUrl(att.downloadUrl || fallbackDownload);
                         const isImage = att.category === 'IMAGE' || att.mimeType?.startsWith('image/');
                         const isVideo = att.category === 'VIDEO' || att.category === 'RAW' || att.mimeType?.startsWith('video/');
                         const isAudio = att.category === 'AUDIO' || att.mimeType?.startsWith('audio/');
@@ -513,6 +523,13 @@ export function ChatPage() {
                                 alt={att.originalName}
                                 className="max-h-60 w-auto max-w-full rounded-xl object-contain cursor-pointer hover:opacity-95 transition-opacity"
                                 onClick={() => setPreviewImageModal(streamUrl)}
+                                onError={(e) => {
+                                  const el = e.currentTarget;
+                                  if (!el.dataset.retried && att._id) {
+                                    el.dataset.retried = 'true';
+                                    el.src = `${API_URL || ''}/api/portal/media/${att._id}/stream?token=${encodeURIComponent(token || '')}`;
+                                  }
+                                }}
                               />
                               <a
                                 href={downloadUrl}
@@ -535,6 +552,14 @@ export function ChatPage() {
                                 preload="metadata"
                                 playsInline
                                 className="max-h-64 w-full rounded-xl"
+                                onError={(e) => {
+                                  const el = e.currentTarget;
+                                  if (!el.dataset.retried && att._id) {
+                                    el.dataset.retried = 'true';
+                                    el.src = `${API_URL || ''}/api/portal/media/${att._id}/stream?token=${encodeURIComponent(token || '')}`;
+                                    el.load();
+                                  }
+                                }}
                               />
                               <div className="p-1.5 flex items-center justify-between text-[11px] bg-black/90 text-white/80 px-2.5">
                                 <span className="truncate max-w-[180px] font-mono text-[10px]">{att.originalName}</span>
@@ -578,6 +603,14 @@ export function ChatPage() {
                                 controls
                                 preload="metadata"
                                 className="w-full h-8"
+                                onError={(e) => {
+                                  const el = e.currentTarget;
+                                  if (!el.dataset.retried && att._id) {
+                                    el.dataset.retried = 'true';
+                                    el.src = `${API_URL || ''}/api/portal/media/${att._id}/stream?token=${encodeURIComponent(token || '')}`;
+                                    el.load();
+                                  }
+                                }}
                               />
                             </div>
                           );

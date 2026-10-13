@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Check, RotateCcw, Play, Pause, Clock, ArrowLeft, MessageSquare, Video, FileText, CheckCircle2, AlertCircle, ExternalLink, RefreshCw } from 'lucide-react';
-import { api, API_URL } from '@/lib/api';
+import { api, API_URL, DIRECT_URL } from '@/lib/api';
 import { ApprovalDetail } from '@/lib/types';
 import { Card, Button, Badge, Spinner, Textarea } from '@/components/Ui';
 import clsx from 'clsx';
@@ -81,7 +81,8 @@ export function ApprovalsPage() {
     if (!detail?.videoUrl) return '';
     const token = localStorage.getItem('smm_client_token') || '';
     const raw = detail.videoUrl;
-    const base = raw.startsWith('http') ? raw : `${API_URL || ''}${raw}`;
+    const host = DIRECT_URL || API_URL || '';
+    const base = raw.startsWith('http') ? raw : `${host}${raw}`;
     return token ? `${base}${base.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}` : base;
   }, [detail?.videoUrl, customVideoSrc]);
 

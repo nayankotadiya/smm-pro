@@ -5,10 +5,11 @@ import { MEDIA_CATEGORIES } from '../config/constants';
 const mediaSchema = new Schema({
   contentId: { type: ObjectId, ref: 'Content', index: true },
   clientId: { type: ObjectId, ref: 'Client', index: true },
-  storage: { type: String, enum: ['DRIVE', 'LOCAL'], required: true },
+  storage: { type: String, enum: ['DRIVE', 'LOCAL', 'GRIDFS'], required: true },
   driveFileId: String,
   driveFolderId: String,
   localPath: { type: String, select: false },
+  gridFsId: { type: ObjectId, index: true },
   fileName: { type: String, required: true },
   originalName: String,
   mimeType: String,

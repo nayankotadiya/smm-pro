@@ -13,6 +13,7 @@ import { visibilityFilter, moveToStage, setLastAction, broadcastContent } from '
 import { logActivity } from './activity';
 import { postSystemEvent } from './chat';
 import { emitDomain } from './events';
+import { saveFileToGridFS, findGridFSFile, openGridFSDownloadStream, reCacheGridFSToLocal } from './gridfs';
 
 /** Subset of multer's File shape — avoids depending on the global Express.Multer namespace */
 interface MulterFile { fieldname: string; originalname: string; encoding: string; mimetype: string; size: number; destination: string; filename: string; path: string; buffer: Buffer; }
@@ -294,7 +295,7 @@ export async function canAccessMedia(u: AuthUser, media: any) {
 
 /** Streams a file through the API after permission checks. Supports HTTP Range for video preview. */
 export async function streamMedia(u: AuthUser, id: string, res: Response, range: string | undefined, download: boolean, ip?: string) {
-  const media = await Media.findById(id).select('+localPath');
+  const media = await Media.findById(id).select('+localPath +gridFsId');
   if (!media || media.status === 'UPLOADING' || media.status === 'FAILED') throw notFound('File');
   if (!(await canAccessMedia(u, media))) throw forbidden();
   res.setHeader('Content-Disposition', `${download ? 'attachment' : 'inline'}; filename="${media.fileName}"`);
@@ -308,7 +309,7 @@ export async function streamMedia(u: AuthUser, id: string, res: Response, range:
   return pipeMedia(media, res, range);
 }
 
-/** Low-level byte piping (local disk or Drive) with Range support. Caller is responsible for authorization. */
+/** Low-level byte piping (local disk, GridFS, or Drive) with Range support. Caller is responsible for authorization. */
 export async function pipeMedia(media: any, res: Response, range?: string) {
   if (!res.getHeader('Content-Type')) res.setHeader('Content-Type', media.mimeType || 'application/octet-stream');
   res.setHeader('Accept-Ranges', 'bytes');
@@ -329,7 +330,46 @@ export async function pipeMedia(media: any, res: Response, range?: string) {
     return fs.createReadStream(p).pipe(res);
   }
 
-  // 2. Fall back to streaming directly from Google Drive
+  // 2. Stream permanently from MongoDB GridFS if local file was wiped by container restart
+  if (media.gridFsId || media._id) {
+    try {
+      const gridFile = await findGridFSFile(media.gridFsId, media._id);
+      if (gridFile) {
+        const size = gridFile.length;
+        const m = range && /bytes=(\d*)-(\d*)/.exec(range);
+
+        // Re-cache to disk in background so subsequent requests are lightning fast
+        void reCacheGridFSToLocal(gridFile._id, p || localPathFor(media.fileName), media);
+
+        if (m) {
+          const start = m[1] ? Number(m[1]) : 0;
+          const end = m[2] ? Math.min(Number(m[2]), size - 1) : size - 1;
+          const contentLength = end - start + 1;
+          res.status(206);
+          res.setHeader('Content-Range', `bytes ${start}-${end}/${size}`);
+          res.setHeader('Content-Length', contentLength);
+          const downloadStream = openGridFSDownloadStream(gridFile._id, { start, end: end + 1 });
+          downloadStream.on('error', () => {
+            if (!res.headersSent) res.status(500).end();
+            else res.destroy();
+          });
+          return downloadStream.pipe(res);
+        }
+
+        res.setHeader('Content-Length', size);
+        const downloadStream = openGridFSDownloadStream(gridFile._id);
+        downloadStream.on('error', () => {
+          if (!res.headersSent) res.status(500).end();
+          else res.destroy();
+        });
+        return downloadStream.pipe(res);
+      }
+    } catch (gridErr: any) {
+      console.warn('[pipeMedia] GridFS stream error:', gridErr?.message || gridErr);
+    }
+  }
+
+  // 3. Fall back to streaming directly from Google Drive
   if (media.driveFileId && gd.driveConfigured()) {
     try {
       const r = await gd.streamFile(media.driveFileId, range);
@@ -345,7 +385,7 @@ export async function pipeMedia(media: any, res: Response, range?: string) {
     }
   }
 
-  throw notFound('File on disk or Drive');
+  throw notFound('File on disk, database, or Drive');
 }
 
 export async function saveLocalUpload(u: AuthUser, id: string, file: MulterFile) {
@@ -375,6 +415,17 @@ export async function saveLocalUpload(u: AuthUser, id: string, file: MulterFile)
   media.localPath = dest;
   media.size = file.size;
   media.mimeType = finalMime;
+
+  // Persist permanently into MongoDB GridFS so files survive Render restarts & redeployments
+  try {
+    const gridFsId = await saveFileToGridFS(dest, media.fileName, {
+      contentType: finalMime,
+      metadata: { mediaId: media._id, contentId: media.contentId, clientId: media.clientId }
+    });
+    media.gridFsId = gridFsId;
+  } catch (gridErr: any) {
+    console.warn('[saveLocalUpload] GridFS persistence error:', gridErr?.message || gridErr);
+  }
 
   // If Google Drive is configured on the server, also back up to Google Drive
   if (gd.driveConfigured()) {

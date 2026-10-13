@@ -270,8 +270,8 @@ export async function publicView(token: string) {
 }
 export async function publicStreamTarget(token: string, which: 'video' | 'thumbnail') {
   const a = await findByToken(token);
-  if (which === 'video') return a.mediaId ? Media.findById(a.mediaId).select('+localPath') : null;
-  return Media.findOne({ contentId: a.contentId, category: 'THUMBNAIL', status: { $in: ['READY', 'APPROVED', 'REVIEW_REQUIRED'] } }).sort({ versionNumber: -1 }).select('+localPath');
+  if (which === 'video') return a.mediaId ? Media.findById(a.mediaId).select('+localPath +gridFsId') : null;
+  return Media.findOne({ contentId: a.contentId, category: 'THUMBNAIL', status: { $in: ['READY', 'APPROVED', 'REVIEW_REQUIRED'] } }).sort({ versionNumber: -1 }).select('+localPath +gridFsId');
 }
 export async function publicOpened(token: string) {
   const a = await findByToken(token);

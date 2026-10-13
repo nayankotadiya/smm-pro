@@ -40,6 +40,15 @@ async function main() {
   }
   startAutomationEngine();
   await startScheduler();
+  // Ensure any existing local media files are backed up to persistent MongoDB GridFS
+  void (async () => {
+    try {
+      const { migrateExistingLocalFilesToGridFS } = await import('./services/gridfs');
+      await migrateExistingLocalFilesToGridFS();
+    } catch (e: any) {
+      console.warn('[gridfs auto-migration]', e?.message);
+    }
+  })();
   server.listen(env.port, () => {
     console.log(`[api] SMM PRO server listening on http://localhost:${env.port}`);
   });

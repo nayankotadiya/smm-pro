@@ -13,6 +13,7 @@ import { requirePortalAuth, signPortalAccess, userFromPortalToken, signPortal2FA
 import { requireAuth } from '../middleware/auth';
 import { clientDecision } from '../services/approvals';
 import { pipeMedia, inferMimeType, safeMoveFile } from '../services/media';
+import { saveFileToGridFS } from '../services/gridfs';
 import { ensureClientRoom, ensureContentRoom, broadcastMessage, postSystemEvent } from '../services/chat';
 import { nextContentCode, applyStage, setLastAction, broadcastContent } from '../services/content';
 import { ensureContentFolders, LOCAL_DIR, localPathFor } from '../services/storage';
@@ -744,7 +745,7 @@ r.get('/approvals/:id/video', ah(async (req, res) => {
   const a = await Approval.findOne({ _id: req.params.id, clientId });
   if (!a || !a.mediaId) throw notFound('Video file');
 
-  const media = await Media.findById(a.mediaId).select('+localPath');
+  const media = await Media.findById(a.mediaId).select('+localPath +gridFsId');
   if (!media) throw notFound('Media file');
 
   res.setHeader('Cache-Control', 'private, no-store');
@@ -766,7 +767,7 @@ r.get('/approvals/:id/thumbnail', ah(async (req, res) => {
   const a = await Approval.findOne({ _id: req.params.id, clientId });
   if (!a) throw notFound('Approval');
 
-  const thumb = await Media.findOne({ contentId: a.contentId, category: 'THUMBNAIL' }).select('+localPath');
+  const thumb = await Media.findOne({ contentId: a.contentId, category: 'THUMBNAIL' }).select('+localPath +gridFsId');
   if (!thumb) throw notFound('Thumbnail');
 
   res.setHeader('Cache-Control', 'private, max-age=3600');
@@ -1204,10 +1205,21 @@ r.post('/chat/upload', portalUpload.single('file'), ah(async (req, res) => {
   else if (mimeType.startsWith('audio/')) category = 'AUDIO';
   else category = 'DOCUMENT';
 
+  let gridFsId: any = undefined;
+  try {
+    gridFsId = await saveFileToGridFS(dest, originalName, {
+      contentType: mimeType,
+      metadata: { clientId, category, source: 'PORTAL_CHAT' },
+    });
+  } catch (gridErr: any) {
+    console.warn('[portal chat upload] GridFS save error:', gridErr?.message || gridErr);
+  }
+
   const media = await Media.create({
     clientId,
     storage: 'LOCAL',
     localPath: dest,
+    gridFsId,
     fileName: originalName,
     originalName,
     mimeType,
@@ -1317,7 +1329,7 @@ r.get('/media/:id/stream', ah(async (req, res) => {
   }
   if (!clientId) throw forbidden('Authentication required');
 
-  const media = await Media.findById(req.params.id).select('+localPath');
+  const media = await Media.findById(req.params.id).select('+localPath +gridFsId');
   if (!media) throw notFound('Media file');
 
   res.setHeader('Cache-Control', 'private, max-age=86400');
@@ -1342,7 +1354,7 @@ r.get('/media/:id/download', ah(async (req, res) => {
   }
   if (!clientId) throw forbidden('Authentication required');
 
-  const media = await Media.findById(req.params.id).select('+localPath');
+  const media = await Media.findById(req.params.id).select('+localPath +gridFsId');
   if (!media) throw notFound('Media file');
 
   const safeFileName = encodeURIComponent(media.fileName || 'download');
