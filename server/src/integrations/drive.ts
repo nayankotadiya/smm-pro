@@ -11,13 +11,13 @@ export function driveConfigured() {
 }
 function getAuth() {
   if (authClient) return authClient;
-  if (env.google.serviceAccountB64) {
-    const creds = JSON.parse(Buffer.from(env.google.serviceAccountB64, 'base64').toString('utf8'));
-    authClient = new google.auth.JWT({ email: creds.client_email, key: creds.private_key, scopes: ['https://www.googleapis.com/auth/drive'] });
-  } else {
-    const o = new google.auth.OAuth2(env.google.clientId, env.google.clientSecret, env.google.redirectUri);
+  if (env.google.clientId && env.google.clientSecret && env.google.refreshToken) {
+    const o = new google.auth.OAuth2(env.google.clientId, env.google.clientSecret, env.google.redirectUri || 'https://developers.google.com/oauthplayground');
     o.setCredentials({ refresh_token: env.google.refreshToken });
     authClient = o;
+  } else if (env.google.serviceAccountB64) {
+    const creds = JSON.parse(Buffer.from(env.google.serviceAccountB64, 'base64').toString('utf8'));
+    authClient = new google.auth.JWT({ email: creds.client_email, key: creds.private_key, scopes: ['https://www.googleapis.com/auth/drive'] });
   }
   return authClient;
 }
