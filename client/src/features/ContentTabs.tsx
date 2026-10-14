@@ -295,23 +295,28 @@ export function ShootingTab({ d }: { d: any }) {
           /* Manager / SMM Shoot Scheduler Mode */
           <Card
             title={
-              <div className="flex flex-wrap items-center gap-2 min-w-0">
-                <span className="flex items-center gap-2 min-w-0">
-                  <CameraIcon size={18} className="text-primary shrink-0" />
-                  <span className="truncate">Shoot Plan & Call Sheet</span>
+              <div className="space-y-1.5 min-w-0">
+                <div className="flex flex-wrap items-center gap-2 min-w-0">
+                  <span className="flex items-center gap-2 font-bold text-ink">
+                    <CameraIcon size={18} className="text-primary shrink-0" />
+                    <span className="whitespace-normal">Shoot Plan & Call Sheet</span>
+                  </span>
                   <Badge status={s?.status || (s?.shootDate ? 'SCHEDULED' : 'PENDING')} />
-                </span>
-                <span className="text-[11.5px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20 inline-flex items-center gap-1 shrink-0">
-                  <UserCheck size={12} /> Manager / SMM Mode
-                </span>
+                </div>
+                <div>
+                  <span className="text-[11.5px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20 inline-flex items-center gap-1">
+                    <UserCheck size={12} /> Manager / SMM Mode
+                  </span>
+                </div>
               </div>
             }
             action={
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                 {(me?.role === 'SUPER_ADMIN' || me?.role === 'MANAGER') && s && (
                   <Button
                     size="sm"
                     variant="danger"
+                    className="flex-1 sm:flex-initial"
                     loading={delShoot.isPending}
                     onClick={() => {
                       if (window.confirm('Delete and reset shoot details?')) {
@@ -325,6 +330,7 @@ export function ShootingTab({ d }: { d: any }) {
                 <Button
                   size="sm"
                   variant="primary"
+                  className="flex-1 sm:flex-initial"
                   loading={save.isPending}
                   onClick={() =>
                     save.mutate({
@@ -428,15 +434,19 @@ export function ShootingTab({ d }: { d: any }) {
           /* Shooter View-Only Call Sheet */
           <Card
             title={
-              <div className="flex flex-wrap items-center gap-2 min-w-0">
-                <span className="flex items-center gap-2 min-w-0">
-                  <CameraIcon size={18} className="text-primary shrink-0" />
-                  <span className="truncate">Official Shoot Call Sheet</span>
+              <div className="space-y-1.5 min-w-0">
+                <div className="flex flex-wrap items-center gap-2 min-w-0">
+                  <span className="flex items-center gap-2 font-bold text-ink">
+                    <CameraIcon size={18} className="text-primary shrink-0" />
+                    <span className="whitespace-normal">Official Shoot Call Sheet</span>
+                  </span>
                   <Badge status={s?.status || (isScheduled ? 'SCHEDULED' : 'PENDING')} />
-                </span>
-                <span className="text-[11.5px] font-semibold text-slate-500 dark:text-slate-400 bg-surface-2 px-2.5 py-0.5 rounded-full border border-line/60 inline-flex items-center gap-1 shrink-0">
-                  <Lock size={12} /> Shooter (View Only)
-                </span>
+                </div>
+                <div>
+                  <span className="text-[11.5px] font-semibold text-slate-500 dark:text-slate-400 bg-surface-2 px-2.5 py-0.5 rounded-full border border-line/60 inline-flex items-center gap-1">
+                    <Lock size={12} /> Shooter (View Only)
+                  </span>
+                </div>
               </div>
             }
           >

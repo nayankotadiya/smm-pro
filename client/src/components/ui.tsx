@@ -92,9 +92,9 @@ export function Card({ title, action, children, className, pad = true }: { title
   return (
     <section className={clsx('card animate-rise overflow-hidden min-w-0 max-w-full', className)}>
       {(title || action) && (
-        <header className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-3 border-b border-line/50 bg-surface-2/25 px-3.5 sm:px-5 py-2.5 sm:py-3 backdrop-blur-sm min-w-0">
+        <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 border-b border-line/50 bg-surface-2/25 px-3.5 sm:px-5 py-2.5 sm:py-3 backdrop-blur-sm min-w-0">
           {title && (
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 w-full sm:w-auto">
               {typeof title === 'string' ? (
                 <h2 className="text-[14px] font-bold tracking-tight truncate">{title}</h2>
               ) : (
@@ -102,7 +102,11 @@ export function Card({ title, action, children, className, pad = true }: { title
               )}
             </div>
           )}
-          {action && <div className="flex flex-wrap items-center gap-2 shrink-0 max-w-full">{action}</div>}
+          {action && (
+            <div className="flex flex-wrap items-center gap-2 shrink-0 w-full sm:w-auto sm:justify-end">
+              {action}
+            </div>
+          )}
         </header>
       )}
       <div className={pad ? 'p-3.5 sm:p-5' : ''}>{children}</div>

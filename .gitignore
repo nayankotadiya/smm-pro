@@ -11,3 +11,4 @@ backups/
 .DS_Store
 Thumbs.db
 scratch/
+mongo-data/
