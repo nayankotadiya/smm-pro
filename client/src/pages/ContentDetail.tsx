@@ -65,16 +65,16 @@ export default function ContentDetail() {
 
           {blocked && <div className="mb-4 flex animate-rise items-start gap-3 rounded-lg border border-danger/30 bg-danger-soft p-3"><ShieldAlert size={18} className="mt-0.5 shrink-0 text-danger" /><div className="text-[13px]"><div className="font-semibold">Blocked {ago(c.blocked?.since)} by {c.blocked?.by?.name}</div><div>{c.blocked?.reason}</div></div></div>}
 
-          <div className="card mb-5 animate-rise p-4 sm:p-5">
+          <div className="card mb-5 animate-rise p-4 sm:p-5 min-w-0">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex min-w-[240px] flex-1 items-center gap-3.5">
+              <div className="flex min-w-0 sm:min-w-[240px] flex-1 items-center gap-3.5">
                 <span className="text-[24px] font-bold tabular text-ink dark:text-white">{c.progress}%</span>
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <Progress value={c.progress} tone={blocked ? 'red' : done ? 'green' : 'blue'} className="!h-2.5" />
                   <div className="mt-1 flex items-center gap-2 text-meta font-semibold text-slate-700 dark:text-slate-300">
                     <span>Stage {stageNumber(c.stage)} of {STAGES.length}</span>
                     <span className="text-slate-400 dark:text-slate-600">·</span>
-                    <span className="text-primary-ink font-bold">{label(c.stage)}</span>
+                    <span className="text-primary-ink font-bold truncate">{label(c.stage)}</span>
                   </div>
                 </div>
               </div>
@@ -92,10 +92,10 @@ export default function ContentDetail() {
             />
           </div>
 
-          <div className="grid gap-5 xl:grid-cols-[1fr_300px]">
+          <div className="grid gap-5 xl:grid-cols-[1fr_300px] min-w-0">
             <div className="min-w-0">
               <Tabs tabs={TABS.map((t) => ({ ...t, count: t.key === 'reviews' ? d.approvals.filter((a: any) => a.status === 'PENDING').length : t.key === 'files' ? d.media.length : t.key === 'chat' ? unread : undefined }))} value={tab} onChange={(k) => setSp(k === 'overview' ? {} : { tab: k }, { replace: true })} />
-              <div key={tab} className="animate-rise">
+              <div key={tab} className="animate-rise min-w-0">
               {tab === 'overview' && <Overview d={d} onTask={() => setModal('task')} onReminder={() => setModal('reminder')} go={(t) => setSp({ tab: t }, { replace: true })} />}
               {tab === 'script' && <ScriptTab d={d} />}
               {tab === 'shooting' && <ShootingTab d={d} />}
@@ -107,7 +107,7 @@ export default function ContentDetail() {
               {tab === 'chat' && <ChatThread roomId={d.roomId} embedded />}
               </div>
             </div>
-            <aside className="space-y-5">
+            <aside className="space-y-5 min-w-0">
               <Card title="Status">
                 <dl className="space-y-3 text-[13px]">
                   <div><dt className="text-meta uppercase tracking-wide text-ink-3">Last action</dt><dd className="mt-0.5 font-medium text-ink">{c.lastAction?.text || '—'}{c.lastAction?.at && <span className="text-ink-3"> · {ago(c.lastAction.at)}</span>}</dd></div>

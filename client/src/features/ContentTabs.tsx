@@ -84,8 +84,8 @@ export function ScriptTab({ d }: { d: any }) {
   const estSeconds = Math.round(wordCount / 2.5);
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[1fr_260px]">
-      <div className="space-y-4">
+    <div className="grid gap-5 lg:grid-cols-[1fr_260px] min-w-0">
+      <div className="space-y-4 min-w-0">
         {canReview && <ReviewBar approval={pending} title={`${pending.version} is waiting for your review`} />}
         {cur?.status === 'CHANGES_REQUESTED' && cur.reviewNote && <div className="rounded border border-warning/30 bg-warning-soft p-3 text-[13px]"><b>Changes requested by {cur.reviewedBy?.name}:</b> {cur.reviewNote}</div>}
         <Card title={<span className="flex items-center gap-2">{cur ? `Script ${cur.label}` : 'New script'}{cur && <Badge status={cur.status} />}{ro && cur && <span className="text-meta font-normal text-ink-3">Read only</span>}</span>}
@@ -193,9 +193,17 @@ export function ReviewBar({ approval, title, mediaId }: { approval: any; title: 
   const inv = useInv(); const [open, setOpen] = useState(false); const [note, setNote] = useState(''); const [comments, setComments] = useState<any[]>([]);
   const m = useMutation({ mutationFn: (b: any) => post(`/approvals/${approval._id}/review`, b), onSuccess: (_r, b) => { toast.success(b.decision === 'APPROVE' ? 'Approved.' : 'Changes request created.'); setOpen(false); setNote(''); setComments([]); inv(); }, onError: err });
   return (
-    <div className="animate-rise rounded-2xl border border-primary/40 bg-gradient-to-r from-primary/20 via-purple-500/15 to-pink-500/10 p-4 shadow-[0_8px_32px_rgba(139,92,246,0.22)] backdrop-blur-2xl sm:p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3"><div><div className="text-[15px] font-bold text-ink">{title}</div><div className="text-meta font-medium text-ink-2">Submitted {ago(approval.sentAt || approval.createdAt)}{approval.createdBy?.name ? ` by ${approval.createdBy.name}` : ''}</div></div>
-        <div className="flex gap-2.5"><Button icon={<RotateCcw size={15} />} onClick={() => setOpen(true)}>Request changes</Button><Button variant="primary" icon={<Check size={15} />} loading={m.isPending && !open} onClick={() => m.mutate({ decision: 'APPROVE' })}>Approve</Button></div></div>
+    <div className="animate-rise rounded-2xl border border-primary/40 bg-gradient-to-r from-primary/20 via-purple-500/15 to-pink-500/10 p-4 shadow-[0_8px_32px_rgba(139,92,246,0.22)] backdrop-blur-2xl sm:p-5 min-w-0">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="text-[15px] font-bold text-ink truncate">{title}</div>
+          <div className="text-meta font-medium text-ink-2 truncate">Submitted {ago(approval.sentAt || approval.createdAt)}{approval.createdBy?.name ? ` by ${approval.createdBy.name}` : ''}</div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button icon={<RotateCcw size={15} />} onClick={() => setOpen(true)}>Request changes</Button>
+          <Button variant="primary" icon={<Check size={15} />} loading={m.isPending && !open} onClick={() => m.mutate({ decision: 'APPROVE' })}>Approve</Button>
+        </div>
+      </div>
       <Modal open={open} onClose={() => setOpen(false)} title={`Request changes — ${approval.version}`} wide={!!mediaId} footer={<><Button onClick={() => setOpen(false)}>Cancel</Button><Button variant="primary" loading={m.isPending} disabled={!note.trim() && !comments.length} onClick={() => m.mutate({ decision: 'CHANGES', note: note.trim() || undefined, comments })}>Send change request</Button></>}>
         {mediaId && <div className="mb-4"><VideoReview mediaId={mediaId} pending={comments} onPendingChange={setComments} /></div>}
         <Field label={mediaId ? 'Overall note (optional if you added timestamp comments)' : 'What needs to change?'} hint="A revision task is created and assigned automatically."><Textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} autoFocus={!mediaId} /></Field>
@@ -281,25 +289,25 @@ export function ShootingTab({ d }: { d: any }) {
   const currentShooterName = c.assignedShooter?.name || s?.shooterId?.name || 'Unassigned';
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
-      <div className="space-y-5">
+    <div className="grid gap-5 lg:grid-cols-[1fr_320px] min-w-0">
+      <div className="space-y-5 min-w-0">
         {canManageShoot ? (
           /* Manager / SMM Shoot Scheduler Mode */
           <Card
             title={
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="flex items-center gap-2">
-                  <CameraIcon size={18} className="text-primary" />
-                  Shoot Plan & Call Sheet
+              <div className="flex flex-wrap items-center gap-2 min-w-0">
+                <span className="flex items-center gap-2 min-w-0">
+                  <CameraIcon size={18} className="text-primary shrink-0" />
+                  <span className="truncate">Shoot Plan & Call Sheet</span>
                   <Badge status={s?.status || (s?.shootDate ? 'SCHEDULED' : 'PENDING')} />
                 </span>
-                <span className="text-[11.5px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20 flex items-center gap-1">
+                <span className="text-[11.5px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20 inline-flex items-center gap-1 shrink-0">
                   <UserCheck size={12} /> Manager / SMM Mode
                 </span>
               </div>
             }
             action={
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {(me?.role === 'SUPER_ADMIN' || me?.role === 'MANAGER') && s && (
                   <Button
                     size="sm"
@@ -330,8 +338,9 @@ export function ShootingTab({ d }: { d: any }) {
               </div>
             }
           >
-            <div className="mb-4 rounded-xl border border-primary/20 bg-primary/5 p-3 text-[12.5px] text-primary-ink flex items-center gap-2">
-              <span>👑 <b>Manager / SMM:</b> Assign the shooter, shoot date, time, location & instructions below. Shooters cannot alter or set these details themselves.</span>
+            <div className="mb-4 rounded-xl border border-primary/20 bg-primary/5 p-3 text-[12.5px] text-primary-ink flex items-start gap-2.5 min-w-0">
+              <span className="shrink-0 text-[14px] leading-tight">👑</span>
+              <span className="leading-relaxed min-w-0"><b>Manager / SMM:</b> Assign the shooter, shoot date, time, location & instructions below. Shooters cannot alter or set these details themselves.</span>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
@@ -377,19 +386,55 @@ export function ShootingTab({ d }: { d: any }) {
                   <Textarea rows={2} value={v.afterShootRemarks || ''} onChange={set('afterShootRemarks')} placeholder="e.g. Completed 4 scenes, lighting was good, client was happy..." />
                 </Field>
               </div>
+
+              {/* Bottom Save Action Bar for Mobile Convenience */}
+              <div className="sm:col-span-2 mt-2 pt-3 border-t border-line/60 flex flex-wrap items-center justify-between gap-3">
+                <div className="text-[12px] font-medium text-ink-3">
+                  {s?.updatedAt ? `Last saved ${ago(s.updatedAt)}` : 'Ready to save & schedule'}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {(me?.role === 'SUPER_ADMIN' || me?.role === 'MANAGER') && s && (
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      loading={delShoot.isPending}
+                      onClick={() => {
+                        if (window.confirm('Delete and reset shoot details?')) {
+                          delShoot.mutate();
+                        }
+                      }}
+                    >
+                      Delete Shoot
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    loading={save.isPending}
+                    onClick={() =>
+                      save.mutate({
+                        ...v,
+                        shootDate: v.shootDate ? new Date(v.shootDate).toISOString() : null,
+                      })
+                    }
+                  >
+                    Save & Schedule Shoot
+                  </Button>
+                </div>
+              </div>
             </div>
           </Card>
         ) : (
           /* Shooter View-Only Call Sheet */
           <Card
             title={
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="flex items-center gap-2">
-                  <CameraIcon size={18} className="text-primary" />
-                  Official Shoot Call Sheet
+              <div className="flex flex-wrap items-center gap-2 min-w-0">
+                <span className="flex items-center gap-2 min-w-0">
+                  <CameraIcon size={18} className="text-primary shrink-0" />
+                  <span className="truncate">Official Shoot Call Sheet</span>
                   <Badge status={s?.status || (isScheduled ? 'SCHEDULED' : 'PENDING')} />
                 </span>
-                <span className="text-[11.5px] font-semibold text-slate-500 dark:text-slate-400 bg-surface-2 px-2.5 py-0.5 rounded-full border border-line/60 flex items-center gap-1">
+                <span className="text-[11.5px] font-semibold text-slate-500 dark:text-slate-400 bg-surface-2 px-2.5 py-0.5 rounded-full border border-line/60 inline-flex items-center gap-1 shrink-0">
                   <Lock size={12} /> Shooter (View Only)
                 </span>
               </div>
@@ -477,11 +522,11 @@ export function ShootingTab({ d }: { d: any }) {
 
                   {/* Shot List */}
                   {s?.shotList && (
-                    <div className="sm:col-span-2 rounded-xl border border-line/70 bg-surface-2/40 p-3.5 space-y-1.5">
+                    <div className="sm:col-span-2 rounded-xl border border-line/70 bg-surface-2/40 p-3.5 space-y-1.5 min-w-0">
                       <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                         Shot List
                       </div>
-                      <pre className="whitespace-pre-wrap font-sans text-[13px] text-ink leading-relaxed">
+                      <pre className="whitespace-pre-wrap break-words font-sans text-[13px] text-ink leading-relaxed">
                         {s.shotList}
                       </pre>
                     </div>
@@ -489,11 +534,11 @@ export function ShootingTab({ d }: { d: any }) {
 
                   {/* Creative Instructions */}
                   {s?.instructions && (
-                    <div className="sm:col-span-2 rounded-xl border border-line/70 bg-surface-2/40 p-3.5 space-y-1.5">
+                    <div className="sm:col-span-2 rounded-xl border border-line/70 bg-surface-2/40 p-3.5 space-y-1.5 min-w-0">
                       <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                         Creative Instructions
                       </div>
-                      <pre className="whitespace-pre-wrap font-sans text-[13px] text-ink leading-relaxed">
+                      <pre className="whitespace-pre-wrap break-words font-sans text-[13px] text-ink leading-relaxed">
                         {s.instructions}
                       </pre>
                     </div>
@@ -501,23 +546,23 @@ export function ShootingTab({ d }: { d: any }) {
                 </div>
 
                 {/* Security / Role Notice */}
-                <div className="rounded-xl border border-line/60 bg-surface-2/30 p-3 text-[12px] text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                  <Lock size={14} className="shrink-0 text-slate-400" />
-                  <span>Shoot date, time, and location are assigned exclusively by Manager & SMM. Shooters cannot alter these. To request changes, coordinate with your manager in Chat.</span>
+                <div className="rounded-xl border border-line/60 bg-surface-2/30 p-3 text-[12px] text-slate-500 dark:text-slate-400 flex items-start gap-2.5 min-w-0">
+                  <Lock size={14} className="shrink-0 text-slate-400 mt-0.5" />
+                  <span className="leading-relaxed min-w-0">Shoot date, time, and location are assigned exclusively by Manager & SMM. Shooters cannot alter these. To request changes, coordinate with your manager in Chat.</span>
                 </div>
               </div>
             )}
           </Card>
         )}
 
-        <Card title="Raw footage" action={<UploadButton label="Upload raw video" category="RAW" contentId={c._id} accept="video/*" camera icon={<Film size={15} />} />}>
+        <Card title="Raw footage" action={<UploadButton label="Upload raw video" category="RAW" contentId={c._id} accept="video/*" camera size="sm" icon={<Film size={15} />} />}>
           {!raws.length ? <Empty title="No raw footage yet" hint="Uploading notifies the editor, creates the editing task and moves the content forward." /> : <VersionList items={raws} a={a} />}
         </Card>
-        <Card title="Reference files" action={<UploadButton label="Add reference" category="REFERENCE" contentId={c._id} variant="secondary" />}>
+        <Card title="Reference files" action={<UploadButton label="Add reference" category="REFERENCE" contentId={c._id} variant="secondary" size="sm" />}>
           {!d.media.some((m: any) => m.category === 'REFERENCE') ? <p className="text-ink-3">No reference files.</p> : <div className="grid gap-3 md:grid-cols-2">{d.media.filter((m: any) => m.category === 'REFERENCE').map((m: any) => <FileCard key={m._id} m={m} a={a} />)}</div>}
         </Card>
       </div>
-      <div className="space-y-5">
+      <div className="space-y-5 min-w-0">
         <Card title="Checklist">
           <ul className="space-y-2.5">
             {CHECK.map(([k, l]) => (
@@ -581,20 +626,20 @@ function ShooterRemarkBox({ contentId, shoot, onSaved }: { contentId: string; sh
       pad={false}
     >
       {/* Before / After Shoot Switcher Tabs */}
-      <div className="flex border-b border-line/60 bg-surface-2/30 p-1.5 gap-1.5">
+      <div className="flex border-b border-line/60 bg-surface-2/30 p-1.5 gap-1.5 min-w-0">
         <button
           type="button"
           onClick={() => setStage('BEFORE')}
           className={clsx(
-            'flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-[12.5px] font-bold transition-all duration-150',
+            'flex-1 min-w-0 flex items-center justify-center gap-1.5 rounded-lg py-2 px-2 text-[12.5px] font-bold transition-all duration-150',
             stage === 'BEFORE'
               ? 'bg-surface text-primary-ink shadow-xs ring-1 ring-line/70'
               : 'text-ink-2 hover:text-ink'
           )}
         >
-          <span>⚡ Before Shoot</span>
+          <span className="truncate">⚡ Before Shoot</span>
           {beforeList.length > 0 && (
-            <span className={clsx('rounded-full px-1.5 text-[10.5px] font-bold', stage === 'BEFORE' ? 'bg-primary-soft text-primary-ink' : 'bg-surface-3 text-ink-2')}>
+            <span className={clsx('rounded-full px-1.5 text-[10.5px] font-bold shrink-0', stage === 'BEFORE' ? 'bg-primary-soft text-primary-ink' : 'bg-surface-3 text-ink-2')}>
               {beforeList.length}
             </span>
           )}
@@ -603,15 +648,15 @@ function ShooterRemarkBox({ contentId, shoot, onSaved }: { contentId: string; sh
           type="button"
           onClick={() => setStage('AFTER')}
           className={clsx(
-            'flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-[12.5px] font-bold transition-all duration-150',
+            'flex-1 min-w-0 flex items-center justify-center gap-1.5 rounded-lg py-2 px-2 text-[12.5px] font-bold transition-all duration-150',
             stage === 'AFTER'
               ? 'bg-surface text-emerald-600 dark:text-emerald-400 shadow-xs ring-1 ring-line/70'
               : 'text-ink-2 hover:text-ink'
           )}
         >
-          <span>🎬 After Shoot</span>
+          <span className="truncate">🎬 After Shoot</span>
           {afterList.length > 0 && (
-            <span className={clsx('rounded-full px-1.5 text-[10.5px] font-bold', stage === 'AFTER' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-surface-3 text-ink-2')}>
+            <span className={clsx('rounded-full px-1.5 text-[10.5px] font-bold shrink-0', stage === 'AFTER' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-surface-3 text-ink-2')}>
               {afterList.length}
             </span>
           )}
@@ -727,9 +772,9 @@ export function EditingTab({ d }: { d: any }) {
       {c.stage === 'RAW_FOOTAGE' && <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-surface p-4"><div><div className="font-semibold text-ink">Raw footage is ready</div><div className="text-meta text-ink-2">Start editing to let the team know this is in progress.</div></div><Button variant="primary" loading={start.isPending} onClick={() => start.mutate()}>Start editing</Button></div>}
       {latest && <Card title="Review latest version"><VideoReview mediaId={latest._id} /></Card>}
       {open.length > 0 && <Card title={`Open feedback (${open.length})`} pad={false}><ul className="divide-y divide-line">{open.map((f: any) => <li key={f._id} className="flex items-start justify-between gap-3 px-4 py-2.5"><div><div className="flex items-center gap-2 text-meta text-ink-2">{f.timestampSec != null && <span className="rounded bg-inverse px-1.5 py-0.5 font-medium tabular text-inverse-ink">{fmtTs(f.timestampSec)}</span>}{f.version} · {f.authorName}{f.authorType === 'CLIENT' && <Badge t="amber">Client</Badge>}</div><div className="mt-0.5 font-medium text-ink">{f.comment}</div></div><Button size="sm" onClick={() => patch(`/media/feedback/${f._id}`, { resolved: true }).then(inv).catch(err)}>Resolve</Button></li>)}</ul></Card>}
-      <Card title="Edit versions" action={<UploadButton label="Upload edit" category="EDIT" contentId={c._id} accept="video/*" icon={<Film size={15} />} />}>{!edits.length ? <Empty title="No edits uploaded yet" hint="Each upload becomes a new version and goes to SMM review automatically." /> : <VersionList items={edits} a={a} />}</Card>
-      <Card title="Final video" action={<UploadButton label="Upload final" category="FINAL" contentId={c._id} accept="video/*" variant="secondary" icon={<Film size={15} />} />}>{!finals.length ? <p className="text-ink-3">The final export goes here once the edit is approved.</p> : <VersionList items={finals} a={a} />}</Card>
-      <Card title="Thumbnail" action={<UploadButton label="Upload thumbnail" category="THUMBNAIL" contentId={c._id} accept="image/*" variant="secondary" />}>{!thumbs.length ? <p className="text-ink-3">No thumbnail yet.</p> : <VersionList items={thumbs} a={a} />}</Card>
+      <Card title="Edit versions" action={<UploadButton label="Upload edit" category="EDIT" contentId={c._id} accept="video/*" size="sm" icon={<Film size={15} />} />}>{!edits.length ? <Empty title="No edits uploaded yet" hint="Each upload becomes a new version and goes to SMM review automatically." /> : <VersionList items={edits} a={a} />}</Card>
+      <Card title="Final video" action={<UploadButton label="Upload final" category="FINAL" contentId={c._id} accept="video/*" variant="secondary" size="sm" icon={<Film size={15} />} />}>{!finals.length ? <p className="text-ink-3">The final export goes here once the edit is approved.</p> : <VersionList items={finals} a={a} />}</Card>
+      <Card title="Thumbnail" action={<UploadButton label="Upload thumbnail" category="THUMBNAIL" contentId={c._id} accept="image/*" variant="secondary" size="sm" />}>{!thumbs.length ? <p className="text-ink-3">No thumbnail yet.</p> : <VersionList items={thumbs} a={a} />}</Card>
       {a.modal}
     </div>
   );
@@ -760,7 +805,7 @@ export function useClientReviewActions() {
 }
 export function ClientTracking({ a }: { a: any }) {
   const steps: [string, any][] = [['Sent', a.sentAt], ['Delivered', a.deliveredAt], ['Opened', a.openedAt], [a.status === 'CHANGES_REQUESTED' ? 'Changes requested' : 'Approved', a.decidedAt]];
-  return <ol className="grid grid-cols-4 gap-2">{steps.map(([l, at]) => <li key={l} className={clsx('rounded border px-2 py-1.5 transition-colors duration-500', at ? 'border-primary/30 bg-primary-soft/50' : 'border-line')}><div className="text-meta text-ink-2">{l}</div><div className="text-[13px] font-semibold tabular text-ink">{at ? fmtDateTime(at) : '—'}</div></li>)}</ol>;
+  return <ol className="grid grid-cols-2 sm:grid-cols-4 gap-2">{steps.map(([l, at]) => <li key={l} className={clsx('rounded-xl border px-3 py-2 transition-colors duration-500 min-w-0', at ? 'border-primary/30 bg-primary-soft/50' : 'border-line')}><div className="text-meta text-ink-2 truncate">{l}</div><div className="text-[13px] font-semibold tabular text-ink truncate">{at ? fmtDateTime(at) : '—'}</div></li>)}</ol>;
 }
 export function ReviewsTab({ d }: { d: any }) {
   const can = useCan(); const me = useAuth((s) => s.user)!; const c = d.content; const act = useClientReviewActions();

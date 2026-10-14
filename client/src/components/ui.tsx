@@ -92,9 +92,17 @@ export function Card({ title, action, children, className, pad = true }: { title
   return (
     <section className={clsx('card animate-rise overflow-hidden min-w-0 max-w-full', className)}>
       {(title || action) && (
-        <header className="flex min-h-[48px] items-center justify-between gap-3 border-b border-line/50 bg-surface-2/25 px-4 sm:px-5 py-3 backdrop-blur-sm">
-          <h2 className="text-[14px] font-bold tracking-tight truncate">{title}</h2>
-          <div className="shrink-0">{action}</div>
+        <header className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-3 border-b border-line/50 bg-surface-2/25 px-3.5 sm:px-5 py-2.5 sm:py-3 backdrop-blur-sm min-w-0">
+          {title && (
+            <div className="min-w-0 flex-1">
+              {typeof title === 'string' ? (
+                <h2 className="text-[14px] font-bold tracking-tight truncate">{title}</h2>
+              ) : (
+                <div className="text-[14px] font-bold tracking-tight min-w-0">{title}</div>
+              )}
+            </div>
+          )}
+          {action && <div className="flex flex-wrap items-center gap-2 shrink-0 max-w-full">{action}</div>}
         </header>
       )}
       <div className={pad ? 'p-3.5 sm:p-5' : ''}>{children}</div>
@@ -306,8 +314,8 @@ export function Tabs<T extends string>({ tabs, value, onChange }: { tabs: { key:
   useEffect(() => { const ro = new ResizeObserver(measure); if (wrap.current) ro.observe(wrap.current); document.fonts?.ready.then(measure); return () => ro.disconnect(); }, [value]); // eslint-disable-line
   useEffect(() => { refs.current[value]?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' }); }, [value]);
   return (
-    <div className="-mx-4 mb-4 overflow-x-auto overscroll-x-contain border-b border-line/60 px-4 sm:mx-0 sm:px-0" role="tablist" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
-      <div ref={wrap} className="relative flex min-w-max gap-6">
+    <div className="-mx-3 mb-4 overflow-x-auto overscroll-x-contain border-b border-line/60 px-3 sm:mx-0 sm:px-0" role="tablist" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+      <div ref={wrap} className="relative flex min-w-max gap-4 sm:gap-6">
         {tabs.map((t) => (
           <button
             key={t.key}

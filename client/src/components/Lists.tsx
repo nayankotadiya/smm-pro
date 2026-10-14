@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
@@ -256,14 +257,20 @@ export function StatusBadge({ c }: { c: any }) {
 
 export function WorkflowBar({ stage, blocked, onSelectStage }: { stage: string; blocked?: boolean; onSelectStage?: (stage: string) => void }) {
   const i = STAGES.indexOf(stage);
+  const curRef = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    curRef.current?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+  }, [stage]);
+
   return (
-    <div className="overflow-x-auto pb-2 pt-1" style={{ scrollbarWidth: 'thin' }}>
+    <div className="overflow-x-auto pb-2 pt-1 no-scrollbar overscroll-x-contain" style={{ scrollbarWidth: 'thin', WebkitOverflowScrolling: 'touch' }}>
       <ol className="flex min-w-[880px] items-start px-1">
         {STAGES.map((s, n) => {
           const done = n < i; const cur = n === i;
           return (
             <li
               key={s}
+              ref={cur ? curRef : undefined}
               className={clsx(
                 'group relative flex-1 text-center transition-transform',
                 onSelectStage && 'cursor-pointer'

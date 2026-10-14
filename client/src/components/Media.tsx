@@ -414,8 +414,8 @@ export function VideoReview({ mediaId, allowComment = true, pending, onPendingCh
   };
   const fb: any[] = meta.data?.feedback || [];
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
-      <div>
+    <div className="grid gap-4 lg:grid-cols-[1fr_280px] min-w-0">
+      <div className="min-w-0">
         {link.isLoading
           ? <div className="flex aspect-video items-center justify-center rounded-xl bg-black"><Spinner className="text-white" /></div>
           : <video ref={ref} src={link.data?.stream} controls playsInline preload="metadata" onTimeUpdate={(e) => setNow(e.currentTarget.currentTime)} className="max-h-[60dvh] w-full rounded-xl bg-black" />}
@@ -427,7 +427,7 @@ export function VideoReview({ mediaId, allowComment = true, pending, onPendingCh
           </div>
         )}
       </div>
-      <div className="flex min-h-0 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-col">
         <div className="mb-2 text-meta font-medium text-ink-2">Comments</div>
         <ul className="max-h-64 space-y-1.5 overflow-y-auto lg:max-h-[46dvh]">
           {[...(pending || []).map((p, i) => ({ ...p, _id: `p${i}`, pending: true })), ...fb].map((f: any) => (
@@ -476,7 +476,7 @@ export function UploadButton({ label, category, contentId, clientId, accept, var
       : undefined
   );
   return (
-    <span className="inline-flex gap-1.5">
+    <span className="inline-flex flex-wrap items-center gap-1.5 max-w-full">
       <input ref={ref} type="file" hidden accept={computedAccept} onChange={pick} />
       <Button variant={variant} size={size} onClick={() => ref.current?.click()} icon={icon ?? <Upload size={15} />}>{label}</Button>
       {camera && isTouch && <><input ref={cam} type="file" hidden accept={computedAccept} capture="environment" onChange={pick} /><Button size={size} onClick={() => cam.current?.click()} icon={<Camera size={15} />}>Camera</Button></>}

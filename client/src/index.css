@@ -429,6 +429,8 @@
 
   .input {
     width: 100%;
+    max-width: 100%;
+    min-width: 0;
     min-height: 38px;
     border-radius: 0.6rem;
     border: 1.5px solid rgb(var(--line));
