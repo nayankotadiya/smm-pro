@@ -12,6 +12,8 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.print.PrintAttributes
+import android.print.PrintManager
 import android.view.ViewGroup
 import android.webkit.*
 import android.widget.Toast
@@ -64,6 +66,22 @@ class MainActivity : ComponentActivity() {
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { _ -> }
+
+    inner class AndroidPrintInterface(private val targetWebView: WebView) {
+        @JavascriptInterface
+        fun print() {
+            runOnUiThread {
+                try {
+                    val printManager = getSystemService(Context.PRINT_SERVICE) as? PrintManager
+                    val jobName = "SMM_PRO_Report_${System.currentTimeMillis()}"
+                    val printAdapter = targetWebView.createPrintDocumentAdapter(jobName)
+                    printManager?.print(jobName, printAdapter, PrintAttributes.Builder().build())
+                } catch (e: Exception) {
+                    Toast.makeText(this@MainActivity, "Print error: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -146,9 +164,11 @@ class MainActivity : ComponentActivity() {
                             mediaPlaybackRequiresUserGesture = false
                             mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                             cacheMode = WebSettings.LOAD_DEFAULT
-                            userAgentString = "$userAgentString SMMProAndroid/1.0.0"
+                            userAgentString = "$userAgentString SMMProAndroid/1.0.1"
                             setSupportZoom(false)
                         }
+
+                        addJavascriptInterface(AndroidPrintInterface(this), "AndroidPrintHost")
 
                         webViewClient = object : WebViewClient() {
                             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
@@ -160,6 +180,21 @@ class MainActivity : ComponentActivity() {
                             override fun onPageFinished(view: WebView?, url: String?) {
                                 super.onPageFinished(view, url)
                                 isLoading = false
+                                view?.evaluateJavascript(
+                                    """
+                                    if (!window.__androidPrintInjected) {
+                                        window.__androidPrintInjected = true;
+                                        var _origPrint = window.print;
+                                        window.print = function() {
+                                            if (window.AndroidPrintHost && window.AndroidPrintHost.print) {
+                                                window.AndroidPrintHost.print();
+                                            } else if (_origPrint) {
+                                                _origPrint();
+                                            }
+                                        };
+                                    }
+                                    """.trimIndent(), null
+                                )
                             }
 
                             override fun onReceivedError(

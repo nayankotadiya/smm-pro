@@ -29,6 +29,7 @@ This folder contains standalone installable Android APKs for both portals of the
 ## ⚙️ Features Included in Both Apps
 
 - **Native Edge-to-Edge Experience**: Status bar and navigation bar tailored to the SMM PRO dark aesthetic (`#0F172A`).
+- **Native PDF Print & Export (`v1.0.1`)**: Integrated Android `PrintManager` interface (`AndroidPrintHost`) enabling in-app 1-tap "Save as PDF" directly from Reports and Shooter/Editor modals.
 - **File & Media Picker (`onShowFileChooser`)**: Select and upload raw videos, photos, scripts, and documents directly from device storage or live camera.
 - **Video Review & Playback**: Unrestricted media playback for client and editor video version reviews.
 - **Integrated Download Manager**: Automatically routes reel exports, PDFs, and client reports to Android's native Downloads folder with system progress notifications.
