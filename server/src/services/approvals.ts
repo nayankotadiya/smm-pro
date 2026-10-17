@@ -141,10 +141,10 @@ export async function sendClientReview(u: AuthUser, b: { contentId: string; kind
     version = `Script ${v.label}`; scriptVersionId = v._id;
   } else {
     const isGraphic = ['POST', 'CAROUSEL', 'AI_IMAGE', 'IMAGE'].includes(content.type);
-    const m = await Media.findOne({ contentId: content._id, category: { $in: ['FINAL', 'EDIT', 'GRAPHIC', 'THUMBNAIL'] }, status: { $in: ['APPROVED', 'REVIEW_REQUIRED', 'READY'] } }).sort({ category: -1, versionNumber: -1 });
+    const m = await Media.findOne({ contentId: content._id, category: { $in: ['FINAL', 'EDIT', 'IMAGE', 'THUMBNAIL'] }, status: { $in: ['APPROVED', 'REVIEW_REQUIRED', 'READY'] } }).sort({ category: -1, versionNumber: -1 });
     if (!m && !isGraphic) throw badRequest('Upload the final video first');
     if (m) {
-      version = m.category === 'FINAL' ? `Final V${m.versionNumber || 1}` : m.category === 'GRAPHIC' ? `Graphic V${m.versionNumber || 1}` : `Edit V${m.versionNumber || 1}`;
+      version = m.category === 'FINAL' ? `Final V${m.versionNumber || 1}` : m.category === 'IMAGE' ? `Graphic V${m.versionNumber || 1}` : `Edit V${m.versionNumber || 1}`;
       mediaId = m._id;
     } else {
       version = 'Creative V1';

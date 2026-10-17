@@ -745,7 +745,7 @@ export function buildMasterPlanRows(contents: any[], clients: any[], shoots: any
 }
 
 /** Full synchronization of MongoDB content and database records to Google Sheets */
-export async function syncAllToGoogleSheets(): Promise<{
+export async function syncAllToGoogleSheets(explicitSpreadsheetId?: string): Promise<{
   success: boolean;
   contentCount: number;
   reelsCount: number;
@@ -758,7 +758,7 @@ export async function syncAllToGoogleSheets(): Promise<{
   employeeCount: number;
   message: string;
 }> {
-  const spreadsheetId = await getSpreadsheetId();
+  const spreadsheetId = explicitSpreadsheetId || await getSpreadsheetId();
   if (!spreadsheetId) {
     throw new Error('Google Spreadsheet ID is not configured. Please create or configure a spreadsheet first.');
   }

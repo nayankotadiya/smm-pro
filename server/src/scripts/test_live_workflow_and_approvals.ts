@@ -6,10 +6,10 @@ import { env } from '../config/env';
 
 import mongoose from 'mongoose';
 import crypto from 'crypto';
-import { User, Client, Content, Task, Activity } from '../models';
+import { User, Client, Content, Task } from '../models';
 import { syncAllToGoogleSheets, syncSingleContentToSheet } from '../integrations/sheets';
 import { getWorkflowStagesForType } from '../config/constants';
-import { createClientReviewLink, clientDecision, sendClientReview } from '../services/approvals';
+import { clientDecision, sendClientReview } from '../services/approvals';
 
 async function main() {
   const uri = env.mongoUri || process.env.MONGODB_URI;
@@ -27,7 +27,8 @@ async function main() {
   const designer = await User.findOne({ role: 'DESIGNER' }) || superAdmin;
   const smm = await User.findOne({ role: 'SMM' }) || superAdmin;
 
-  console.log(`Roles: Admin=${superAdmin?.name}, Designer=${designer?.name}, SMM=${smm?.name}`);
+  if (!smm) throw new Error('No active SMM user found');
+  console.log(`Roles: Admin=${superAdmin?.name}, Designer=${designer?.name}, SMM=${smm.name}`);
 
   // 3. Verify workflow stages for POST & CAROUSEL (Scripts NOT required)
   const postStages = getWorkflowStagesForType('POST');
