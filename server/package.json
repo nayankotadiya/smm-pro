@@ -16,7 +16,8 @@
     "restore": "tsx src/scripts/restore.ts",
     "setup:free": "tsx src/scripts/setup-free-tier.ts",
     "test:drive": "tsx src/scripts/test-drive.ts",
-    "drive:auth": "tsx src/scripts/get-refresh-token.ts"
+    "drive:auth": "tsx src/scripts/get-refresh-token.ts",
+    "demo:audit": "tsx src/scripts/seed_and_audit_demo.ts"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",
