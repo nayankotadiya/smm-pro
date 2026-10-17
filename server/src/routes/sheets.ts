@@ -61,16 +61,26 @@ r.post('/create', requirePerm('integrations.manage'), ah(async (req, res) => {
     throw badRequest('Google credentials are not configured on this server');
   }
   const title = req.body?.title || 'SMM Pro Master Tracker';
-  const result = await createDefaultSpreadsheet(title);
-  res.json({
-    ok: true,
-    ...result,
-  });
+  try {
+    const result = await createDefaultSpreadsheet(title);
+    res.json({
+      ok: true,
+      ...result,
+    });
+  } catch (err: any) {
+    const msg = err?.response?.data?.error?.message || err.message || 'Failed to create Google Sheet';
+    throw badRequest(`Google Sheets error: ${msg}`);
+  }
 }));
 
 r.post('/sync', requirePerm('integrations.manage'), ah(async (_req, res) => {
-  const result = await syncAllToGoogleSheets();
-  res.json(result);
+  try {
+    const result = await syncAllToGoogleSheets();
+    res.json(result);
+  } catch (err: any) {
+    const msg = err?.response?.data?.error?.message || err.message || 'Failed to sync with Google Sheets';
+    throw badRequest(`Google Sheets sync error: ${msg}`);
+  }
 }));
 
 r.post('/test', requirePerm('integrations.manage'), ah(async (req, res) => {
