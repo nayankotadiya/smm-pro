@@ -53,8 +53,16 @@ r.get('/data', requirePerm('clients.read'), ah(async (req, res) => {
     });
 
     const allRows = resp.data.values || [];
-    const headers = allRows[0] || [];
-    const rows = allRows.slice(1);
+    // Intelligent header detection: find the first row with >= 3 non-empty columns
+    let headerIndex = 0;
+    for (let i = 0; i < Math.min(8, allRows.length); i++) {
+      if (allRows[i] && allRows[i].filter((cell: any) => Boolean(cell && String(cell).trim())).length >= 3) {
+        headerIndex = i;
+        break;
+      }
+    }
+    const headers = allRows[headerIndex] || allRows[0] || [];
+    const rows = allRows.slice(headerIndex + 1).filter((r: any[]) => r.some((c: any) => Boolean(c && String(c).trim())));
 
     res.json({
       ok: true,
