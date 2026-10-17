@@ -4,5 +4,6 @@
   "less.lint.unknownAtRules": "ignore",
   "files.associations": {
     "*.css": "tailwindcss"
-  }
+  },
+  "java.configuration.updateBuildConfiguration": "automatic"
 }
