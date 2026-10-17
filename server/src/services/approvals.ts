@@ -140,9 +140,15 @@ export async function sendClientReview(u: AuthUser, b: { contentId: string; kind
     if (!v) throw badRequest('An internally approved script is required first');
     version = `Script ${v.label}`; scriptVersionId = v._id;
   } else {
-    const m = await Media.findOne({ contentId: content._id, category: { $in: ['FINAL', 'EDIT'] }, status: { $in: ['APPROVED', 'REVIEW_REQUIRED', 'READY'] } }).sort({ category: -1, versionNumber: -1 });
-    if (!m) throw badRequest('Upload the final video first');
-    version = m.category === 'FINAL' ? `Final V${m.versionNumber}` : `Edit V${m.versionNumber}`; mediaId = m._id;
+    const isGraphic = ['POST', 'CAROUSEL', 'AI_IMAGE', 'IMAGE'].includes(content.type);
+    const m = await Media.findOne({ contentId: content._id, category: { $in: ['FINAL', 'EDIT', 'GRAPHIC', 'THUMBNAIL'] }, status: { $in: ['APPROVED', 'REVIEW_REQUIRED', 'READY'] } }).sort({ category: -1, versionNumber: -1 });
+    if (!m && !isGraphic) throw badRequest('Upload the final video first');
+    if (m) {
+      version = m.category === 'FINAL' ? `Final V${m.versionNumber || 1}` : m.category === 'GRAPHIC' ? `Graphic V${m.versionNumber || 1}` : `Edit V${m.versionNumber || 1}`;
+      mediaId = m._id;
+    } else {
+      version = 'Creative V1';
+    }
   }
   // cancel older open links of the same type (single active link per content/type)
   const open = await Approval.find({ contentId: content._id, type, status: { $in: ['DRAFT', 'SENT', 'DELIVERED', 'OPENED', 'WAITING_FOR_CLIENT'] } });
