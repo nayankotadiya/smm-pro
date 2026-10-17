@@ -28,8 +28,8 @@ export function DeviceNotificationBanner() {
         <div className="flex items-center gap-2.5">
           <Bell size={18} className="shrink-0 text-amber-400" />
           <div>
-            <span className="font-bold">ફોનમાં નોટિફિકેશન બ્લોક છે: </span>
-            <span>બ્રાઉઝરમાં ઉપર URL પાસે લોક/ટ્યુન આઈકન ➔ Permissions ➔ Notifications ➔ <b>Allow</b> કરો જેથી ફોનની પેનલમાં નોટિફિકેશન આવે.</span>
+            <span className="font-bold">Notifications are blocked: </span>
+            <span>Click the lock icon in your browser address bar ➔ Site Settings ➔ Notifications ➔ <b>Allow</b> to receive real-time device alerts.</span>
           </div>
         </div>
         <button onClick={() => setDismissed(true)} className="p-1 hover:opacity-70 shrink-0"><X size={15} /></button>
@@ -118,7 +118,7 @@ export function TestNotificationButton({ className, label }: { className?: strin
       if (getDeviceNotificationState() !== 'granted') {
         const res = await requestAndEnableDeviceNotifications();
         if (!res.granted) {
-          toast.error('કૃપા કરીને બ્રાઉઝરમાં Notification Allow કરો.');
+          toast.error('Please allow notifications in your browser permissions.');
           setTesting(false);
           return;
         }
@@ -129,7 +129,7 @@ export function TestNotificationButton({ className, label }: { className?: strin
 
       // 1. Trigger local OS shade alert with sound & vibration
       await showDeviceNotification({
-        title: '🔔 SMM PRO Mobile Alert',
+        title: '🔔 SMM PRO Device Alert',
         message: 'Notification panel & vibration test successful!',
         link: '/notifications',
         sound: true,
@@ -139,14 +139,14 @@ export function TestNotificationButton({ className, label }: { className?: strin
       // 2. Trigger backend push test
       const r = await post<any>('/push/test').catch(() => ({ ok: false, devices: 0 }));
       if (r?.devices > 0 && r?.sentCount > 0) {
-        toast.success(`✅ ${r.sentCount} રજીસ્ટર્ડ ડિવાઇસ પર ટેસ્ટ પુશ મોકલાયો! ફોનની નોટિફિકેશન પેનલ ચેક કરો.`);
+        toast.success(`✅ Test notification sent to ${r.sentCount} registered device(s). Check your notification panel.`);
       } else if (r?.devices === 0) {
-        toast.info('લોકલ ટેસ્ટ મોકલાયો છે. આ ફોનને બેકએન્ડ પર કાયમી લિંક કરવા Settings માં જઈને "Enable notifications" આપો.');
+        toast.info('Local test triggered. Enable device notifications in Settings to link this device.');
       } else {
-        toast.success('ટેસ્ટ નોટિફિકેશન મોકલાયું! ફોન પેનલ ચેક કરો.');
+        toast.success('Test notification sent successfully. Check your notification panel.');
       }
     } catch {
-      toast.error('ટેસ્ટ નોટિફિકેશન મોકલવામાં નિષ્ફળતા.');
+      toast.error('Failed to trigger test notification.');
     } finally {
       setTesting(false);
     }
@@ -159,7 +159,7 @@ export function TestNotificationButton({ className, label }: { className?: strin
       className={`inline-flex select-none items-center justify-center gap-1.5 rounded-xl border border-primary/40 bg-primary/10 px-3.5 py-1.5 text-[12.5px] font-bold text-primary-ink shadow-xs hover:bg-primary/20 hover:border-primary transition-all active:scale-95 ${className || ''}`}
     >
       <Send size={13} className="text-primary" />
-      {testing ? 'ટેસ્ટિંગ…' : label || '🔔 ટેસ્ટ નોટિફિકેશન (Sound & Vibrate)'}
+      {testing ? 'Testing…' : label || '🔔 Test Notification (Sound & Vibrate)'}
     </button>
   );
 }

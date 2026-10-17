@@ -267,7 +267,7 @@ export default function SchedulingPublishing() {
                 </span>
               </div>
               <p className="text-xs text-ink-3">
-                Tracking {pkg.clientName || 'All Clients'}: કેટલી બની ગઈ, કેટલી બાકી છે, અને કેટલી Schedule થઈ છે
+                Tracking {pkg.clientName || 'All Clients'}: Total Produced, Pending Production, and Scheduled deliverables
               </p>
             </div>
           </div>
@@ -322,7 +322,7 @@ export default function SchedulingPublishing() {
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-[11px] font-black uppercase tracking-wider text-amber-500">
-                      Deliverables Pending Action (બનાવવાની બાકી છે)
+                      Deliverables Pending Production
                     </span>
                     <Badge t="amber">
                       ⚠️ {pkg.remaining.total} REMAINING
@@ -354,7 +354,7 @@ export default function SchedulingPublishing() {
           {/* 1. Target Quota */}
           <div className="rounded-xl border border-line bg-surface-2/60 p-3.5">
             <div className="text-[11px] font-bold text-ink-3 uppercase tracking-wider flex items-center justify-between">
-              <span>Monthly Target (ટાર્ગેટ)</span>
+              <span>Monthly Target Quota</span>
               <Package size={14} className="text-ink-3" />
             </div>
             <div className="mt-1.5 text-2xl font-black tabular tracking-tight text-ink">
@@ -368,7 +368,7 @@ export default function SchedulingPublishing() {
           {/* 2. Made / Produced */}
           <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3.5">
             <div className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider flex items-center justify-between">
-              <span>Bani Gay Chhe (બની ગઈ)</span>
+              <span>Produced / Completed</span>
               <CheckCircle2 size={14} className="text-emerald-500" />
             </div>
             <div className="mt-1.5 text-2xl font-black tabular tracking-tight text-emerald-500">
@@ -388,7 +388,7 @@ export default function SchedulingPublishing() {
           )}>
             <div className="text-[11px] font-bold uppercase tracking-wider flex items-center justify-between">
               <span className={pkg.remaining.total > 0 ? 'text-amber-500' : 'text-emerald-500'}>
-                Baki Chhe (બનાવવાની બાકી)
+                Pending Production / Remaining
               </span>
               {pkg.remaining.total > 0 ? (
                 <AlertTriangle size={14} className="text-amber-500 animate-bounce" />
@@ -416,7 +416,7 @@ export default function SchedulingPublishing() {
           {/* 4. Scheduled for Posting */}
           <div className="rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/5 p-3.5">
             <div className="text-[11px] font-bold text-fuchsia-500 uppercase tracking-wider flex items-center justify-between">
-              <span>Schedule Thay Chhe (Schedule થઈ)</span>
+              <span>Scheduled for Publishing</span>
               <CalendarDays size={14} className="text-fuchsia-500" />
             </div>
             <div className="mt-1.5 text-2xl font-black tabular tracking-tight text-fuchsia-500">

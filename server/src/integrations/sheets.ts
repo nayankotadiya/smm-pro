@@ -139,6 +139,56 @@ export const CONTENT_TRACKER_HEADERS = [
 
 export const CONTENT_TRACKER_COLUMNS = CONTENT_TRACKER_HEADERS;
 
+export const CLIENT_HEADERS = [
+  'Client Code',
+  'Client Name',
+  'Business Name',
+  'Contact Person',
+  'Phone',
+  'Status',
+  'Monthly Package Target',
+  'Reels Progress',
+  'Posts Progress',
+  'Carousels Progress',
+  'Pending Deliverables (Alert)',
+  'Fulfillment %',
+  'Last Synced',
+];
+
+export const SCHEDULE_HEADERS = [
+  'Client Code',
+  'Client Name',
+  'Monthly Target',
+  'Produced / Completed',
+  'Pending Production',
+  'Scheduled for Publishing',
+  'Ready to Schedule',
+  'Posted Live',
+  'Deliverables Quota Alert',
+  'Fulfillment %',
+  'Last Synced',
+];
+
+export const EMPLOYEE_HEADERS = [
+  'Employee ID',
+  'Name',
+  'Email',
+  'Role',
+  'Pending Tasks',
+  'Last Synced',
+];
+
+export const TASK_HEADERS = [
+  'Task ID',
+  'Content ID',
+  'Title',
+  'Assigned To',
+  'Kind',
+  'Priority',
+  'Status',
+  'Due Date',
+];
+
 export const SHEETS_CONFIG = [
   'Dashboard',
   'Master Plan',
@@ -287,19 +337,19 @@ export async function setupSheetHeadersAndFormulas(spreadsheetId: string) {
         },
         {
           range: "'Clients'!A1:M1",
-          values: [['Client Code', 'Client Name', 'Business Name', 'Contact Person', 'Phone', 'Status', 'Monthly Package Target', 'Reels Progress', 'Posts Progress', 'Carousels Progress', 'Remaining Deliverables (Alert)', 'Fulfillment %', 'Last Synced']],
+          values: [CLIENT_HEADERS],
         },
         {
           range: "'Schedule'!A1:K1",
-          values: [['Client Code', 'Client Name', 'Monthly Target', 'Bani Gay (Made)', 'Baki Chhe (Remaining)', 'Schedule Thay (Scheduled)', 'Ready to Schedule', 'Posted Live', 'Scheduling Alert', 'Fulfillment %', 'Last Synced']],
+          values: [SCHEDULE_HEADERS],
         },
         {
           range: "'Employees'!A1:F1",
-          values: [['Employee ID', 'Name', 'Email', 'Role', 'Pending Tasks', 'Last Synced']],
+          values: [EMPLOYEE_HEADERS],
         },
         {
           range: "'Tasks'!A1:H1",
-          values: [['Task ID', 'Content ID', 'Title', 'Assigned To', 'Kind', 'Priority', 'Status', 'Due Date']],
+          values: [TASK_HEADERS],
         },
         {
           range: "'Setup Guide'!A1:C",
@@ -1003,20 +1053,8 @@ export async function syncAllToGoogleSheets(explicitSpreadsheetId?: string): Pro
 
   // 5. Build Comprehensive Schedule rows (Section 1: Client Packages & Progress, Section 2: Detailed Calendar)
   const scheduleRows: any[][] = [];
-  scheduleRows.push(['SECTION 1: CLIENT MONTHLY PACKAGES & SCHEDULING STATUS (KETLI BANI GAY, KETLI BAKI, KETLI SCHEDULE THAY)']);
-  scheduleRows.push([
-    'Client Code',
-    'Client Name',
-    'Monthly Target',
-    'Bani Gay (Made/Produced)',
-    'Baki Chhe (Remaining to Make)',
-    'Schedule Thay (Scheduled)',
-    'Ready to Schedule',
-    'Posted Live',
-    'Scheduling & Quota Alert',
-    'Fulfillment %',
-    'Last Synced',
-  ]);
+  scheduleRows.push(['SECTION 1: CLIENT MONTHLY PACKAGES & DELIVERABLES FULFILLMENT STATUS']);
+  scheduleRows.push(SCHEDULE_HEADERS);
 
   clients.forEach((cl: any) => {
     const pkg = cl.monthlyPackage || { reels: 10, posts: 5, carousels: 2 };
@@ -1181,22 +1219,22 @@ export async function syncAllToGoogleSheets(explicitSpreadsheetId?: string): Pro
     ['Published Content', posted, 'Live on Social Media'],
   ];
 
-  // 9. Clear previous rows to ensure clean sync
+  // 9. Clear previous rows to ensure clean sync across all sheets
   try {
     await s.spreadsheets.values.batchClear({
       spreadsheetId,
       requestBody: {
         ranges: [
-          "'Content Tracker'!A2:AE500",
+          "'Content Tracker'!A1:AE500",
           "'Master Plan'!A1:V500",
-          "'Reels'!A2:AE500",
-          "'Posts'!A2:AE500",
-          "'Carousels'!A2:AE500",
-          "'AI Reels'!A2:AE500",
-          "'Clients'!A2:M500",
+          "'Reels'!A1:AE500",
+          "'Posts'!A1:AE500",
+          "'Carousels'!A1:AE500",
+          "'AI Reels'!A1:AE500",
+          "'Clients'!A1:M500",
           "'Schedule'!A1:L500",
-          "'Employees'!A2:F500",
-          "'Tasks'!A2:H500",
+          "'Employees'!A1:F500",
+          "'Tasks'!A1:H500",
         ],
       },
     });
@@ -1204,31 +1242,20 @@ export async function syncAllToGoogleSheets(explicitSpreadsheetId?: string): Pro
     console.warn('[sheets] Warning clearing previous rows:', clearErr.message);
   }
 
-  // 10. Execute batch update to Google Sheets across all sheets
+  // 10. Execute batch update to Google Sheets across all sheets starting at row 1 with headers
   const updates: sheets_v4.Schema$ValueRange[] = [
     { range: "'Dashboard'!A1:C14", values: dashboardRows },
     { range: "'Master Plan'!A1:V" + masterPlanRows.length, values: masterPlanRows },
-    { range: "'Clients'!A2:M" + (clientRows.length + 1), values: clientRows },
+    { range: "'Clients'!A1:M" + (clientRows.length + 1), values: [CLIENT_HEADERS, ...clientRows] },
     { range: "'Schedule'!A1:L" + scheduleRows.length, values: scheduleRows },
-    { range: "'Employees'!A2:F" + (employeeRows.length + 1), values: employeeRows },
-    { range: "'Tasks'!A2:H" + (taskRows.length + 1), values: taskRows },
+    { range: "'Employees'!A1:F" + (employeeRows.length + 1), values: [EMPLOYEE_HEADERS, ...employeeRows] },
+    { range: "'Tasks'!A1:H" + (taskRows.length + 1), values: [TASK_HEADERS, ...taskRows] },
+    { range: "'Content Tracker'!A1:AE" + (contentRows.length + 1), values: [CONTENT_TRACKER_HEADERS, ...contentRows] },
+    { range: "'Reels'!A1:AE" + (reelsRows.length + 1), values: [CONTENT_TRACKER_HEADERS, ...reelsRows] },
+    { range: "'Posts'!A1:AE" + (postsRows.length + 1), values: [CONTENT_TRACKER_HEADERS, ...postsRows] },
+    { range: "'Carousels'!A1:AE" + (carouselsRows.length + 1), values: [CONTENT_TRACKER_HEADERS, ...carouselsRows] },
+    { range: "'AI Reels'!A1:AE" + (aiReelsRows.length + 1), values: [CONTENT_TRACKER_HEADERS, ...aiReelsRows] },
   ];
-
-  if (contentRows.length > 0) {
-    updates.push({ range: "'Content Tracker'!A2:AE" + (contentRows.length + 1), values: contentRows });
-  }
-  if (reelsRows.length > 0) {
-    updates.push({ range: "'Reels'!A2:AE" + (reelsRows.length + 1), values: reelsRows });
-  }
-  if (postsRows.length > 0) {
-    updates.push({ range: "'Posts'!A2:AE" + (postsRows.length + 1), values: postsRows });
-  }
-  if (carouselsRows.length > 0) {
-    updates.push({ range: "'Carousels'!A2:AE" + (carouselsRows.length + 1), values: carouselsRows });
-  }
-  if (aiReelsRows.length > 0) {
-    updates.push({ range: "'AI Reels'!A2:AE" + (aiReelsRows.length + 1), values: aiReelsRows });
-  }
 
   await s.spreadsheets.values.batchUpdate({
     spreadsheetId,

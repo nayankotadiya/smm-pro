@@ -384,14 +384,14 @@ function NotificationSettings() {
         const s = await enablePush(true);
         setPs(s);
         if (s !== 'on') {
-          toast.error('કૃપા કરીને પહેલા આ ફોન પર "Enable notifications" ક્લિક કરીને પરવાનગી આપો.');
+          toast.error('Please click "Enable notifications" first to grant browser permissions.');
           return;
         }
       }
 
       // Trigger local OS notification shade alert with sound & vibration
       await showDeviceNotification({
-        title: '🔔 SMM PRO Mobile Alert',
+        title: '🔔 SMM PRO Device Alert',
         message: 'Notification panel & vibration test successful!',
         sound: true,
         vibrate: true,
@@ -402,11 +402,11 @@ function NotificationSettings() {
       qc.invalidateQueries({ queryKey: ['push-devices'] });
 
       if (r?.devices === 0) {
-        toast.error('⚠️ ડેટાબેઝમાં આ ફોનનું સબસ્ક્રિપ્શન મળ્યું નથી. "Enable notifications" ફરી દબાવો.');
+        toast.error('No active device subscription found in database. Click "Enable notifications" to link this device.');
       } else if (r?.sentCount > 0) {
-        toast.success(`✅ ${r.sentCount} ડિવાઇસ પર ટેસ્ટ પુશ સફળતાપૂર્વક મોકલાયો! ફોનની નોટિફિકેશન પેનલ ચેક કરો.`);
+        toast.success(`✅ Test push notification sent to ${r.sentCount} registered device(s). Check your notification panel.`);
       } else {
-        toast.info('ટેસ્ટ પુશ સેન્ડ થઈ ગયો છે.');
+        toast.info('Test push notification dispatched.');
       }
     } catch (e) {
       toast.error(errMsg(e));
@@ -478,7 +478,7 @@ function NotificationSettings() {
           {devices.data && devices.data.length > 0 ? (
             <div className="mt-4 border-t border-line pt-3">
               <div className="flex items-center justify-between text-[13px] font-semibold text-ink">
-                <span>રજીસ્ટર્ડ ડિવાઇસ ({devices.data.length})</span>
+                <span>Registered Devices ({devices.data.length})</span>
                 <span className="text-[11px] font-normal text-success-ink bg-success-soft px-2 py-0.5 rounded-full">Active in DB</span>
               </div>
               <ul className="mt-2 space-y-1.5 text-[12.5px]">
@@ -497,9 +497,9 @@ function NotificationSettings() {
             </div>
           ) : (
             <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-[12px] text-amber-300">
-              <b>⚠️ આ ફોન હજી સુધી સર્વર પર લિંક નથી થયો:</b>
+              <b>⚠️ This device is not yet linked to the server:</b>
               <div className="mt-1">
-                ઉપર આપેલ <b>"Enable notifications"</b> બટન દબાવો અને બ્રાઉઝરમાં <b>Allow</b> કરો જેથી તમારો ફોન બેકએન્ડ ડેટાબેઝમાં એડ થઈ જાય.
+                Click the <b>"Enable notifications"</b> button above and grant browser permissions to add this device to the database.
               </div>
             </div>
           )}
@@ -507,13 +507,13 @@ function NotificationSettings() {
           {/* Phone notification panel & sound guidance */}
           <div className="mt-3.5 rounded-xl border border-border/80 bg-surface-2/80 p-3.5 text-[12px] space-y-2 text-ink-2">
             <div className="font-semibold text-ink flex items-center gap-1.5 text-[13px]">
-              <Smartphone size={15} className="text-primary" /> ફોનમાં સાઉન્ડ કે વાઇબ્રેટ ન થાય તો આ સેટિંગ્સ ચકાસો:
+              <Smartphone size={15} className="text-primary" /> Troubleshooting device notification & sound settings:
             </div>
             <ul className="list-disc pl-4 space-y-1.5 text-[11.5px] leading-relaxed">
-              <li><b>1. Android Sound Mode:</b> ફોન <i>Silent</i> કે <i>Do Not Disturb (DND)</i> મોડ પર ન હોય તે ચેક કરો. જો સાયલન્ટ હશે તો કોઈ સાઉન્ડ નહીં આવે.</li>
-              <li><b>2. Chrome Notification Category:</b> ફોન <i>Settings ➔ Apps ➔ Chrome ➔ Notifications ➔ Notification categories ➔ Sites ➔ તમારો ડોમેન</i> પર જઈને <b>"Alert"</b> (Sound & Vibrate Allowed) સિલેક્ટ કરો.</li>
-              <li><b>3. Battery Saver (Xiaomi / Vivo / Oppo / Realme / Samsung):</b> <i>Settings ➔ Apps ➔ Chrome ➔ Battery ➔ "Unrestricted"</i> અને <i>"Autostart"</i> ચાલુ કરો, જેથી સ્ક્રીન લૉક હોય ત્યારે પણ તરત નોટિફિકેશન આવે.</li>
-              <li><b>4. iPhone (iOS):</b> Safari માં <b>Share ➔ Add to Home Screen</b> કરો. હોમ સ્ક્રીન એપ ખોલીને આ પેજ પર આવીને Notifications ઓન કરો (iOS 16.4+).</li>
+              <li><b>1. Device Sound Mode:</b> Ensure your phone is not set to <i>Silent</i> or <i>Do Not Disturb (DND)</i> mode.</li>
+              <li><b>2. Browser Notification Categories:</b> In <i>Settings ➔ Apps ➔ Chrome ➔ Notifications ➔ Notification categories ➔ Sites</i>, ensure <b>"Alert"</b> (Sound & Vibration Allowed) is selected.</li>
+              <li><b>3. Battery Optimization (Android):</b> Set browser battery usage to <i>"Unrestricted"</i> and enable <i>"Autostart"</i> so notifications are received while the screen is locked.</li>
+              <li><b>4. iPhone (iOS):</b> In Safari, tap <b>Share ➔ Add to Home Screen</b>. Launch from the Home Screen and enable notifications (iOS 16.4+).</li>
             </ul>
           </div>
         </Card>
@@ -833,13 +833,13 @@ function Integrations() {
                 </div>
 
                 <div className="space-y-1.5 pt-1 border-t border-border/60 text-xs">
-                  <span className="font-semibold text-ink">તમારા Google Drive માં જોવા માટે:</span>
+                  <span className="font-semibold text-ink">To access in your personal Google Drive:</span>
                   <p className="text-[11px] text-ink-2 leading-relaxed">
-                    તમારો Gmail લખીને <b>Share</b> ક્લિક કરો જેથી આ ફોલ્ડર તમારા Google Drive ના <b>"Shared with me"</b> માં તરત જ આવી જાય.
+                    Enter your Gmail address and click <b>Share</b>. The folder will immediately appear under <b>"Shared with me"</b> in your Google Drive.
                   </p>
                   <div className="flex gap-1.5">
                     <Input
-                      placeholder="તમારો Gmail (e.g. name@gmail.com)"
+                      placeholder="Your Gmail (e.g. name@gmail.com)"
                       value={shareEmail}
                       onChange={(e) => setShareEmail(e.target.value)}
                       className="text-xs h-8"
