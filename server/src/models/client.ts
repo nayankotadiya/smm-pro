@@ -15,6 +15,11 @@ const clientSchema = new Schema({
     designer: { type: ObjectId, ref: 'User' }, smm: { type: ObjectId, ref: 'User' }, reviewer: { type: ObjectId, ref: 'User' },
   },
   status: { type: String, enum: ['ACTIVE', 'PAUSED', 'ONBOARDING', 'ARCHIVED'], default: 'ACTIVE' },
+  monthlyPackage: {
+    reels: { type: Number, default: 10 },
+    posts: { type: Number, default: 5 },
+    carousels: { type: Number, default: 2 },
+  },
   driveFolderId: String,
   driveSubfolders: { type: Map, of: String },
   createdBy: { type: ObjectId, ref: 'User' },

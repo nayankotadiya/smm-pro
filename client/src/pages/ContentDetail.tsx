@@ -27,6 +27,9 @@ const STAGE_TAB: Record<string, Tab> = {
 
 function getStageTab(stage: string, type?: string): Tab {
   const isVideo = !['POST', 'CAROUSEL', 'AI_IMAGE'].includes((type || '').toUpperCase());
+  if (!isVideo && (stage === 'IDEA' || stage === 'GRAPHIC_DESIGN')) {
+    return 'files';
+  }
   if (stage === 'SMM_REVIEW' || stage === 'FINAL_REVIEW') {
     return isVideo ? 'editing' : 'reviews';
   }
@@ -63,8 +66,10 @@ export default function ContentDetail() {
       const unread = 0;
       const stages = getWorkflowStagesForType(c.type);
       const isVideo = !['POST', 'CAROUSEL', 'AI_IMAGE'].includes((c.type || '').toUpperCase());
+      const isGraphic = ['POST', 'CAROUSEL', 'AI_IMAGE'].includes((c.type || '').toUpperCase());
       const visibleTabs = TABS.filter((t) => {
         if (!isVideo && (t.key === 'shooting' || t.key === 'editing')) return false;
+        if (isGraphic && t.key === 'script') return false;
         return true;
       });
       const activeTab = visibleTabs.some((t) => t.key === tab) ? tab : 'overview';

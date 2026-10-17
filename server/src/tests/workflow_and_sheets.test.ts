@@ -105,13 +105,22 @@ describe('Advanced Content Workflow & Google Sheets Integration', () => {
   });
 
   it('validates Content Tracker columns A through AB and reference status colors', () => {
-    expect(CONTENT_TRACKER_COLUMNS.length).toBe(28); // A to AB = 28 columns
+    expect(CONTENT_TRACKER_COLUMNS.length).toBe(31); // A to AE = 31 columns
     expect(CONTENT_TRACKER_COLUMNS[0]).toBe('Content ID');
     expect(CONTENT_TRACKER_COLUMNS[1]).toBe('Client');
-    expect(CONTENT_TRACKER_COLUMNS[22]).toBe('Due Date');
-    expect(CONTENT_TRACKER_COLUMNS[23]).toBe('Days Left');
-    expect(CONTENT_TRACKER_COLUMNS[24]).toBe('Overdue');
-    expect(CONTENT_TRACKER_COLUMNS[27]).toBe('Last Updated');
+    expect(CONTENT_TRACKER_COLUMNS[7]).toBe('Shooter');
+    expect(CONTENT_TRACKER_COLUMNS[8]).toBe('Shoot Date');
+    expect(CONTENT_TRACKER_COLUMNS[9]).toBe('Shoot Status');
+    expect(CONTENT_TRACKER_COLUMNS[10]).toBe('Editor');
+    expect(CONTENT_TRACKER_COLUMNS[11]).toBe('Edit Date');
+    expect(CONTENT_TRACKER_COLUMNS[12]).toBe('Edit Status');
+    expect(CONTENT_TRACKER_COLUMNS[13]).toBe('Graphic Designer');
+    expect(CONTENT_TRACKER_COLUMNS[16]).toBe('Graphic Approval');
+    expect(CONTENT_TRACKER_COLUMNS[17]).toBe('Client Approval');
+    expect(CONTENT_TRACKER_COLUMNS[25]).toBe('Due Date');
+    expect(CONTENT_TRACKER_COLUMNS[26]).toBe('Days Left');
+    expect(CONTENT_TRACKER_COLUMNS[27]).toBe('Overdue');
+    expect(CONTENT_TRACKER_COLUMNS[30]).toBe('Last Updated');
 
     // Status colors match reference sheet exactly
     expect(STATUS_CONFIG.SCRIPT_DONE.color).toBe('#00D9E8');

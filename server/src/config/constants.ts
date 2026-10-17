@@ -76,10 +76,10 @@ export const STAGE_NEXT_ACTION: Record<Stage, string> = {
 export function getWorkflowStagesForType(type: string): Stage[] {
   const t = (type || 'REEL').toUpperCase();
   if (t === 'POST') {
-    return ['IDEA', 'SCRIPT', 'INTERNAL_REVIEW', 'GRAPHIC_DESIGN', 'SMM_REVIEW', 'FINAL_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'];
+    return ['IDEA', 'GRAPHIC_DESIGN', 'SMM_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'];
   }
   if (t === 'CAROUSEL') {
-    return ['IDEA', 'SCRIPT', 'INTERNAL_REVIEW', 'GRAPHIC_DESIGN', 'SMM_REVIEW', 'FINAL_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'];
+    return ['IDEA', 'GRAPHIC_DESIGN', 'SMM_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'];
   }
   if (t === 'AI_REEL') {
     return ['IDEA', 'SCRIPT', 'INTERNAL_REVIEW', 'VOICE_OVER', 'AI_GENERATION', 'EDITING', 'SMM_REVIEW', 'FINAL_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'];
