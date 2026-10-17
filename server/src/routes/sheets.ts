@@ -12,8 +12,9 @@ import {
   STATUS_COLOR_LEGEND,
   SHEETS_CONFIG,
   sheets,
+  generateShooterEditorReportSheet,
 } from '../integrations/sheets';
-import { SystemSetting, Content, Client } from '../models';
+import { SystemSetting, Content, Client, Shoot } from '../models';
 
 const r = Router();
 
@@ -215,6 +216,137 @@ r.post('/test', requirePerm('clients.read'), ah(async (req, res) => {
       error: err.message,
     });
   }
+}));
+
+// Generate and export a dedicated Shooter & Editor production report to a new Google Sheet
+r.post('/reports/shooter-editor', requirePerm('content.write'), ah(async (req, res) => {
+  try {
+    const result = await generateShooterEditorReportSheet(req.body);
+    res.json({
+      ok: true,
+      ...result,
+    });
+  } catch (err: any) {
+    const msg = err?.response?.data?.error?.message || err.message || 'Failed to generate Shooter & Editor Google Sheet report';
+    throw badRequest(`Report generation error: ${msg}`);
+  }
+}));
+
+// Preview Shooter & Editor production metrics and deliverables before export
+r.get('/reports/shooter-editor/preview', requirePerm('clients.read'), ah(async (req, res) => {
+  const query: any = { status: { $ne: 'CANCELLED' } };
+
+  if (req.query.clientId) {
+    query.clientId = String(req.query.clientId);
+  }
+
+  if (req.query.contentType) {
+    query.type = String(req.query.contentType);
+  }
+
+  const role = req.query.role ? String(req.query.role) : 'ALL';
+  const userId = req.query.userId ? String(req.query.userId) : undefined;
+
+  if (userId) {
+    if (role === 'SHOOTER') {
+      query.assignedShooter = userId;
+    } else if (role === 'EDITOR') {
+      query.assignedEditor = userId;
+    } else {
+      query.$or = [{ assignedShooter: userId }, { assignedEditor: userId }];
+    }
+  }
+
+  if (req.query.startDate || req.query.endDate) {
+    const dateMatch: any = {};
+    if (req.query.startDate) dateMatch.$gte = new Date(String(req.query.startDate));
+    if (req.query.endDate) {
+      const ed = new Date(String(req.query.endDate));
+      ed.setHours(23, 59, 59, 999);
+      dateMatch.$lte = ed;
+    }
+    query.$or = [
+      { deadline: dateMatch },
+      { plannedPublicationDate: dateMatch },
+      { createdAt: dateMatch },
+    ];
+  } else if (req.query.month && req.query.year) {
+    const y = Number(req.query.year);
+    const m = Number(req.query.month);
+    const sm = new Date(y, m - 1, 1);
+    const em = new Date(y, m, 0, 23, 59, 59, 999);
+    const dateMatch = { $gte: sm, $lte: em };
+    query.$or = [
+      { deadline: dateMatch },
+      { plannedPublicationDate: dateMatch },
+      { createdAt: dateMatch },
+    ];
+  } else if (req.query.year) {
+    const y = Number(req.query.year);
+    const sy = new Date(y, 0, 1);
+    const ey = new Date(y, 11, 31, 23, 59, 59, 999);
+    const dateMatch = { $gte: sy, $lte: ey };
+    query.$or = [
+      { deadline: dateMatch },
+      { plannedPublicationDate: dateMatch },
+      { createdAt: dateMatch },
+    ];
+  }
+
+  const status = req.query.status ? String(req.query.status) : 'ALL';
+  if (status !== 'ALL') {
+    if (status === 'PENDING_SHOOT') {
+      query.stage = { $in: ['IDEA', 'SCRIPT', 'CLIENT_REVIEW', 'SHOOTING'] };
+      query.productionStatus = { $nin: ['RAW_UPLOADED', 'EDITING', 'POSTED', 'COMPLETED'] };
+    } else if (status === 'SHOT') {
+      query.$or = [
+        { stage: { $in: ['RAW_FOOTAGE', 'EDITING', 'SMM_REVIEW', 'FINAL_REVIEW', 'SCHEDULE', 'PUBLISHED'] } },
+        { productionStatus: { $in: ['RAW_UPLOADED', 'EDITING', 'COMPLETED'] } },
+      ];
+    } else if (status === 'EDITING') {
+      query.stage = { $in: ['RAW_FOOTAGE', 'EDITING'] };
+    } else if (status === 'EDIT_DONE') {
+      query.stage = { $in: ['SMM_REVIEW', 'FINAL_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'] };
+    } else if (status === 'COMPLETED') {
+      query.$or = [{ stage: 'PUBLISHED' }, { status: 'COMPLETED' }, { productionStatus: 'POSTED' }];
+    }
+  }
+
+  const items = await Content.find(query)
+    .populate('clientId', 'name businessName clientCode')
+    .populate('assignedShooter', 'name email role')
+    .populate('assignedEditor', 'name email role')
+    .populate('currentOwner', 'name role')
+    .sort({ deadline: 1, plannedPublicationDate: 1, createdAt: -1 })
+    .lean();
+
+  let countShot = 0;
+  let countPendingShoot = 0;
+  let countEditing = 0;
+  let countEditDone = 0;
+  let countCompleted = 0;
+
+  items.forEach((c: any) => {
+    const isShot = ['RAW_FOOTAGE', 'EDITING', 'SMM_REVIEW', 'FINAL_REVIEW', 'SCHEDULE', 'PUBLISHED'].includes(c.stage) ||
+      ['RAW_UPLOADED', 'EDITING', 'COMPLETED'].includes(c.productionStatus);
+    if (isShot) countShot++;
+    else countPendingShoot++;
+
+    if (['RAW_FOOTAGE', 'EDITING'].includes(c.stage)) countEditing++;
+    if (['SMM_REVIEW', 'FINAL_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'].includes(c.stage)) countEditDone++;
+    if (c.stage === 'PUBLISHED' || c.status === 'COMPLETED' || c.productionStatus === 'POSTED') countCompleted++;
+  });
+
+  res.json({
+    ok: true,
+    total: items.length,
+    shot: countShot,
+    pendingShoot: countPendingShoot,
+    editing: countEditing,
+    editDone: countEditDone,
+    completed: countCompleted,
+    items,
+  });
 }));
 
 export default r;

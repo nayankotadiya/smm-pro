@@ -64,7 +64,7 @@ export default function ContentDetail() {
     <Async q={q} rows={8}>{(d: any) => {
       const c = d.content; const blocked = c.status === 'BLOCKED'; const done = c.status === 'COMPLETED';
       const unread = 0;
-      const stages = getWorkflowStagesForType(c.type);
+      const stages = getWorkflowStagesForType(c.type, c.stage);
       const isVideo = !['POST', 'CAROUSEL', 'AI_IMAGE'].includes((c.type || '').toUpperCase());
       const isGraphic = ['POST', 'CAROUSEL', 'AI_IMAGE'].includes((c.type || '').toUpperCase());
       const visibleTabs = TABS.filter((t) => {
@@ -73,6 +73,44 @@ export default function ContentDetail() {
         return true;
       });
       const activeTab = visibleTabs.some((t) => t.key === tab) ? tab : 'overview';
+
+      const stageIdx = stages.indexOf(c.stage);
+      const computedProgress = done ? 100 : stageIdx >= 0 ? Math.round(((stageIdx + 1) / stages.length) * 100) : (c.progress || 20);
+
+      const currentOwnerResolved = c.currentOwner || (
+        c.stage === 'SHOOTING' ? c.assignedShooter :
+        c.stage === 'EDITING' || c.stage === 'RAW_FOOTAGE' ? c.assignedEditor :
+        c.stage === 'GRAPHIC_DESIGN' ? c.assignedDesigner :
+        c.stage === 'SCRIPT' ? c.assignedWriter :
+        c.stage === 'CLIENT_REVIEW' || c.stage === 'CLIENT_FINAL_APPROVAL' || c.stage === 'INTERNAL_REVIEW' ? (c.assignedReviewer || c.assignedSMM) :
+        c.stage === 'SCHEDULE' || c.stage === 'PUBLISHED' ? c.assignedSMM :
+        (c.assignedSMM || c.assignedWriter)
+      );
+
+      const nextOwnerResolved = c.nextOwner || (
+        c.stage === 'SCRIPT' ? (isVideo ? c.assignedShooter : c.assignedDesigner) :
+        c.stage === 'CLIENT_REVIEW' ? (isVideo ? c.assignedShooter : c.assignedDesigner) :
+        c.stage === 'SHOOTING' ? c.assignedEditor :
+        c.stage === 'EDITING' || c.stage === 'GRAPHIC_DESIGN' ? (c.assignedReviewer || c.assignedSMM) :
+        c.stage === 'INTERNAL_REVIEW' || c.stage === 'FINAL_REVIEW' ? (c.assignedReviewer || c.assignedSMM) :
+        c.stage === 'SCHEDULE' ? c.assignedSMM : null
+      );
+
+      const lastActionResolved = c.lastAction?.text || `In ${label(c.stage)} workflow stage`;
+      const nextActionResolved = blocked
+        ? `Resolve block: ${c.blocked?.reason}`
+        : c.nextAction || (
+          c.stage === 'CLIENT_REVIEW' ? 'Awaiting client review & feedback' :
+          c.stage === 'SHOOTING' ? 'Capture footage as planned' :
+          c.stage === 'EDITING' ? 'Assemble cuts and audio mix' :
+          c.stage === 'GRAPHIC_DESIGN' ? 'Complete carousel graphics' :
+          c.stage === 'SCHEDULE' ? 'Set publication time and live post' :
+          c.stage === 'FINAL_REVIEW' ? 'Final QA verification before approval' :
+          'Proceed to next workflow stage'
+        );
+
+      const deadlineResolved = c.deadline || c.stageDeadlines?.approvalDeadline || c.productionDeadline || c.plannedPublicationDate;
+      const versionResolved = c.currentVideoVersion ? c.currentVideoVersion.replace('_', ' ') : c.currentScriptVersion ? `Script V${c.currentScriptVersion}` : 'Draft V1.0';
 
       return (
         <>
@@ -94,9 +132,9 @@ export default function ContentDetail() {
           <div className="card mb-5 animate-rise p-4 sm:p-5 min-w-0">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div className="flex min-w-0 sm:min-w-[240px] flex-1 items-center gap-3.5">
-                <span className="text-[24px] font-bold tabular text-ink dark:text-white">{c.progress}%</span>
+                <span className="text-[24px] font-bold tabular text-ink dark:text-white">{computedProgress}%</span>
                 <div className="flex-1 min-w-0">
-                  <Progress value={c.progress} tone={blocked ? 'red' : done ? 'green' : 'blue'} className="!h-2.5" />
+                  <Progress value={computedProgress} tone={blocked ? 'red' : done ? 'green' : 'blue'} className="!h-2.5" />
                   <div className="mt-1 flex items-center gap-2 text-meta font-semibold text-slate-700 dark:text-slate-300">
                     <span>Stage {stageNumber(c.stage, c.type)} of {stages.length}</span>
                     <span className="text-slate-400 dark:text-slate-600">·</span>
@@ -104,8 +142,8 @@ export default function ContentDetail() {
                   </div>
                 </div>
               </div>
-              <div className={`text-[13px] font-semibold ${isOverdue(c.deadline, done) ? 'text-danger' : 'text-slate-700 dark:text-slate-300'}`}>
-                {c.deadline ? `Deadline ${fmtDateTime(c.deadline)}` : 'No deadline'}
+              <div className={`text-[13px] font-semibold ${isOverdue(deadlineResolved, done) ? 'text-danger' : 'text-slate-700 dark:text-slate-300'}`}>
+                {deadlineResolved ? `Deadline ${fmtDateTime(deadlineResolved)}` : 'Flexible deadline'}
               </div>
             </div>
             <WorkflowBar
@@ -137,12 +175,12 @@ export default function ContentDetail() {
             <aside className="space-y-5 min-w-0">
               <Card title="Status">
                 <dl className="space-y-3 text-[13px]">
-                  <div><dt className="text-meta uppercase tracking-wide text-ink-3">Last action</dt><dd className="mt-0.5 font-medium text-ink">{c.lastAction?.text || '—'}{c.lastAction?.at && <span className="text-ink-3"> · {ago(c.lastAction.at)}</span>}</dd></div>
-                  <div><dt className="text-meta uppercase tracking-wide text-ink-3">Current owner</dt><dd className="mt-1"><Person u={c.currentOwner} /></dd></div>
-                  <div><dt className="text-meta uppercase tracking-wide text-ink-3">Next action</dt><dd className="mt-0.5 font-medium text-ink">{blocked ? `Resolve block: ${c.blocked?.reason}` : c.nextAction}</dd></div>
-                  <div><dt className="text-meta uppercase tracking-wide text-ink-3">Next owner</dt><dd className="mt-1"><Person u={c.nextOwner} /></dd></div>
-                  <div className="border-t border-line pt-3"><Row k="Deadline" v={c.deadline ? fmtDateTime(c.deadline) : '—'} danger={isOverdue(c.deadline, done)} /></div>
-                  <Row k="Latest version" v={c.currentVideoVersion ? c.currentVideoVersion.replace('_', ' ') : c.currentScriptVersion ? `Script V${c.currentScriptVersion}` : '—'} />
+                  <div><dt className="text-meta uppercase tracking-wide text-ink-3">Last action</dt><dd className="mt-0.5 font-medium text-ink">{lastActionResolved}{c.lastAction?.at && <span className="text-ink-3"> · {ago(c.lastAction.at)}</span>}</dd></div>
+                  <div><dt className="text-meta uppercase tracking-wide text-ink-3">Current owner</dt><dd className="mt-1"><Person u={currentOwnerResolved} /></dd></div>
+                  <div><dt className="text-meta uppercase tracking-wide text-ink-3">Next action</dt><dd className="mt-0.5 font-medium text-ink">{nextActionResolved}</dd></div>
+                  <div><dt className="text-meta uppercase tracking-wide text-ink-3">Next owner</dt><dd className="mt-1"><Person u={nextOwnerResolved} /></dd></div>
+                  <div className="border-t border-line pt-3"><Row k="Deadline" v={deadlineResolved ? fmtDateTime(deadlineResolved) : 'Flexible deadline'} danger={isOverdue(deadlineResolved, done)} /></div>
+                  <Row k="Latest version" v={versionResolved} />
                   {c.campaignId && <Row k="Campaign" v={c.campaignId.name} />}
                 </dl>
                 {!done && getStageTab(c.stage, c.type) !== activeTab && <Button className="mt-4 w-full" variant="primary" onClick={() => setSp({ tab: getStageTab(c.stage, c.type) }, { replace: true })}>Go to {label(c.stage)}<ArrowRight size={15} /></Button>}

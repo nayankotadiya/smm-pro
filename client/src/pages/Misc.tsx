@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
-import { Plus, CheckCircle2, Circle, Trash2, ArrowRight, MessageSquare, Repeat, Sparkles, Send, Printer } from 'lucide-react';
+import { Plus, CheckCircle2, Circle, Trash2, ArrowRight, MessageSquare, Repeat, Sparkles, Send, Printer, Film } from 'lucide-react';
 import { get, post, patch, del, errMsg } from '@/lib/api';
 import { useAuth, useCan } from '@/store/auth';
 import { useUI, toast } from '@/store/ui';
@@ -16,6 +16,7 @@ import { PresenceLabel } from './Dashboard';
 import { TestNotificationButton } from '@/components/NotificationBanner';
 import { ClientReportModal } from '@/components/ClientReportModal';
 import { CustomNotificationModal } from '@/components/CustomNotificationModal';
+import { ShooterEditorReportModal } from '@/components/ShooterEditorReportModal';
 
 // ------------------------------------------------------------ Reminders
 export function Reminders() {
@@ -129,6 +130,7 @@ const hrs = (h: number | null) => (h == null ? '—' : h < 1 ? '<1 h' : h >= 48 
 export function Reports() {
   const [days, setDays] = useState(30);
   const [showStatusModal, setShowStatusModal] = useState(false);
+  const [showShooterEditorReport, setShowShooterEditorReport] = useState(false);
   const nav = useNavigate();
   const q = useQuery({ queryKey: ['reports', days], queryFn: () => get('/reports', { days }) });
   return (
@@ -141,7 +143,15 @@ export function Reports() {
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="primary"
-              icon={<Sparkles size={15} className="text-emerald-300" />}
+              className="bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-600 hover:to-indigo-700 text-white shadow-sm"
+              icon={<Film size={15} />}
+              onClick={() => setShowShooterEditorReport(true)}
+            >
+              Shooter &amp; Editor Production Report
+            </Button>
+            <Button
+              variant="secondary"
+              icon={<Sparkles size={15} className="text-emerald-400" />}
               onClick={() => setShowStatusModal(true)}
             >
               Status Report &amp; PDF
@@ -177,6 +187,7 @@ export function Reports() {
         </div>
       )}</Async>
       <ClientReportModal open={showStatusModal} onClose={() => setShowStatusModal(false)} />
+      <ShooterEditorReportModal open={showShooterEditorReport} onClose={() => setShowShooterEditorReport(false)} />
     </>
   );
 }

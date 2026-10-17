@@ -301,7 +301,7 @@ export function WorkflowBar({
   blocked?: boolean;
   onSelectStage?: (stage: string) => void;
 }) {
-  const stages = getWorkflowStagesForType(contentType);
+  const stages = getWorkflowStagesForType(contentType, stage);
   const i = stages.indexOf(stage);
   const curRef = useRef<HTMLLIElement>(null);
   useEffect(() => {

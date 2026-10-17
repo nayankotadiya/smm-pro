@@ -68,7 +68,79 @@ export default function SchedulingPublishing() {
   const [selectedType, setSelectedType] = useState('');
   const [selectedPlatform, setSelectedPlatform] = useState('');
   const [selectedAssignee, setSelectedAssignee] = useState('');
+  const [selectedShooter, setSelectedShooter] = useState('');
+  const [selectedEditor, setSelectedEditor] = useState('');
+  const [datePreset, setDatePreset] = useState<'ALL' | 'TODAY' | 'THIS_WEEK' | 'THIS_MONTH' | 'LAST_MONTH' | 'THIS_YEAR' | 'CUSTOM'>('ALL');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [timeSort, setTimeSort] = useState<'DEFAULT' | 'TIME_ASC' | 'TIME_DESC' | 'DATE_DESC' | 'DATE_ASC'>('DEFAULT');
   const [filtersOpen, setFiltersOpen] = useState(false);
+
+  // Shooters and Editors filtered from Team
+  const shootersList = useMemo(() => {
+    return (team.data || []).filter((u: any) => u.role === 'SHOOTER' || (u.role && u.role.includes('SHOOT')));
+  }, [team.data]);
+
+  const editorsList = useMemo(() => {
+    return (team.data || []).filter((u: any) => u.role === 'EDITOR' || (u.role && u.role.includes('EDIT')));
+  }, [team.data]);
+
+  // Date Range Bounds
+  const dateRangeBounds = useMemo(() => {
+    const now = new Date();
+    if (datePreset === 'TODAY') {
+      const s = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const e = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      return { start: s, end: e };
+    }
+    if (datePreset === 'THIS_WEEK') {
+      const day = now.getDay();
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+      const s = new Date(now.getFullYear(), now.getMonth(), diff);
+      const e = new Date(s.getFullYear(), s.getMonth(), s.getDate() + 6, 23, 59, 59, 999);
+      return { start: s, end: e };
+    }
+    if (datePreset === 'THIS_MONTH') {
+      const s = new Date(now.getFullYear(), now.getMonth(), 1);
+      const e = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      return { start: s, end: e };
+    }
+    if (datePreset === 'LAST_MONTH') {
+      const s = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const e = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      return { start: s, end: e };
+    }
+    if (datePreset === 'THIS_YEAR') {
+      const s = new Date(now.getFullYear(), 0, 1);
+      const e = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+      return { start: s, end: e };
+    }
+    if (datePreset === 'CUSTOM') {
+      const s = dateFrom ? new Date(dateFrom + 'T00:00:00') : null;
+      const e = dateTo ? new Date(dateTo + 'T23:59:59') : null;
+      return { start: s, end: e };
+    }
+    return null;
+  }, [datePreset, dateFrom, dateTo]);
+
+  const hasActiveFilters = Boolean(
+    selectedClient || selectedType || selectedPlatform || selectedAssignee ||
+    selectedShooter || selectedEditor || datePreset !== 'ALL' || timeSort !== 'DEFAULT' || search
+  );
+
+  const resetAllFilters = () => {
+    setSelectedClient('');
+    setSelectedType('');
+    setSelectedPlatform('');
+    setSelectedAssignee('');
+    setSelectedShooter('');
+    setSelectedEditor('');
+    setDatePreset('ALL');
+    setDateFrom('');
+    setDateTo('');
+    setTimeSort('DEFAULT');
+    setSearch('');
+  };
 
   // Modals
   const [publishModalContent, setPublishModalContent] = useState<any | null>(null);
@@ -100,7 +172,7 @@ export default function SchedulingPublishing() {
   // Filtered Items for List View
   const filteredItems = useMemo(() => {
     const todayStr = dateKey(new Date());
-    return allItems.filter((c) => {
+    const res = allItems.filter((c) => {
       if (search) {
         const q = search.toLowerCase();
         const matches = (c.title || '').toLowerCase().includes(q) ||
@@ -110,6 +182,38 @@ export default function SchedulingPublishing() {
       }
       if (selectedAssignee && c.currentOwner?._id !== selectedAssignee && c.assignedSMM?._id !== selectedAssignee) {
         return false;
+      }
+
+      // Shooter Filter
+      if (selectedShooter) {
+        const sId = c.assignedShooter?._id || c.assignedShooter;
+        const sName = (c.assignedShooter?.name || '').toLowerCase();
+        const planSId = c.shootPlan?.shooterId?._id || c.shootPlan?.shooterId;
+        const planSName = (c.shootPlan?.shooterId?.name || '').toLowerCase();
+        const targetS = selectedShooter.toLowerCase();
+        const matchesShooter = sId === selectedShooter || planSId === selectedShooter || sName.includes(targetS) || planSName.includes(targetS);
+        if (!matchesShooter) return false;
+      }
+
+      // Editor Filter
+      if (selectedEditor) {
+        const eId = c.assignedEditor?._id || c.assignedEditor;
+        const eName = (c.assignedEditor?.name || '').toLowerCase();
+        const targetE = selectedEditor.toLowerCase();
+        const matchesEditor = eId === selectedEditor || eName.includes(targetE);
+        if (!matchesEditor) return false;
+      }
+
+      // Date Range Filter
+      if (dateRangeBounds) {
+        const targetD = c.plannedPublicationDate || c.deadline || c.shootPlan?.shootDate;
+        if (targetD) {
+          const d = new Date(targetD);
+          if (dateRangeBounds.start && d < dateRangeBounds.start) return false;
+          if (dateRangeBounds.end && d > dateRangeBounds.end) return false;
+        } else if (datePreset !== 'ALL') {
+          return false;
+        }
       }
 
       // Active Block Filter (from top Hero & Breakdown Cards)
@@ -161,7 +265,41 @@ export default function SchedulingPublishing() {
           return true;
       }
     });
-  }, [allItems, activeTab, search, selectedAssignee, activeBlockFilter]);
+
+    if (timeSort === 'TIME_ASC') {
+      return [...res].sort((a, b) => {
+        const ta = a.plannedPublicationTime || '00:00';
+        const tb = b.plannedPublicationTime || '00:00';
+        return ta.localeCompare(tb);
+      });
+    }
+    if (timeSort === 'TIME_DESC') {
+      return [...res].sort((a, b) => {
+        const ta = a.plannedPublicationTime || '00:00';
+        const tb = b.plannedPublicationTime || '00:00';
+        return tb.localeCompare(ta);
+      });
+    }
+    if (timeSort === 'DATE_DESC') {
+      return [...res].sort((a, b) => {
+        const da = new Date(a.plannedPublicationDate || a.deadline || 0).getTime();
+        const db = new Date(b.plannedPublicationDate || b.deadline || 0).getTime();
+        return db - da;
+      });
+    }
+    if (timeSort === 'DATE_ASC') {
+      return [...res].sort((a, b) => {
+        const da = new Date(a.plannedPublicationDate || a.deadline || 0).getTime();
+        const db = new Date(b.plannedPublicationDate || b.deadline || 0).getTime();
+        return da - db;
+      });
+    }
+
+    return res;
+  }, [
+    allItems, activeTab, search, selectedAssignee, activeBlockFilter,
+    selectedShooter, selectedEditor, dateRangeBounds, timeSort
+  ]);
 
   // Calendar calculations
   const calRange = useMemo(() => {
@@ -874,26 +1012,25 @@ export default function SchedulingPublishing() {
           />
           <Button
             size="sm"
-            variant="secondary"
+            variant={hasActiveFilters ? 'primary' : 'secondary'}
             icon={<SlidersHorizontal size={14} />}
             onClick={() => setFiltersOpen(!filtersOpen)}
           >
-            Filters
+            <span>Filters</span>
+            {hasActiveFilters && (
+              <span className="ml-1 rounded-full bg-white/25 px-1.5 py-0.2 text-[10px] font-bold">
+                {(selectedClient ? 1 : 0) + (selectedType ? 1 : 0) + (selectedPlatform ? 1 : 0) + (selectedAssignee ? 1 : 0) + (selectedShooter ? 1 : 0) + (selectedEditor ? 1 : 0) + (datePreset !== 'ALL' ? 1 : 0) + (timeSort !== 'DEFAULT' ? 1 : 0)}
+              </span>
+            )}
           </Button>
-          {(selectedClient || selectedType || selectedPlatform || selectedAssignee || search) && (
+          {hasActiveFilters && (
             <Button
               size="sm"
               variant="ghost"
               icon={<X size={14} />}
-              onClick={() => {
-                setSelectedClient('');
-                setSelectedType('');
-                setSelectedPlatform('');
-                setSelectedAssignee('');
-                setSearch('');
-              }}
+              onClick={resetAllFilters}
             >
-              Reset
+              Reset All
             </Button>
           )}
         </div>
@@ -928,11 +1065,86 @@ export default function SchedulingPublishing() {
         )}
       </div>
 
+      {/* Active Filters Summary Pills */}
+      {hasActiveFilters && (
+        <div className="flex items-center gap-2 flex-wrap text-xs bg-surface-2/60 border border-line/60 rounded-xl p-2.5">
+          <span className="font-bold text-ink-3 text-[11px] uppercase tracking-wider flex items-center gap-1">
+            <Filter size={12} className="text-primary" /> Active Filters:
+          </span>
+          {datePreset !== 'ALL' && (
+            <Badge t="blue">
+              <span className="flex items-center gap-1">
+                <CalendarDays size={11} />
+                <span>Period: {datePreset.replace('_', ' ')}</span>
+                <button onClick={() => setDatePreset('ALL')} className="hover:text-red-400"><X size={11} /></button>
+              </span>
+            </Badge>
+          )}
+          {selectedShooter && (
+            <Badge t="amber">
+              <span className="flex items-center gap-1">
+                <Film size={11} />
+                <span>Shooter: {shootersList.find(s => s._id === selectedShooter)?.name || selectedShooter}</span>
+                <button onClick={() => setSelectedShooter('')} className="hover:text-red-400"><X size={11} /></button>
+              </span>
+            </Badge>
+          )}
+          {selectedEditor && (
+            <Badge t="blue">
+              <span className="flex items-center gap-1">
+                <Clock size={11} />
+                <span>Editor: {editorsList.find(e => e._id === selectedEditor)?.name || selectedEditor}</span>
+                <button onClick={() => setSelectedEditor('')} className="hover:text-red-400"><X size={11} /></button>
+              </span>
+            </Badge>
+          )}
+          {selectedClient && (
+            <Badge t="green">
+              <span className="flex items-center gap-1">
+                <span>Client: {(clients.data || []).find(c => c._id === selectedClient)?.name || selectedClient}</span>
+                <button onClick={() => setSelectedClient('')} className="hover:text-red-400"><X size={11} /></button>
+              </span>
+            </Badge>
+          )}
+          {selectedType && (
+            <Badge t="neutral">
+              <span className="flex items-center gap-1">
+                <span>Type: {label(selectedType)}</span>
+                <button onClick={() => setSelectedType('')} className="hover:text-red-400"><X size={11} /></button>
+              </span>
+            </Badge>
+          )}
+          {selectedPlatform && (
+            <Badge t="neutral">
+              <span className="flex items-center gap-1">
+                <span>Platform: {selectedPlatform}</span>
+                <button onClick={() => setSelectedPlatform('')} className="hover:text-red-400"><X size={11} /></button>
+              </span>
+            </Badge>
+          )}
+          {timeSort !== 'DEFAULT' && (
+            <Badge t="neutral">
+              <span className="flex items-center gap-1">
+                <Clock size={11} />
+                <span>Sort: {timeSort.replace('_', ' ')}</span>
+                <button onClick={() => setTimeSort('DEFAULT')} className="hover:text-red-400"><X size={11} /></button>
+              </span>
+            </Badge>
+          )}
+          <button
+            onClick={resetAllFilters}
+            className="text-[11px] font-bold text-primary hover:underline ml-auto"
+          >
+            Clear all filters
+          </button>
+        </div>
+      )}
+
       {/* Extended Filters Drawer */}
       {filtersOpen && (
-        <div className="grid grid-cols-2 gap-2.5 rounded-xl border border-line/70 bg-surface/90 p-4 shadow-lift sm:grid-cols-4 animate-rise">
+        <div className="grid grid-cols-2 gap-3 rounded-2xl border border-line bg-surface/95 p-4 sm:p-5 shadow-lift sm:grid-cols-4 animate-rise">
           <div>
-            <label className="text-[11px] font-bold text-ink-3">Client</label>
+            <label className="text-[11px] font-bold text-ink-3 uppercase tracking-wider mb-1 block">Client</label>
             <Select value={selectedClient} onChange={(e) => setSelectedClient(e.target.value)}>
               <option value="">All Clients</option>
               {(clients.data || []).map((c) => (
@@ -941,7 +1153,7 @@ export default function SchedulingPublishing() {
             </Select>
           </div>
           <div>
-            <label className="text-[11px] font-bold text-ink-3">Content Type</label>
+            <label className="text-[11px] font-bold text-ink-3 uppercase tracking-wider mb-1 block">Content Type</label>
             <Select value={selectedType} onChange={(e) => setSelectedType(e.target.value)}>
               <option value="">All Types</option>
               <option value="REEL">Reel</option>
@@ -954,7 +1166,7 @@ export default function SchedulingPublishing() {
             </Select>
           </div>
           <div>
-            <label className="text-[11px] font-bold text-ink-3">Platform</label>
+            <label className="text-[11px] font-bold text-ink-3 uppercase tracking-wider mb-1 block">Platform</label>
             <Select value={selectedPlatform} onChange={(e) => setSelectedPlatform(e.target.value)}>
               <option value="">All Platforms</option>
               <option value="INSTAGRAM">Instagram</option>
@@ -964,12 +1176,74 @@ export default function SchedulingPublishing() {
             </Select>
           </div>
           <div>
-            <label className="text-[11px] font-bold text-ink-3">Assigned Team</label>
+            <label className="text-[11px] font-bold text-ink-3 uppercase tracking-wider mb-1 block">Date Period</label>
+            <Select value={datePreset} onChange={(e) => setDatePreset(e.target.value as any)}>
+              <option value="ALL">All Dates</option>
+              <option value="TODAY">Today</option>
+              <option value="THIS_WEEK">This Week</option>
+              <option value="THIS_MONTH">This Month</option>
+              <option value="LAST_MONTH">Last Month</option>
+              <option value="THIS_YEAR">Year 2026</option>
+              <option value="CUSTOM">Custom Date Range...</option>
+            </Select>
+            {datePreset === 'CUSTOM' && (
+              <div className="grid grid-cols-2 gap-1.5 mt-2">
+                <Input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="text-xs"
+                  title="From date"
+                />
+                <Input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="text-xs"
+                  title="To date"
+                />
+              </div>
+            )}
+          </div>
+          <div>
+            <label className="text-[11px] font-bold text-ink-3 uppercase tracking-wider mb-1 block flex items-center gap-1">
+              <Film size={12} className="text-amber-500" /> Shooter
+            </label>
+            <Select value={selectedShooter} onChange={(e) => setSelectedShooter(e.target.value)}>
+              <option value="">All Shooters</option>
+              {shootersList.map((s) => (
+                <option key={s._id} value={s._id}>{s.name}</option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <label className="text-[11px] font-bold text-ink-3 uppercase tracking-wider mb-1 block flex items-center gap-1">
+              <Clock size={12} className="text-purple-500" /> Editor
+            </label>
+            <Select value={selectedEditor} onChange={(e) => setSelectedEditor(e.target.value)}>
+              <option value="">All Editors</option>
+              {editorsList.map((ed) => (
+                <option key={ed._id} value={ed._id}>{ed.name}</option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <label className="text-[11px] font-bold text-ink-3 uppercase tracking-wider mb-1 block">Assigned SMM / Owner</label>
             <Select value={selectedAssignee} onChange={(e) => setSelectedAssignee(e.target.value)}>
               <option value="">All Team Members</option>
               {(team.data || []).map((u) => (
                 <option key={u._id} value={u._id}>{u.name} ({u.role})</option>
               ))}
+            </Select>
+          </div>
+          <div>
+            <label className="text-[11px] font-bold text-ink-3 uppercase tracking-wider mb-1 block">Time &amp; Date Sort</label>
+            <Select value={timeSort} onChange={(e) => setTimeSort(e.target.value as any)}>
+              <option value="DEFAULT">Default Order</option>
+              <option value="TIME_ASC">Earliest Time (09:00 ➔ 20:00)</option>
+              <option value="TIME_DESC">Latest Time (20:00 ➔ 09:00)</option>
+              <option value="DATE_DESC">Newest Date First</option>
+              <option value="DATE_ASC">Oldest Date First</option>
             </Select>
           </div>
         </div>

@@ -6,12 +6,14 @@ import {
   FileSpreadsheet, ExternalLink, RefreshCw, Palette, Download,
   Search, SlidersHorizontal, X, Check, Eye, Table as TableIcon,
   AlertTriangle, Filter, Sparkles, Layers, Film, Image as ImageIcon,
-  CalendarDays, CheckCircle2, Building2, Users, ListTodo, ShieldAlert,
+  CalendarDays, Calendar, Clock, CheckCircle2, Building2, Users, ListTodo, ShieldAlert,
   Command, Keyboard, ArrowUpRight, GripVertical, ChevronLeft, ChevronRight,
-  Columns, Settings2, Paintbrush, CheckSquare, Square, RotateCcw
+  Columns, Settings2, Paintbrush, CheckSquare, Square, RotateCcw, UserCheck
 } from 'lucide-react';
 import { get, post, errMsg } from '@/lib/api';
 import { Button, Card, Empty, Input, PageHeader, Select, Spinner, Badge, Modal } from '@/components/ui';
+import { useTeam, useClients } from '@/hooks/useData';
+import { ShooterEditorReportModal } from '@/components/ShooterEditorReportModal';
 import { toast } from '@/store/ui';
 
 // Default 9 Status Color Codes matching the user's reference image
@@ -351,6 +353,19 @@ export default function SheetsHub() {
   });
 
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [shooterEditorReportOpen, setShooterEditorReportOpen] = useState(false);
+
+  // Date, Time & Role Filters
+  const [datePreset, setDatePreset] = useState<'ALL' | 'TODAY' | 'THIS_WEEK' | 'THIS_MONTH' | 'LAST_MONTH' | 'THIS_YEAR' | 'CUSTOM'>('ALL');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [selectedShooter, setSelectedShooter] = useState('');
+  const [selectedEditor, setSelectedEditor] = useState('');
+  const [selectedClient, setSelectedClient] = useState('');
+  const [timeSort, setTimeSort] = useState<'DEFAULT' | 'DATE_DESC' | 'DATE_ASC'>('DEFAULT');
+
+  const team = useTeam();
+  const clients = useClients();
 
   // Status & Metadata Query
   const statusQ = useQuery({
@@ -537,9 +552,149 @@ export default function SheetsHub() {
     });
   };
 
+  // Column Index Locators
+  const shooterColIdx = useMemo(() => {
+    return rawHeaders.findIndex((h) => /shoot(er)?\b/i.test(h || '') && !/status|remark/i.test(h || ''));
+  }, [rawHeaders]);
+
+  const editorColIdx = useMemo(() => {
+    return rawHeaders.findIndex((h) => /edit(or)?\b/i.test(h || '') && !/status|remark/i.test(h || ''));
+  }, [rawHeaders]);
+
+  const clientColIdx = useMemo(() => {
+    return rawHeaders.findIndex((h) => /client\b/i.test(h || '') && !/review|approval/i.test(h || ''));
+  }, [rawHeaders]);
+
+  const dateColIndices = useMemo(() => {
+    const indices: number[] = [];
+    rawHeaders.forEach((h, i) => {
+      if (/date|time|schedule|shoot date|deadline|created/i.test(h || '')) {
+        indices.push(i);
+      }
+    });
+    return indices;
+  }, [rawHeaders]);
+
+  // Unique lists for dropdowns
+  const uniqueShooters = useMemo(() => {
+    const set = new Set<string>();
+    if (shooterColIdx !== -1) {
+      rawRows.forEach((r) => {
+        const v = (r[shooterColIdx] || '').trim();
+        if (v && v !== '-' && v.toLowerCase() !== 'unassigned') set.add(v);
+      });
+    }
+    (team.data || []).filter((u: any) => u.role === 'SHOOTER' || (u.role && u.role.includes('SHOOT'))).forEach((u: any) => {
+      if (u.name) set.add(u.name);
+    });
+    return Array.from(set).sort();
+  }, [rawRows, shooterColIdx, team.data]);
+
+  const uniqueEditors = useMemo(() => {
+    const set = new Set<string>();
+    if (editorColIdx !== -1) {
+      rawRows.forEach((r) => {
+        const v = (r[editorColIdx] || '').trim();
+        if (v && v !== '-' && v.toLowerCase() !== 'unassigned') set.add(v);
+      });
+    }
+    (team.data || []).filter((u: any) => u.role === 'EDITOR' || (u.role && u.role.includes('EDIT'))).forEach((u: any) => {
+      if (u.name) set.add(u.name);
+    });
+    return Array.from(set).sort();
+  }, [rawRows, editorColIdx, team.data]);
+
+  const uniqueClients = useMemo(() => {
+    const set = new Set<string>();
+    if (clientColIdx !== -1) {
+      rawRows.forEach((r) => {
+        const v = (r[clientColIdx] || '').trim();
+        if (v && v !== '-') set.add(v);
+      });
+    }
+    Object.values(clientLookup).forEach((c) => { if (c) set.add(c); });
+    (clients.data || []).forEach((c: any) => { if (c.name) set.add(c.name); });
+    return Array.from(set).sort();
+  }, [rawRows, clientColIdx, clientLookup, clients.data]);
+
+  // Date range boundary calculation
+  const dateRangeBounds = useMemo(() => {
+    const now = new Date();
+    if (datePreset === 'TODAY') {
+      const s = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const e = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      return { start: s, end: e };
+    }
+    if (datePreset === 'THIS_WEEK') {
+      const day = now.getDay();
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+      const s = new Date(now.getFullYear(), now.getMonth(), diff);
+      const e = new Date(s.getFullYear(), s.getMonth(), s.getDate() + 6, 23, 59, 59, 999);
+      return { start: s, end: e };
+    }
+    if (datePreset === 'THIS_MONTH') {
+      const s = new Date(now.getFullYear(), now.getMonth(), 1);
+      const e = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      return { start: s, end: e };
+    }
+    if (datePreset === 'LAST_MONTH') {
+      const s = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const e = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      return { start: s, end: e };
+    }
+    if (datePreset === 'THIS_YEAR') {
+      const s = new Date(now.getFullYear(), 0, 1);
+      const e = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+      return { start: s, end: e };
+    }
+    if (datePreset === 'CUSTOM') {
+      const s = dateFrom ? new Date(dateFrom + 'T00:00:00') : null;
+      const e = dateTo ? new Date(dateTo + 'T23:59:59') : null;
+      return { start: s, end: e };
+    }
+    return null;
+  }, [datePreset, dateFrom, dateTo]);
+
+  // Helper to extract first valid Date from a row
+  const getRowDate = (row: string[]): Date | null => {
+    if (dateColIndices.length > 0) {
+      for (const idx of dateColIndices) {
+        const val = row[idx];
+        if (val) {
+          const d = new Date(val);
+          if (!isNaN(d.getTime()) && d.getFullYear() > 2000 && d.getFullYear() < 2100) return d;
+        }
+      }
+    }
+    for (const cell of row) {
+      if (typeof cell === 'string' && cell.length >= 8 && /\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4}/.test(cell)) {
+        const d = new Date(cell);
+        if (!isNaN(d.getTime()) && d.getFullYear() > 2000 && d.getFullYear() < 2100) return d;
+      }
+    }
+    return null;
+  };
+
+  const hasAdvancedFilters = Boolean(
+    selectedShooter || selectedEditor || selectedClient || datePreset !== 'ALL' || timeSort !== 'DEFAULT'
+  );
+
+  const resetAllFilters = () => {
+    setSearch('');
+    setSelectedStatusFilters([]);
+    setSelectedShooter('');
+    setSelectedEditor('');
+    setSelectedClient('');
+    setDatePreset('ALL');
+    setDateFrom('');
+    setDateTo('');
+    setTimeSort('DEFAULT');
+    toast.success('All filters reset');
+  };
+
   // Filtered rows
   const filteredRows = useMemo(() => {
-    return rawRows.filter((row) => {
+    const result = rawRows.filter((row) => {
       // Search query
       if (search.trim()) {
         const q = search.toLowerCase();
@@ -552,9 +707,68 @@ export default function SheetsHub() {
         if (!doesRowMatchSelectedFilters(row)) return false;
       }
 
+      // Shooter filter
+      if (selectedShooter) {
+        const sLower = selectedShooter.toLowerCase();
+        const matchesShooter = shooterColIdx !== -1
+          ? String(row[shooterColIdx] || '').toLowerCase().includes(sLower)
+          : row.some((cell) => String(cell || '').toLowerCase().includes(sLower));
+        if (!matchesShooter) return false;
+      }
+
+      // Editor filter
+      if (selectedEditor) {
+        const eLower = selectedEditor.toLowerCase();
+        const matchesEditor = editorColIdx !== -1
+          ? String(row[editorColIdx] || '').toLowerCase().includes(eLower)
+          : row.some((cell) => String(cell || '').toLowerCase().includes(eLower));
+        if (!matchesEditor) return false;
+      }
+
+      // Client filter
+      if (selectedClient) {
+        const cLower = selectedClient.toLowerCase();
+        const matchesClient = clientColIdx !== -1
+          ? String(row[clientColIdx] || '').toLowerCase().includes(cLower)
+          : row.some((cell) => String(cell || '').toLowerCase().includes(cLower));
+        if (!matchesClient) return false;
+      }
+
+      // Date Range Filter
+      if (dateRangeBounds) {
+        const rDate = getRowDate(row);
+        if (rDate) {
+          if (dateRangeBounds.start && rDate < dateRangeBounds.start) return false;
+          if (dateRangeBounds.end && rDate > dateRangeBounds.end) return false;
+        } else if (datePreset !== 'ALL') {
+          return false;
+        }
+      }
+
       return true;
     });
-  }, [rawRows, rawHeaders, search, selectedStatusFilters, filterMode]);
+
+    if (timeSort === 'DATE_DESC') {
+      return [...result].sort((a, b) => {
+        const da = getRowDate(a)?.getTime() || 0;
+        const db = getRowDate(b)?.getTime() || 0;
+        return db - da;
+      });
+    }
+    if (timeSort === 'DATE_ASC') {
+      return [...result].sort((a, b) => {
+        const da = getRowDate(a)?.getTime() || 0;
+        const db = getRowDate(b)?.getTime() || 0;
+        return da - db;
+      });
+    }
+
+    return result;
+  }, [
+    rawRows, rawHeaders, search, selectedStatusFilters, filterMode,
+    selectedShooter, selectedEditor, selectedClient, dateRangeBounds, timeSort,
+    shooterColIdx, editorColIdx, clientColIdx
+  ]);
 
   // Keyboard Shortcuts: 1-9 to toggle status filters, 0 or Escape to clear, / to search
   useEffect(() => {
@@ -596,15 +810,13 @@ export default function SheetsHub() {
 
       if (e.key === '0') {
         e.preventDefault();
-        setSelectedStatusFilters([]);
-        setSearch('');
-        toast.success('Filters reset');
+        resetAllFilters();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedStatusFilters, search]);
+  }, [selectedStatusFilters, search, selectedShooter, selectedEditor, selectedClient, datePreset, timeSort]);
 
   // Export CSV
   const handleExportCSV = () => {
@@ -715,6 +927,15 @@ export default function SheetsHub() {
         sub="Real-time bi-directional synchronization, automated status colors, movable workflow columns, and interactive navigation."
         actions={
           <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              variant="primary"
+              size="sm"
+              className="bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-600 hover:to-indigo-700 text-white shadow-sm font-bold"
+              icon={<Film size={14} />}
+              onClick={() => setShooterEditorReportOpen(true)}
+            >
+              Shooter/Editor Report &amp; New Sheet
+            </Button>
             <Button
               variant={viewMode === 'grid' ? 'primary' : 'secondary'}
               size="sm"
@@ -1003,8 +1224,8 @@ export default function SheetsHub() {
         <div className="space-y-4">
           {/* Search & Quick Filters Bar */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2 flex-1 max-w-md">
-              <div className="relative w-full">
+            <div className="flex items-center gap-2 flex-1 max-w-xl flex-wrap">
+              <div className="relative flex-1 min-w-[200px]">
                 <Input
                   ref={searchInputRef}
                   placeholder={`Search across ${activeSheet}... (Press / to focus)`}
@@ -1023,11 +1244,16 @@ export default function SheetsHub() {
               </div>
               <Button
                 size="sm"
-                variant="secondary"
+                variant={hasAdvancedFilters ? 'primary' : 'secondary'}
                 icon={<SlidersHorizontal size={14} />}
                 onClick={() => setFiltersOpen(!filtersOpen)}
               >
-                Filters
+                <span>Filters</span>
+                {hasAdvancedFilters && (
+                  <span className="ml-1 rounded-full bg-white/25 px-1.5 py-0.2 text-[10px] font-bold">
+                    {(selectedShooter ? 1 : 0) + (selectedEditor ? 1 : 0) + (selectedClient ? 1 : 0) + (datePreset !== 'ALL' ? 1 : 0) + (timeSort !== 'DEFAULT' ? 1 : 0)}
+                  </span>
+                )}
               </Button>
               <Button
                 size="sm"
@@ -1038,17 +1264,14 @@ export default function SheetsHub() {
               >
                 Columns
               </Button>
-              {(search || selectedStatusFilters.length > 0) && (
+              {(search || selectedStatusFilters.length > 0 || hasAdvancedFilters) && (
                 <Button
                   size="sm"
                   variant="ghost"
                   icon={<X size={14} />}
-                  onClick={() => {
-                    setSearch('');
-                    setSelectedStatusFilters([]);
-                  }}
+                  onClick={resetAllFilters}
                 >
-                  Reset
+                  Reset All
                 </Button>
               )}
             </div>
@@ -1062,11 +1285,74 @@ export default function SheetsHub() {
             </div>
           </div>
 
+          {/* Active Advanced Filters Summary Pills */}
+          {hasAdvancedFilters && (
+            <div className="flex items-center gap-2 flex-wrap text-xs bg-surface-2/60 border border-line/60 rounded-xl p-2.5">
+              <span className="font-bold text-ink-3 text-[11px] uppercase tracking-wider flex items-center gap-1">
+                <Filter size={12} className="text-primary" /> Active Filters:
+              </span>
+              {datePreset !== 'ALL' && (
+                <Badge t="blue">
+                  <span className="flex items-center gap-1">
+                    <Calendar size={11} />
+                    <span>Period: {datePreset.replace('_', ' ')}</span>
+                    <button onClick={() => setDatePreset('ALL')} className="hover:text-red-400"><X size={11} /></button>
+                  </span>
+                </Badge>
+              )}
+              {selectedShooter && (
+                <Badge t="amber">
+                  <span className="flex items-center gap-1">
+                    <Film size={11} />
+                    <span>Shooter: {selectedShooter}</span>
+                    <button onClick={() => setSelectedShooter('')} className="hover:text-red-400"><X size={11} /></button>
+                  </span>
+                </Badge>
+              )}
+              {selectedEditor && (
+                <Badge t="blue">
+                  <span className="flex items-center gap-1">
+                    <UserCheck size={11} />
+                    <span>Editor: {selectedEditor}</span>
+                    <button onClick={() => setSelectedEditor('')} className="hover:text-red-400"><X size={11} /></button>
+                  </span>
+                </Badge>
+              )}
+              {selectedClient && (
+                <Badge t="green">
+                  <span className="flex items-center gap-1">
+                    <Building2 size={11} />
+                    <span>Client: {selectedClient}</span>
+                    <button onClick={() => setSelectedClient('')} className="hover:text-red-400"><X size={11} /></button>
+                  </span>
+                </Badge>
+              )}
+              {timeSort !== 'DEFAULT' && (
+                <Badge t="neutral">
+                  <span className="flex items-center gap-1">
+                    <Clock size={11} />
+                    <span>Sort: {timeSort === 'DATE_DESC' ? 'Newest First' : 'Oldest First'}</span>
+                    <button onClick={() => setTimeSort('DEFAULT')} className="hover:text-red-400"><X size={11} /></button>
+                  </span>
+                </Badge>
+              )}
+              <button
+                onClick={resetAllFilters}
+                className="text-[11px] font-bold text-primary hover:underline ml-auto"
+              >
+                Clear all filters
+              </button>
+            </div>
+          )}
+
           {/* Extended Filters Drawer */}
           {filtersOpen && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 rounded-xl border border-line bg-surface/90 p-4 shadow-lift animate-rise">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 rounded-2xl border border-line bg-surface/95 p-4 sm:p-5 shadow-lift animate-rise">
+              {/* Status Filter */}
               <div>
-                <label className="text-[11px] font-bold text-ink-3">Quick Filter by Status</label>
+                <label className="text-[11px] font-bold text-ink-3 uppercase tracking-wider flex items-center gap-1 mb-1">
+                  <Palette size={12} className="text-primary" /> Filter by Status
+                </label>
                 <Select
                   value={selectedStatusFilters[0] || ''}
                   onChange={(e) => {
@@ -1074,7 +1360,7 @@ export default function SheetsHub() {
                     else setSelectedStatusFilters([e.target.value]);
                   }}
                 >
-                  <option value="">All Statuses</option>
+                  <option value="">All Statuses ({rawRows.length})</option>
                   {COLOR_LEGEND_ITEMS.map((item) => (
                     <option key={item.id} value={item.key}>
                       [{item.id}] {item.title} ({statusCounts[item.id] ?? 0})
@@ -1084,28 +1370,133 @@ export default function SheetsHub() {
                   <option value="ACTION">🚨 ACTION (Alert)</option>
                 </Select>
               </div>
+
+              {/* Date Filter */}
               <div>
-                <label className="text-[11px] font-bold text-ink-3">Column Customization</label>
+                <label className="text-[11px] font-bold text-ink-3 uppercase tracking-wider flex items-center gap-1 mb-1">
+                  <Calendar size={12} className="text-primary" /> Date Period
+                </label>
+                <Select
+                  value={datePreset}
+                  onChange={(e) => setDatePreset(e.target.value as any)}
+                >
+                  <option value="ALL">All Dates</option>
+                  <option value="TODAY">Today</option>
+                  <option value="THIS_WEEK">This Week</option>
+                  <option value="THIS_MONTH">This Month</option>
+                  <option value="LAST_MONTH">Last Month</option>
+                  <option value="THIS_YEAR">Year 2026</option>
+                  <option value="CUSTOM">Custom Date Range...</option>
+                </Select>
+                {datePreset === 'CUSTOM' && (
+                  <div className="grid grid-cols-2 gap-1.5 mt-2">
+                    <Input
+                      type="date"
+                      value={dateFrom}
+                      onChange={(e) => setDateFrom(e.target.value)}
+                      className="text-xs"
+                      title="From date"
+                    />
+                    <Input
+                      type="date"
+                      value={dateTo}
+                      onChange={(e) => setDateTo(e.target.value)}
+                      className="text-xs"
+                      title="To date"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Shooter Filter */}
+              <div>
+                <label className="text-[11px] font-bold text-ink-3 uppercase tracking-wider flex items-center gap-1 mb-1">
+                  <Film size={12} className="text-amber-500" /> Shooter
+                </label>
+                <Select
+                  value={selectedShooter}
+                  onChange={(e) => setSelectedShooter(e.target.value)}
+                >
+                  <option value="">All Shooters</option>
+                  {uniqueShooters.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </Select>
+              </div>
+
+              {/* Editor Filter */}
+              <div>
+                <label className="text-[11px] font-bold text-ink-3 uppercase tracking-wider flex items-center gap-1 mb-1">
+                  <UserCheck size={12} className="text-purple-500" /> Editor
+                </label>
+                <Select
+                  value={selectedEditor}
+                  onChange={(e) => setSelectedEditor(e.target.value)}
+                >
+                  <option value="">All Editors</option>
+                  {uniqueEditors.map((ed) => (
+                    <option key={ed} value={ed}>{ed}</option>
+                  ))}
+                </Select>
+              </div>
+
+              {/* Client Filter */}
+              <div>
+                <label className="text-[11px] font-bold text-ink-3 uppercase tracking-wider flex items-center gap-1 mb-1">
+                  <Building2 size={12} className="text-emerald-500" /> Client
+                </label>
+                <Select
+                  value={selectedClient}
+                  onChange={(e) => setSelectedClient(e.target.value)}
+                >
+                  <option value="">All Clients</option>
+                  {uniqueClients.map((cl) => (
+                    <option key={cl} value={cl}>{cl}</option>
+                  ))}
+                </Select>
+              </div>
+
+              {/* Time / Date Sort Order */}
+              <div>
+                <label className="text-[11px] font-bold text-ink-3 uppercase tracking-wider flex items-center gap-1 mb-1">
+                  <Clock size={12} className="text-blue-500" /> Date &amp; Time Sort
+                </label>
+                <Select
+                  value={timeSort}
+                  onChange={(e) => setTimeSort(e.target.value as any)}
+                >
+                  <option value="DEFAULT">Default Sheet Sequence</option>
+                  <option value="DATE_DESC">Newest Date First</option>
+                  <option value="DATE_ASC">Oldest Date First</option>
+                </Select>
+              </div>
+
+              {/* Quick Actions in Filter Drawer */}
+              <div className="sm:col-span-2 flex items-end gap-2 flex-wrap">
+                <Button
+                  size="sm"
+                  variant="primary"
+                  className="bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-600 hover:to-indigo-700 text-white shadow-sm font-bold flex-1"
+                  icon={<Film size={14} />}
+                  onClick={() => setShooterEditorReportOpen(true)}
+                >
+                  Generate Shooter/Editor Report Sheet
+                </Button>
                 <Button
                   size="sm"
                   variant="secondary"
-                  className="w-full mt-1.5"
                   icon={<Columns size={13} />}
                   onClick={() => setColumnsModalOpen(true)}
                 >
-                  Movable Columns ({visibleColIndices.length}/{rawHeaders.length} visible)
+                  Columns ({visibleColIndices.length}/{rawHeaders.length})
                 </Button>
-              </div>
-              <div>
-                <label className="text-[11px] font-bold text-ink-3">Sheet Theme & Colors</label>
                 <Button
                   size="sm"
                   variant="secondary"
-                  className="w-full mt-1.5"
                   icon={<Paintbrush size={13} />}
                   onClick={() => setPaletteModalOpen(true)}
                 >
-                  Customize Status Palette
+                  Colors
                 </Button>
               </div>
             </div>
@@ -1631,6 +2022,12 @@ export default function SheetsHub() {
           </div>
         </Modal>
       )}
+
+      {/* Shooter & Editor Production Report Modal & Dedicated Sheet Generator */}
+      <ShooterEditorReportModal
+        open={shooterEditorReportOpen}
+        onClose={() => setShooterEditorReportOpen(false)}
+      />
     </div>
   );
 }

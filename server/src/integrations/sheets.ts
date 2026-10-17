@@ -1465,3 +1465,398 @@ export async function syncSingleContentToSheet(contentId: string): Promise<void>
     console.warn(`[sheets] Failed to sync content ${contentId} to Google Sheets:`, err.message);
   }
 }
+
+export interface ShooterEditorReportFilter {
+  role?: 'ALL' | 'SHOOTER' | 'EDITOR';
+  userId?: string;
+  clientId?: string;
+  month?: number;
+  year?: number;
+  startDate?: string;
+  endDate?: string;
+  status?: string;
+  contentType?: string;
+  search?: string;
+}
+
+/** Generates a dedicated, color-formatted Shooter & Editor Production Report tab in Google Sheets */
+export async function generateShooterEditorReportSheet(filter: ShooterEditorReportFilter = {}) {
+  const spreadsheetId = await getSpreadsheetId();
+  if (!spreadsheetId) {
+    throw new Error('Google Spreadsheet ID is not configured');
+  }
+
+  const query: any = { status: { $ne: 'CANCELLED' } };
+
+  if (filter.clientId) {
+    query.clientId = filter.clientId;
+  }
+
+  if (filter.contentType) {
+    query.type = filter.contentType;
+  }
+
+  if (filter.userId) {
+    if (filter.role === 'SHOOTER') {
+      query.assignedShooter = filter.userId;
+    } else if (filter.role === 'EDITOR') {
+      query.assignedEditor = filter.userId;
+    } else {
+      query.$or = [{ assignedShooter: filter.userId }, { assignedEditor: filter.userId }];
+    }
+  }
+
+  // Date filtering
+  if (filter.startDate || filter.endDate) {
+    const dateMatch: any = {};
+    if (filter.startDate) dateMatch.$gte = new Date(filter.startDate);
+    if (filter.endDate) {
+      const ed = new Date(filter.endDate);
+      ed.setHours(23, 59, 59, 999);
+      dateMatch.$lte = ed;
+    }
+    query.$or = [
+      { deadline: dateMatch },
+      { plannedPublicationDate: dateMatch },
+      { createdAt: dateMatch },
+    ];
+  } else if (filter.month && filter.year) {
+    const sm = new Date(filter.year, filter.month - 1, 1);
+    const em = new Date(filter.year, filter.month, 0, 23, 59, 59, 999);
+    const dateMatch = { $gte: sm, $lte: em };
+    query.$or = [
+      { deadline: dateMatch },
+      { plannedPublicationDate: dateMatch },
+      { createdAt: dateMatch },
+    ];
+  } else if (filter.year) {
+    const sy = new Date(filter.year, 0, 1);
+    const ey = new Date(filter.year, 11, 31, 23, 59, 59, 999);
+    const dateMatch = { $gte: sy, $lte: ey };
+    query.$or = [
+      { deadline: dateMatch },
+      { plannedPublicationDate: dateMatch },
+      { createdAt: dateMatch },
+    ];
+  }
+
+  // Status Filter
+  if (filter.status && filter.status !== 'ALL') {
+    if (filter.status === 'PENDING_SHOOT') {
+      query.stage = { $in: ['IDEA', 'SCRIPT', 'CLIENT_REVIEW', 'SHOOTING'] };
+      query.productionStatus = { $nin: ['RAW_UPLOADED', 'EDITING', 'POSTED', 'COMPLETED'] };
+    } else if (filter.status === 'SHOT') {
+      query.$or = [
+        { stage: { $in: ['RAW_FOOTAGE', 'EDITING', 'SMM_REVIEW', 'FINAL_REVIEW', 'SCHEDULE', 'PUBLISHED'] } },
+        { productionStatus: { $in: ['RAW_UPLOADED', 'EDITING', 'COMPLETED'] } },
+      ];
+    } else if (filter.status === 'EDITING') {
+      query.stage = { $in: ['RAW_FOOTAGE', 'EDITING'] };
+    } else if (filter.status === 'EDIT_DONE') {
+      query.stage = { $in: ['SMM_REVIEW', 'FINAL_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'] };
+    } else if (filter.status === 'COMPLETED') {
+      query.$or = [{ stage: 'PUBLISHED' }, { status: 'COMPLETED' }, { productionStatus: 'POSTED' }];
+    }
+  }
+
+  const items = await Content.find(query)
+    .populate('clientId', 'name businessName clientCode')
+    .populate('assignedShooter', 'name email role')
+    .populate('assignedEditor', 'name email role')
+    .populate('currentOwner', 'name role')
+    .sort({ deadline: 1, plannedPublicationDate: 1, createdAt: -1 })
+    .lean();
+
+  const shoots = await Shoot.find({ contentId: { $in: items.map((it: any) => it._id) } })
+    .populate('shooterId', 'name')
+    .lean();
+  const shootMap = new Map(shoots.map((sh: any) => [String(sh.contentId), sh]));
+
+  // Sheet Title
+  const now = new Date();
+  const dateTag = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+  const roleTag = filter.role === 'SHOOTER' ? 'Shooters' : filter.role === 'EDITOR' ? 'Editors' : 'Production';
+  const sheetTitle = `Report_${roleTag}_${dateTag}`.slice(0, 100);
+
+  const s = sheets();
+
+  // Create new Sheet tab in the Spreadsheet
+  const addResp = await s.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: [
+        {
+          addSheet: {
+            properties: {
+              title: sheetTitle,
+              gridProperties: {
+                rowCount: Math.max(100, items.length + 20),
+                columnCount: 18,
+                frozenRowCount: 4,
+              },
+              tabColor: { red: 0.1, green: 0.5, blue: 0.9 },
+            },
+          },
+        },
+      ],
+    },
+  });
+
+  const sheetId = addResp.data.replies?.[0]?.addSheet?.properties?.sheetId || 0;
+
+  // Compute Metrics
+  let countShot = 0;
+  let countPendingShoot = 0;
+  let countEditing = 0;
+  let countEditDone = 0;
+  let countCompleted = 0;
+
+  items.forEach((c: any) => {
+    const isShot = ['RAW_FOOTAGE', 'EDITING', 'SMM_REVIEW', 'FINAL_REVIEW', 'SCHEDULE', 'PUBLISHED'].includes(c.stage) ||
+      ['RAW_UPLOADED', 'EDITING', 'COMPLETED'].includes(c.productionStatus);
+    if (isShot) countShot++;
+    else countPendingShoot++;
+
+    if (['RAW_FOOTAGE', 'EDITING'].includes(c.stage)) countEditing++;
+    if (['SMM_REVIEW', 'FINAL_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'].includes(c.stage)) countEditDone++;
+    if (c.stage === 'PUBLISHED' || c.status === 'COMPLETED' || c.productionStatus === 'POSTED') countCompleted++;
+  });
+
+  // Prepare Rows
+  const row1 = [`BULLETPROOF SMM PRO — ${roleTag.toUpperCase()} PERFORMANCE & STATUS REPORT`, '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Generated: ' + now.toLocaleString('en-IN')];
+  const row2 = [
+    `Total Deliverables: ${items.length}`,
+    `Total Shot: ${countShot}`,
+    `Pending Shoot: ${countPendingShoot}`,
+    `In Video Editing: ${countEditing}`,
+    `Edit Completed: ${countEditDone}`,
+    `Posted Live: ${countCompleted}`,
+    `Scope: ${filter.clientId ? 'Selected Client' : 'All Clients'} · ${filter.month ? 'Month ' + filter.month : 'All Periods'}`,
+  ];
+  const row3 = ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''];
+  const row4 = [
+    'Content ID',
+    'Client Code',
+    'Client Business Name',
+    'Deliverable Title',
+    'Type',
+    'Shooter Name',
+    'Shoot Status',
+    'Shoot Date & Time',
+    'Editor Name',
+    'Edit Status',
+    'Current Stage',
+    'Production Status',
+    'Deadline',
+    'Days Left',
+    'Google Drive Folder Link',
+    'Live Published URL',
+    'Current Owner',
+  ];
+
+  const appUrl = process.env.APP_URL || 'https://smm-pro-nayankotadiya.vercel.app';
+
+  const dataRows = items.map((c: any, idx: number) => {
+    const rowNum = idx + 5;
+    const cl = c.clientId || {};
+    const shooter = c.assignedShooter?.name || 'Unassigned';
+    const editor = c.assignedEditor?.name || 'Unassigned';
+    const owner = c.currentOwner?.name || 'Unassigned';
+    const shoot = shootMap.get(String(c._id));
+
+    // Shoot Status & Date
+    const isShot = ['RAW_FOOTAGE', 'EDITING', 'SMM_REVIEW', 'FINAL_REVIEW', 'SCHEDULE', 'PUBLISHED'].includes(c.stage) ||
+      ['RAW_UPLOADED', 'EDITING', 'COMPLETED'].includes(c.productionStatus);
+    const shootStatus = isShot ? '3. Shoot' : (c.productionStatus === 'CANCELLED' ? '7. shoot pachi cancel' : 'Pending Shoot');
+    const shootDate = shoot?.scheduledAt ? new Date(shoot.scheduledAt).toLocaleDateString('en-IN') : (c.stageDeadlines?.shootDeadline ? new Date(c.stageDeadlines.shootDeadline).toLocaleDateString('en-IN') : 'To Be Scheduled');
+
+    // Edit Status
+    const isEditDone = ['SMM_REVIEW', 'FINAL_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'].includes(c.stage) || c.status === 'COMPLETED';
+    const isEditing = ['RAW_FOOTAGE', 'EDITING'].includes(c.stage);
+    const editStatus = isEditDone ? '4. Edit done' : (isEditing ? 'Video Editing' : (isShot ? 'Ready for Edit' : 'Awaiting Footage'));
+
+    // Drive Link
+    const driveUrl = c.driveFolderId
+      ? `https://drive.google.com/drive/folders/${c.driveFolderId}`
+      : 'https://drive.google.com';
+
+    // Content Link
+    const contentUrl = `${appUrl}/content/${c._id}`;
+
+    // Deadline & Days Left
+    const dlStr = c.deadline ? new Date(c.deadline).toLocaleDateString('en-IN') : '';
+
+    return [
+      `=HYPERLINK("${contentUrl}", "${c.contentId}")`,
+      cl.clientCode || 'BLP',
+      cl.businessName || cl.name || 'Client',
+      c.title || '',
+      c.type || 'REEL',
+      shooter,
+      shootStatus,
+      shootDate,
+      editor,
+      editStatus,
+      c.stage || 'IDEA',
+      c.productionStatus || 'IN_PROGRESS',
+      dlStr,
+      `=IF(ISBLANK(M${rowNum}), "", M${rowNum}-TODAY())`,
+      `=HYPERLINK("${driveUrl}", "Open Google Drive Assets 📁")`,
+      c.publishedUrl ? `=HYPERLINK("${c.publishedUrl}", "Open Live Post ↗")` : 'Pending Publishing',
+      owner,
+    ];
+  });
+
+  const allValues = [row1, row2, row3, row4, ...dataRows];
+
+  // Write values into the new sheet
+  await s.spreadsheets.values.update({
+    spreadsheetId,
+    range: `'${sheetTitle}'!A1:Q${allValues.length}`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: allValues },
+  });
+
+  // Apply Beautiful Formatting & Visual Colors
+  const formatRequests: sheets_v4.Schema$Request[] = [
+    // Header Row 4 styling (Navy Blue, White Bold, Font 11)
+    {
+      repeatCell: {
+        range: {
+          sheetId,
+          startRowIndex: 3,
+          endRowIndex: 4,
+          startColumnIndex: 0,
+          endColumnIndex: 17,
+        },
+        cell: {
+          userEnteredFormat: {
+            backgroundColor: { red: 0.1, green: 0.12, blue: 0.2 },
+            textFormat: { foregroundColor: { red: 1, green: 1, blue: 1 }, bold: true, fontSize: 11 },
+            horizontalAlignment: 'CENTER',
+            verticalAlignment: 'MIDDLE',
+          },
+        },
+        fields: 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment)',
+      },
+    },
+    // Row 1 Title styling (Dark Purple, White Bold, Font 13)
+    {
+      repeatCell: {
+        range: {
+          sheetId,
+          startRowIndex: 0,
+          endRowIndex: 1,
+          startColumnIndex: 0,
+          endColumnIndex: 17,
+        },
+        cell: {
+          userEnteredFormat: {
+            backgroundColor: { red: 0.2, green: 0.12, blue: 0.35 },
+            textFormat: { foregroundColor: { red: 1, green: 1, blue: 1 }, bold: true, fontSize: 13 },
+            verticalAlignment: 'MIDDLE',
+          },
+        },
+        fields: 'userEnteredFormat(backgroundColor,textFormat,verticalAlignment)',
+      },
+    },
+    // Row 2 Summary KPIs styling (Slate Blue/Gray background, Bold Font 10)
+    {
+      repeatCell: {
+        range: {
+          sheetId,
+          startRowIndex: 1,
+          endRowIndex: 2,
+          startColumnIndex: 0,
+          endColumnIndex: 17,
+        },
+        cell: {
+          userEnteredFormat: {
+            backgroundColor: { red: 0.92, green: 0.95, blue: 0.99 },
+            textFormat: { foregroundColor: { red: 0.1, green: 0.2, blue: 0.4 }, bold: true, fontSize: 10 },
+            verticalAlignment: 'MIDDLE',
+          },
+        },
+        fields: 'userEnteredFormat(backgroundColor,textFormat,verticalAlignment)',
+      },
+    },
+    // Alternating Row Banding on Data rows (White & Soft Gray)
+    {
+      addBanding: {
+        bandedRange: {
+          range: {
+            sheetId,
+            startRowIndex: 4,
+            endRowIndex: Math.max(5, allValues.length),
+            startColumnIndex: 0,
+            endColumnIndex: 17,
+          },
+          rowProperties: {
+            firstBandColor: { red: 1, green: 1, blue: 1 },
+            secondBandColor: { red: 0.97, green: 0.98, blue: 1.0 },
+          },
+        },
+      },
+    },
+  ];
+
+  // Add conditional color rules for Shoot Status (Col G = index 6) and Edit Status (Col J = index 9)
+  for (const legend of STATUS_COLOR_LEGEND) {
+    const rgb = hexToRgbColor(legend.bg);
+    const fg = hexToRgbColor(legend.fg);
+
+    // Rule for Shoot Status (Col 6)
+    formatRequests.push({
+      addConditionalFormatRule: {
+        rule: {
+          ranges: [{ sheetId, startRowIndex: 4, endRowIndex: allValues.length, startColumnIndex: 6, endColumnIndex: 7 }],
+          booleanRule: {
+            condition: { type: 'TEXT_CONTAINS', values: [{ userEnteredValue: legend.name }] },
+            format: { backgroundColor: rgb, textFormat: { foregroundColor: fg, bold: true } },
+          },
+        },
+        index: 0,
+      },
+    });
+
+    // Rule for Edit Status (Col 9)
+    formatRequests.push({
+      addConditionalFormatRule: {
+        rule: {
+          ranges: [{ sheetId, startRowIndex: 4, endRowIndex: allValues.length, startColumnIndex: 9, endColumnIndex: 10 }],
+          booleanRule: {
+            condition: { type: 'TEXT_CONTAINS', values: [{ userEnteredValue: legend.name }] },
+            format: { backgroundColor: rgb, textFormat: { foregroundColor: fg, bold: true } },
+          },
+        },
+        index: 0,
+      },
+    });
+  }
+
+  // Execute formatting batch update
+  await s.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: { requests: formatRequests },
+  });
+
+  const directUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit#gid=${sheetId}`;
+
+  return {
+    success: true,
+    sheetTitle,
+    sheetId,
+    spreadsheetId,
+    url: directUrl,
+    itemsCount: items.length,
+    summary: {
+      total: items.length,
+      shot: countShot,
+      pendingShoot: countPendingShoot,
+      editing: countEditing,
+      editDone: countEditDone,
+      completed: countCompleted,
+    },
+    items,
+  };
+}

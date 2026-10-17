@@ -103,32 +103,56 @@ export const isOverdue = (x?: any, done?: boolean) => !!x && !done && +d(x) < Da
 export const toLocalInput = (x?: any) => { if (!x) return ''; const v = d(x); const p = (n: number) => String(n).padStart(2, '0'); return `${v.getFullYear()}-${p(v.getMonth() + 1)}-${p(v.getDate())}T${p(v.getHours())}:${p(v.getMinutes())}`; };
 export const initials = (n?: string) => (n || '?').split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
 
-export function getWorkflowStagesForType(type?: string): string[] {
+export function getWorkflowStagesForType(type?: string, currentStage?: string): string[] {
   const t = (type || 'REEL').toUpperCase();
+  let base: string[];
   if (t === 'POST') {
-    return ['IDEA', 'GRAPHIC_DESIGN', 'SMM_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'];
+    base = ['IDEA', 'GRAPHIC_DESIGN', 'CLIENT_REVIEW', 'SMM_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'];
+  } else if (t === 'CAROUSEL') {
+    base = ['IDEA', 'SCRIPT', 'CLIENT_REVIEW', 'GRAPHIC_DESIGN', 'SMM_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'];
+  } else if (t === 'AI_REEL') {
+    base = ['IDEA', 'SCRIPT', 'INTERNAL_REVIEW', 'VOICE_OVER', 'AI_GENERATION', 'EDITING', 'SMM_REVIEW', 'FINAL_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'];
+  } else if (t === 'AI_IMAGE') {
+    base = ['IDEA', 'AI_GENERATION', 'GRAPHIC_DESIGN', 'SMM_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'];
+  } else if (['STORY', 'AD', 'OTHER'].includes(t)) {
+    base = ['IDEA', 'SCRIPT', 'GRAPHIC_DESIGN', 'SMM_REVIEW', 'FINAL_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'];
+  } else {
+    // Default Reel workflow (past complete workflow)
+    base = [
+      'IDEA', 'SCRIPT', 'INTERNAL_REVIEW', 'CLIENT_REVIEW', 'SHOOTING', 'RAW_FOOTAGE',
+      'EDITING', 'SMM_REVIEW', 'FINAL_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'
+    ];
   }
-  if (t === 'CAROUSEL') {
-    return ['IDEA', 'GRAPHIC_DESIGN', 'SMM_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'];
+
+  // Ensure currentStage is always represented in the workflow steps if passed
+  if (currentStage && !base.includes(currentStage)) {
+    const canonicalOrder = [
+      'IDEA', 'BRIEF', 'SCRIPT', 'INTERNAL_REVIEW', 'CLIENT_REVIEW', 'VOICE_OVER',
+      'SHOOTING', 'RAW_FOOTAGE', 'GRAPHIC_DESIGN', 'AI_GENERATION',
+      'EDITING', 'SMM_REVIEW', 'FINAL_REVIEW', 'CLIENT_FINAL_APPROVAL', 'FINAL_UPLOAD',
+      'SCHEDULE', 'PUBLISHED'
+    ];
+    const targetIdx = canonicalOrder.indexOf(currentStage);
+    if (targetIdx !== -1) {
+      let inserted = false;
+      for (let i = 0; i < base.length; i++) {
+        if (canonicalOrder.indexOf(base[i]) > targetIdx) {
+          base.splice(i, 0, currentStage);
+          inserted = true;
+          break;
+        }
+      }
+      if (!inserted) base.push(currentStage);
+    } else {
+      base.push(currentStage);
+    }
   }
-  if (t === 'AI_REEL') {
-    return ['IDEA', 'SCRIPT', 'INTERNAL_REVIEW', 'VOICE_OVER', 'AI_GENERATION', 'EDITING', 'SMM_REVIEW', 'FINAL_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'];
-  }
-  if (t === 'AI_IMAGE') {
-    return ['IDEA', 'AI_GENERATION', 'GRAPHIC_DESIGN', 'SMM_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'];
-  }
-  if (['STORY', 'AD', 'OTHER'].includes(t)) {
-    return ['IDEA', 'SCRIPT', 'GRAPHIC_DESIGN', 'SMM_REVIEW', 'FINAL_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'];
-  }
-  // Default Reel workflow (past complete workflow)
-  return [
-    'IDEA', 'SCRIPT', 'INTERNAL_REVIEW', 'CLIENT_REVIEW', 'SHOOTING', 'RAW_FOOTAGE',
-    'EDITING', 'SMM_REVIEW', 'FINAL_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'
-  ];
+
+  return base;
 }
 
 export const stageNumber = (s: string, type?: string) => {
-  const stages = getWorkflowStagesForType(type);
+  const stages = getWorkflowStagesForType(type, s);
   const idx = stages.indexOf(s);
   return idx >= 0 ? idx + 1 : 1;
 };
