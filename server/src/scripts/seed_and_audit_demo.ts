@@ -303,8 +303,8 @@ async function runAudit() {
             productionStatus: item.productionStatus,
             approvalStatus: item.approvalStatus || 'NONE',
             progress: item.progress,
-            assignedDesigner: (item as any).assignedDesigner || existing.assignedDesigner,
-            liveUrl: (item as any).liveUrl || existing.liveUrl,
+            assignedDesigner: (item as any).assignedDesigner || (existing as any).assignedDesigner,
+            liveUrl: (item as any).liveUrl || (existing as any).liveUrl,
           },
         }
       );
@@ -363,7 +363,7 @@ async function runAudit() {
     console.log(`   - Content Access: ${visibleContent.length} items (${canSeeAll ? 'Full Org View' : 'Assigned Only'})`);
     console.log(`   - Active Tasks on Desk: ${userTasks.length} task(s)`);
     for (const t of userTasks) {
-      console.log(`     * [${t.type}] ${t.title} (Priority: ${t.priority}, Status: ${t.status})`);
+      console.log(`     * [${(t as any).kind || 'TASK'}] ${t.title} (Priority: ${t.priority}, Status: ${t.status})`);
     }
     console.log('   --------------------------------------------------');
   }
