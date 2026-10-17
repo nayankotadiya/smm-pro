@@ -5,7 +5,7 @@ import clsx from 'clsx';
 import {
   FileSpreadsheet, Sparkles, Filter, Calendar, ExternalLink, Copy, Check,
   Camera, Film, CheckCircle2, Clock, AlertTriangle, Layers, Image as ImageIcon,
-  ChevronDown, Search, ArrowRight, UserCheck, RefreshCw
+  ChevronDown, Search, ArrowRight, UserCheck, RefreshCw, Printer, Download
 } from 'lucide-react';
 import { get, post, errMsg } from '@/lib/api';
 import { useClients, useTeam } from '@/hooks/useData';
@@ -149,6 +149,32 @@ export function ShooterEditorReportModal({ open, onClose, defaultRole = 'ALL', d
     );
   }, [previewData.items, search]);
 
+  const handleExportPdf = () => {
+    const selectedUserName = (team.data || []).find((u: any) => u._id === selectedUser)?.name;
+    const selectedClientName = (clients.data || []).find((c: any) => c._id === selectedClient)?.name;
+
+    let periodLabel = 'This Month';
+    if (timePreset === 'TODAY') periodLabel = 'Today';
+    else if (timePreset === 'THIS_WEEK') periodLabel = 'This Week';
+    else if (timePreset === 'THIS_MONTH') periodLabel = 'This Month';
+    else if (timePreset === 'LAST_MONTH') periodLabel = 'Last Month';
+    else if (timePreset === 'THIS_YEAR') periodLabel = 'Year 2026';
+    else if (timePreset === 'ALL') periodLabel = 'All Time';
+    else if (timePreset === 'CUSTOM') periodLabel = `${startDate || 'Start'} to ${endDate || 'End'}`;
+
+    exportShooterEditorPdf({
+      items: displayedItems,
+      summary: previewData,
+      role,
+      selectedUserName,
+      selectedClientName,
+      selectedType,
+      selectedStatus,
+      periodLabel,
+    });
+    toast.success('Generated PDF preview! Select "Save as PDF" in the print dialog.');
+  };
+
   return (
     <Modal
       open={open}
@@ -161,10 +187,10 @@ export function ShooterEditorReportModal({ open, onClose, defaultRole = 'ALL', d
           <div>
             <div className="flex items-center gap-2">
               <span className="text-base font-black text-ink">Shooter &amp; Editor Production Report</span>
-              <Badge t="blue">Live Sheets Generator</Badge>
+              <Badge t="blue">Live Sheets &amp; PDF</Badge>
             </div>
             <p className="text-xs text-ink-3">
-              Filter deliverables by Shooter, Editor, Client, and Date Range — then export a color-formatted Google Sheet.
+              Filter deliverables by Shooter, Editor, Client, and Date Range — then export an attractive PDF or color-coded Google Sheet.
             </p>
           </div>
         </div>
@@ -175,15 +201,23 @@ export function ShooterEditorReportModal({ open, onClose, defaultRole = 'ALL', d
           <div className="text-xs text-ink-3">
             Showing <strong className="text-ink">{displayedItems.length}</strong> matching deliverable(s)
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button onClick={onClose}>Close</Button>
             <Button
+              variant="secondary"
+              icon={<Printer size={15} className="text-purple-400" />}
+              onClick={handleExportPdf}
+            >
+              Export / Save PDF
+            </Button>
+            <Button
               variant="primary"
-              icon={<Sparkles size={15} className="text-amber-300" />}
+              className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-sm font-semibold"
+              icon={<FileSpreadsheet size={15} />}
               loading={exportMut.isPending}
               onClick={() => exportMut.mutate()}
             >
-              Generate Color-Coded Google Sheet
+              Generate Google Sheet
             </Button>
           </div>
         </div>
@@ -406,7 +440,7 @@ export function ShooterEditorReportModal({ open, onClose, defaultRole = 'ALL', d
 
         {/* Search & Deliverables Preview Table */}
         <div className="space-y-2">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2 flex-1 max-w-sm">
               <Input
                 placeholder="Search by title, Content ID, shooter, editor..."
@@ -415,8 +449,15 @@ export function ShooterEditorReportModal({ open, onClose, defaultRole = 'ALL', d
                 className="w-full !py-1.5 !text-xs"
               />
             </div>
-            <div className="text-xs text-ink-3">
-              Google Sheet will include columns A–Q with live formulas and Drive folders.
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={<Printer size={13} className="text-purple-400" />}
+                onClick={handleExportPdf}
+              >
+                Print / Save PDF
+              </Button>
             </div>
           </div>
 
@@ -515,4 +556,505 @@ export function ShooterEditorReportModal({ open, onClose, defaultRole = 'ALL', d
       </div>
     </Modal>
   );
+}
+
+function escapeHtml(str: string) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function exportShooterEditorPdf({
+  items,
+  summary,
+  role,
+  selectedUserName,
+  selectedClientName,
+  selectedType,
+  selectedStatus,
+  periodLabel,
+}: {
+  items: any[];
+  summary: { total: number; shot: number; pendingShoot: number; editing: number; editDone: number; completed: number };
+  role: string;
+  selectedUserName?: string;
+  selectedClientName?: string;
+  selectedType?: string;
+  selectedStatus?: string;
+  periodLabel: string;
+}) {
+  const now = new Date();
+  const dateFormatted = now.toLocaleDateString('en-IN', { dateStyle: 'full' });
+  const timeFormatted = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+
+  // Compute shooter & editor workloads
+  const shooterStats: Record<string, { name: string; total: number; shot: number; pending: number }> = {};
+  const editorStats: Record<string, { name: string; total: number; done: number; editing: number }> = {};
+
+  items.forEach((c: any) => {
+    const sName = c.assignedShooter?.name || 'Unassigned';
+    if (!shooterStats[sName]) shooterStats[sName] = { name: sName, total: 0, shot: 0, pending: 0 };
+    shooterStats[sName].total++;
+    const isShot = ['RAW_FOOTAGE', 'EDITING', 'SMM_REVIEW', 'FINAL_REVIEW', 'SCHEDULE', 'PUBLISHED'].includes(c.stage) ||
+      ['RAW_UPLOADED', 'EDITING', 'COMPLETED'].includes(c.productionStatus);
+    if (isShot) shooterStats[sName].shot++;
+    else shooterStats[sName].pending++;
+
+    const eName = c.assignedEditor?.name || 'Unassigned';
+    if (!editorStats[eName]) editorStats[eName] = { name: eName, total: 0, done: 0, editing: 0 };
+    editorStats[eName].total++;
+    const isEditDone = ['SMM_REVIEW', 'FINAL_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'].includes(c.stage) || c.status === 'COMPLETED';
+    const isEditing = ['RAW_FOOTAGE', 'EDITING'].includes(c.stage);
+    if (isEditDone) editorStats[eName].done++;
+    else if (isEditing) editorStats[eName].editing++;
+  });
+
+  const shooterList = Object.values(shooterStats).sort((a, b) => b.total - a.total);
+  const editorList = Object.values(editorStats).sort((a, b) => b.total - a.total);
+
+  const shootersHtml = shooterList.length > 0 ? shooterList.map((s) => `
+    <tr>
+      <td style="padding: 5px 8px; font-weight: 600; color: #0f172a; border-bottom: 1px solid #f1f5f9;">${escapeHtml(s.name)}</td>
+      <td style="padding: 5px 8px; text-align: center; font-weight: 700; color: #0f172a; border-bottom: 1px solid #f1f5f9;">${s.total}</td>
+      <td style="padding: 5px 8px; text-align: center; color: #059669; font-weight: 700; border-bottom: 1px solid #f1f5f9;">${s.shot}</td>
+      <td style="padding: 5px 8px; text-align: center; color: #d97706; font-weight: 700; border-bottom: 1px solid #f1f5f9;">${s.pending}</td>
+    </tr>
+  `).join('') : '<tr><td colspan="4" style="padding: 8px; text-align: center; color: #94a3b8;">No shooters assigned</td></tr>';
+
+  const editorsHtml = editorList.length > 0 ? editorList.map((e) => `
+    <tr>
+      <td style="padding: 5px 8px; font-weight: 600; color: #0f172a; border-bottom: 1px solid #f1f5f9;">${escapeHtml(e.name)}</td>
+      <td style="padding: 5px 8px; text-align: center; font-weight: 700; color: #0f172a; border-bottom: 1px solid #f1f5f9;">${e.total}</td>
+      <td style="padding: 5px 8px; text-align: center; color: #ca8a04; font-weight: 700; border-bottom: 1px solid #f1f5f9;">${e.done}</td>
+      <td style="padding: 5px 8px; text-align: center; color: #7c3aed; font-weight: 700; border-bottom: 1px solid #f1f5f9;">${e.editing}</td>
+    </tr>
+  `).join('') : '<tr><td colspan="4" style="padding: 8px; text-align: center; color: #94a3b8;">No editors assigned</td></tr>';
+
+  const itemsRowsHtml = items.map((c: any, idx: number) => {
+    const isShot = ['RAW_FOOTAGE', 'EDITING', 'SMM_REVIEW', 'FINAL_REVIEW', 'SCHEDULE', 'PUBLISHED'].includes(c.stage) ||
+      ['RAW_UPLOADED', 'EDITING', 'COMPLETED'].includes(c.productionStatus);
+    const isEditDone = ['SMM_REVIEW', 'FINAL_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'].includes(c.stage) || c.status === 'COMPLETED';
+    const isEditing = ['RAW_FOOTAGE', 'EDITING'].includes(c.stage);
+
+    const shootBadge = isShot
+      ? '<span style="display: inline-block; padding: 2px 7px; border-radius: 9999px; font-size: 9px; font-weight: 700; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0;">✅ Shot Done</span>'
+      : '<span style="display: inline-block; padding: 2px 7px; border-radius: 9999px; font-size: 9px; font-weight: 700; background: #fffbeb; color: #b45309; border: 1px solid #fde68a;">⏳ Pending Shoot</span>';
+
+    const editBadge = isEditDone
+      ? '<span style="display: inline-block; padding: 2px 7px; border-radius: 9999px; font-size: 9px; font-weight: 700; background: #fefce8; color: #854d0e; border: 1px solid #fef08a;">⭐ Edit Done</span>'
+      : isEditing
+      ? '<span style="display: inline-block; padding: 2px 7px; border-radius: 9999px; font-size: 9px; font-weight: 700; background: #faf5ff; color: #6b21a8; border: 1px solid #e9d5ff;">✂️ In Editing</span>'
+      : isShot
+      ? '<span style="display: inline-block; padding: 2px 7px; border-radius: 9999px; font-size: 9px; font-weight: 700; background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe;">Ready for Edit</span>'
+      : '<span style="display: inline-block; padding: 2px 7px; border-radius: 9999px; font-size: 9px; font-weight: 600; background: #f8fafc; color: #64748b; border: 1px solid #e2e8f0;">Awaiting Footage</span>';
+
+    let typeColor = 'background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe;';
+    let typeIcon = '🎬';
+    if (c.type === 'POST') { typeColor = 'background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0;'; typeIcon = '🖼️'; }
+    else if (c.type === 'CAROUSEL') { typeColor = 'background: #faf5ff; color: #7e22ce; border: 1px solid #e9d5ff;'; typeIcon = '📑'; }
+    else if (c.type === 'AI_REEL') { typeColor = 'background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa;'; typeIcon = '✨'; }
+
+    const deadlineStr = c.deadline ? new Date(c.deadline).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '—';
+    const isOverdue = c.deadline && new Date(c.deadline) < now && c.status !== 'COMPLETED' && c.stage !== 'PUBLISHED';
+
+    return `
+      <tr>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9.5px; font-weight: 700; color: #4338ca;">
+          ${escapeHtml(c.contentId || `#${idx + 1}`)}
+        </td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 10px; font-weight: 600; color: #0f172a; max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+          ${escapeHtml(c.clientId?.name || 'General')}
+          ${c.clientId?.clientCode ? `<div style="font-size: 8.5px; color: #64748b;">${escapeHtml(c.clientId.clientCode)}</div>` : ''}
+        </td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 10.5px; color: #0f172a; font-weight: 500; max-width: 240px;">
+          <div style="font-weight: 600; color: #0f172a; line-height: 1.25;">${escapeHtml(c.title || 'Untitled')}</div>
+        </td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; white-space: nowrap;">
+          <span style="display: inline-block; padding: 1.5px 6px; border-radius: 9999px; font-size: 9px; font-weight: 600; ${typeColor}">
+            ${typeIcon} ${escapeHtml(c.type || 'REEL')}
+          </span>
+        </td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 10px; color: #1e293b; font-weight: 600;">
+          ${escapeHtml(c.assignedShooter?.name || 'Unassigned')}
+        </td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; white-space: nowrap;">
+          ${shootBadge}
+        </td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 10px; color: #1e293b; font-weight: 600;">
+          ${escapeHtml(c.assignedEditor?.name || 'Unassigned')}
+        </td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; white-space: nowrap;">
+          ${editBadge}
+        </td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 9.5px; color: #475569; font-weight: 600;">
+          ${escapeHtml(label(c.stage || '—'))}
+        </td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 9.5px; font-weight: 600; white-space: nowrap; ${isOverdue ? 'color: #dc2626;' : 'color: #475569;'}">
+          ${deadlineStr} ${isOverdue ? '⚠️' : ''}
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="utf-8">
+      <title>Shooter &amp; Editor Production Report - SMM PRO</title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <style>
+        @page {
+          size: A4 landscape;
+          margin: 8mm 10mm;
+        }
+        * {
+          box-sizing: border-box;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+          color-adjust: exact !important;
+        }
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+          color: #0f172a;
+          margin: 0;
+          padding: 8px 12px;
+          font-size: 10px;
+          line-height: 1.4;
+          background: #ffffff;
+        }
+        .header-card {
+          background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 45%, #312e81 80%, #4338ca 100%);
+          border-radius: 12px;
+          padding: 14px 18px;
+          color: #ffffff;
+          margin-bottom: 12px;
+          box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
+          page-break-inside: avoid;
+        }
+        .header-top {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+          padding-bottom: 10px;
+          margin-bottom: 10px;
+        }
+        .brand {
+          font-size: 9px;
+          font-weight: 800;
+          color: #a5b4fc;
+          letter-spacing: 1.5px;
+          text-transform: uppercase;
+        }
+        .title {
+          font-size: 20px;
+          font-weight: 900;
+          color: #ffffff;
+          letter-spacing: -0.3px;
+          margin-top: 2px;
+        }
+        .meta-pills {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          align-items: center;
+        }
+        .meta-pill {
+          background: rgba(255, 255, 255, 0.12);
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          border-radius: 6px;
+          padding: 3px 8px;
+          font-size: 9.5px;
+          font-weight: 600;
+          color: #f1f5f9;
+        }
+        .meta-pill strong {
+          color: #ffffff;
+        }
+        .kpi-grid {
+          display: grid;
+          grid-template-columns: repeat(6, 1fr);
+          gap: 8px;
+          margin-bottom: 12px;
+          page-break-inside: avoid;
+        }
+        .kpi-card {
+          border-radius: 8px;
+          padding: 8px 6px;
+          text-align: center;
+          border: 1px solid #e2e8f0;
+          background: #ffffff;
+        }
+        .kpi-card.total { background: #f8fafc; border-color: #cbd5e1; }
+        .kpi-card.shot { background: #ecfdf5; border-color: #a7f3d0; }
+        .kpi-card.shot .kpi-val { color: #059669; }
+        .kpi-card.pending { background: #fffbeb; border-color: #fde68a; }
+        .kpi-card.pending .kpi-val { color: #d97706; }
+        .kpi-card.edit { background: #faf5ff; border-color: #e9d5ff; }
+        .kpi-card.edit .kpi-val { color: #7c3aed; }
+        .kpi-card.editdone { background: #fefce8; border-color: #fef08a; }
+        .kpi-card.editdone .kpi-val { color: #ca8a04; }
+        .kpi-card.live { background: #eff6ff; border-color: #bfdbfe; }
+        .kpi-card.live .kpi-val { color: #2563eb; }
+        .kpi-val {
+          font-size: 19px;
+          font-weight: 900;
+          line-height: 1.1;
+        }
+        .kpi-lbl {
+          font-size: 8.5px;
+          font-weight: 800;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          color: #475569;
+          margin-top: 3px;
+        }
+        .team-summary-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+          margin-bottom: 12px;
+          page-break-inside: avoid;
+        }
+        .team-box {
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          background: #ffffff;
+          overflow: hidden;
+        }
+        .team-box-header {
+          padding: 6px 10px;
+          font-size: 9.5px;
+          font-weight: 800;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          border-bottom: 1px solid #e2e8f0;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        .team-box.shooter .team-box-header { background: #ecfdf5; color: #065f46; border-color: #a7f3d0; }
+        .team-box.editor .team-box-header { background: #faf5ff; color: #581c87; border-color: #e9d5ff; }
+        .team-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 9.5px;
+        }
+        .team-table th {
+          background: #f8fafc;
+          padding: 4px 8px;
+          font-size: 8.5px;
+          text-transform: uppercase;
+          color: #64748b;
+          font-weight: 700;
+          border-bottom: 1px solid #e2e8f0;
+        }
+        table.deliverables-table {
+          width: 100%;
+          border-collapse: collapse;
+          text-align: left;
+          font-size: 9.5px;
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          overflow: hidden;
+        }
+        thead {
+          display: table-header-group;
+        }
+        table.deliverables-table th {
+          background: #1e293b;
+          color: #f8fafc;
+          padding: 7px 8px;
+          font-size: 8.5px;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          font-weight: 800;
+          border-bottom: 2px solid #0f172a;
+        }
+        table.deliverables-table tr {
+          page-break-inside: avoid;
+          break-inside: avoid;
+        }
+        table.deliverables-table tr:nth-child(even) td {
+          background-color: #f8fafc;
+        }
+        .footer {
+          border-top: 1px solid #e2e8f0;
+          padding-top: 8px;
+          margin-top: 14px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          color: #94a3b8;
+          font-size: 8.5px;
+          font-weight: 600;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header-card">
+        <div class="header-top">
+          <div>
+            <div class="brand">SMM PRO STUDIO · EXECUTIVE PRODUCTION AUDIT</div>
+            <div class="title">Shooter &amp; Editor Production Report</div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 10px; color: #cbd5e1;">Generated: <strong>${dateFormatted}</strong> @ ${timeFormatted}</div>
+            <div style="font-size: 9.5px; color: #a5b4fc; margin-top: 2px;">Scope: <strong>${items.length} Deliverable(s)</strong></div>
+          </div>
+        </div>
+        <div class="meta-pills">
+          <div class="meta-pill">Role: <strong>${role === 'ALL' ? 'Shooters &amp; Editors' : role === 'SHOOTER' ? 'Shooters Only' : 'Editors Only'}</strong></div>
+          <div class="meta-pill">Period: <strong>${escapeHtml(periodLabel)}</strong></div>
+          <div class="meta-pill">Client: <strong>${escapeHtml(selectedClientName || 'All Clients')}</strong></div>
+          ${selectedUserName ? `<div class="meta-pill">Member: <strong>${escapeHtml(selectedUserName)}</strong></div>` : ''}
+          ${selectedType ? `<div class="meta-pill">Type: <strong>${escapeHtml(selectedType)}</strong></div>` : ''}
+          ${selectedStatus && selectedStatus !== 'ALL' ? `<div class="meta-pill">Status: <strong>${escapeHtml(selectedStatus)}</strong></div>` : ''}
+        </div>
+      </div>
+
+      <div class="kpi-grid">
+        <div class="kpi-card total">
+          <div class="kpi-val">${summary.total}</div>
+          <div class="kpi-lbl">Total Content</div>
+        </div>
+        <div class="kpi-card shot">
+          <div class="kpi-val">${summary.shot}</div>
+          <div class="kpi-lbl">Footage Shot</div>
+        </div>
+        <div class="kpi-card pending">
+          <div class="kpi-val">${summary.pendingShoot}</div>
+          <div class="kpi-lbl">Pending Shoot</div>
+        </div>
+        <div class="kpi-card edit">
+          <div class="kpi-val">${summary.editing}</div>
+          <div class="kpi-lbl">In Video Edit</div>
+        </div>
+        <div class="kpi-card editdone">
+          <div class="kpi-val">${summary.editDone}</div>
+          <div class="kpi-lbl">Edit Completed</div>
+        </div>
+        <div class="kpi-card live">
+          <div class="kpi-val">${summary.completed}</div>
+          <div class="kpi-lbl">Posted Live</div>
+        </div>
+      </div>
+
+      <div class="team-summary-grid">
+        <div class="team-box shooter">
+          <div class="team-box-header">
+            <span>📹 Shooter Workload Breakdown</span>
+            <span>${shooterList.length} Active Shooter(s)</span>
+          </div>
+          <table class="team-table">
+            <thead>
+              <tr>
+                <th style="text-align: left;">Shooter Name</th>
+                <th style="text-align: center;">Assigned</th>
+                <th style="text-align: center;">Shot Done</th>
+                <th style="text-align: center;">Pending</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${shootersHtml}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="team-box editor">
+          <div class="team-box-header">
+            <span>✂️ Editor Workload Breakdown</span>
+            <span>${editorList.length} Active Editor(s)</span>
+          </div>
+          <table class="team-table">
+            <thead>
+              <tr>
+                <th style="text-align: left;">Editor Name</th>
+                <th style="text-align: center;">Assigned</th>
+                <th style="text-align: center;">Edit Done</th>
+                <th style="text-align: center;">In Editing</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${editorsHtml}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <table class="deliverables-table">
+        <thead>
+          <tr>
+            <th style="width: 8%;">ID</th>
+            <th style="width: 14%;">Client</th>
+            <th style="width: 25%;">Deliverable Title</th>
+            <th style="width: 8%;">Type</th>
+            <th style="width: 11%;">Shooter</th>
+            <th style="width: 9%;">Shoot Status</th>
+            <th style="width: 11%;">Editor</th>
+            <th style="width: 9%;">Edit Status</th>
+            <th style="width: 8%;">Stage</th>
+            <th style="width: 7%;">Deadline</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${itemsRowsHtml || '<tr><td colspan="10" style="padding: 16px; text-align: center; color: #94a3b8;">No deliverables match the selected filters.</td></tr>'}
+        </tbody>
+      </table>
+
+      <div class="footer">
+        <div>BULLETPROOF SCRIPT MANAGEMENT SYSTEM · SMM PRO PRODUCTION SUITE · CONFIDENTIAL</div>
+        <div>Page automatically formatted for A4 Landscape PDF export</div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  // Print via isolated iframe
+  try {
+    let iframe = document.getElementById('shooter-report-print-frame') as HTMLIFrameElement;
+    if (iframe) iframe.remove();
+
+    iframe = document.createElement('iframe');
+    iframe.id = 'shooter-report-print-frame';
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    iframe.style.opacity = '0';
+    iframe.style.pointerEvents = 'none';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document || iframe.contentDocument;
+    if (doc) {
+      doc.open();
+      doc.write(html);
+      doc.close();
+      setTimeout(() => {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      }, 350);
+      return;
+    }
+  } catch (err) {
+    console.error('Iframe print failed, falling back to window.open', err);
+  }
+
+  const win = window.open('', '_blank');
+  if (win) {
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    setTimeout(() => {
+      win.focus();
+      win.print();
+    }, 350);
+  }
 }
