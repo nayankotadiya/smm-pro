@@ -8,13 +8,16 @@ import {
   setSpreadsheetConfig,
   createDefaultSpreadsheet,
   syncAllToGoogleSheets,
+  applyStatusConditionalFormatting,
+  STATUS_COLOR_LEGEND,
+  SHEETS_CONFIG,
   sheets,
 } from '../integrations/sheets';
 import { SystemSetting } from '../models';
 
 const r = Router();
 
-r.get('/status', requirePerm('integrations.manage'), ah(async (_req, res) => {
+r.get('/status', requirePerm('clients.read'), ah(async (_req, res) => {
   const configured = sheetsConfigured();
   const spreadsheetId = await getSpreadsheetId();
   const syncStatus = await SystemSetting.findOne({ key: 'google_sheets_sync_status' }).lean();
@@ -27,7 +30,53 @@ r.get('/status', requirePerm('integrations.manage'), ah(async (_req, res) => {
     autoSync: config?.value?.autoSync ?? true,
     title: config?.value?.title || 'SMM Pro Master Tracker',
     syncStatus: syncStatus?.value || null,
+    availableSheets: SHEETS_CONFIG,
+    colorLegend: STATUS_COLOR_LEGEND,
   });
+}));
+
+// Fetch Live Data from any Google Sheets tab
+r.get('/data', requirePerm('clients.read'), ah(async (req, res) => {
+  const spreadsheetId = await getSpreadsheetId();
+  if (!spreadsheetId) {
+    return res.status(400).json({ ok: false, error: 'Google Spreadsheet is not configured.' });
+  }
+
+  const sheetName = String(req.query.sheetName || 'Content Tracker');
+  const syncStatus = await SystemSetting.findOne({ key: 'google_sheets_sync_status' }).lean();
+
+  try {
+    const s = sheets();
+    const resp = await s.spreadsheets.values.get({
+      spreadsheetId,
+      range: `'${sheetName}'!A1:AE500`,
+    });
+
+    const allRows = resp.data.values || [];
+    const headers = allRows[0] || [];
+    const rows = allRows.slice(1);
+
+    res.json({
+      ok: true,
+      sheetName,
+      headers,
+      rows,
+      totalRows: rows.length,
+      spreadsheetId,
+      spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${spreadsheetId}`,
+      availableSheets: SHEETS_CONFIG,
+      colorLegend: STATUS_COLOR_LEGEND,
+      lastSyncedAt: syncStatus?.value?.lastSyncedAt || null,
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      ok: false,
+      sheetName,
+      error: err?.response?.data?.error?.message || err.message || 'Failed to read sheet data',
+      availableSheets: SHEETS_CONFIG,
+      colorLegend: STATUS_COLOR_LEGEND,
+    });
+  }
 }));
 
 r.post('/configure', requirePerm('integrations.manage'), ah(async (req, res) => {
@@ -73,7 +122,7 @@ r.post('/create', requirePerm('integrations.manage'), ah(async (req, res) => {
   }
 }));
 
-r.post('/sync', requirePerm('integrations.manage'), ah(async (_req, res) => {
+r.post('/sync', requirePerm('content.write'), ah(async (_req, res) => {
   try {
     const result = await syncAllToGoogleSheets();
     res.json(result);
@@ -83,7 +132,25 @@ r.post('/sync', requirePerm('integrations.manage'), ah(async (_req, res) => {
   }
 }));
 
-r.post('/test', requirePerm('integrations.manage'), ah(async (req, res) => {
+r.post('/formatting', requirePerm('content.write'), ah(async (_req, res) => {
+  const spreadsheetId = await getSpreadsheetId();
+  if (!spreadsheetId) {
+    throw badRequest('Google Spreadsheet is not configured');
+  }
+
+  try {
+    await applyStatusConditionalFormatting(spreadsheetId);
+    res.json({
+      ok: true,
+      message: 'Status color formatting applied successfully across all sheets in real-time!',
+    });
+  } catch (err: any) {
+    const msg = err?.response?.data?.error?.message || err.message || 'Failed to apply formatting';
+    throw badRequest(`Formatting error: ${msg}`);
+  }
+}));
+
+r.post('/test', requirePerm('clients.read'), ah(async (req, res) => {
   if (!sheetsConfigured()) {
     return res.status(400).json({ ok: false, error: 'Google credentials not found in environment' });
   }

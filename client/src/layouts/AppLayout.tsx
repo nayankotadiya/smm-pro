@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Building2, Clapperboard, FileText, Camera, Scissors,
   ShieldCheck, CalendarDays, FolderOpen, MessageSquare, Workflow, AlarmClock,
   Users, BarChart3, Settings, Menu, X, ListChecks, CheckSquare,
-  Film, Image as ImageIcon, Layers, Sparkles, Send
+  Film, Image as ImageIcon, Layers, Sparkles, Send, FileSpreadsheet
 } from 'lucide-react';
 import { useCan } from '@/store/auth';
 import { useUI } from '@/store/ui';
@@ -44,6 +44,7 @@ export default function AppLayout() {
     { to: '/editing', label: 'Editing', icon: Scissors },
     { to: '/approvals', label: 'Approvals', icon: ShieldCheck, badge: pending },
     { to: '/scheduling', label: 'Scheduling & Publish', icon: Send, section: 'Workspace' },
+    { to: '/sheets', label: 'Google Sheets', icon: FileSpreadsheet },
     { to: '/tasks', label: 'Tasks', icon: CheckSquare },
     { to: '/calendar', label: 'Calendar', icon: CalendarDays },
     { to: '/media', label: 'Media', icon: FolderOpen },

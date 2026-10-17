@@ -89,6 +89,19 @@ function hexToRgbColor(hex: string) {
   return { red: r, green: g, blue: b };
 }
 
+// 9 Reference Status Color Codes matching the user image
+export const STATUS_COLOR_LEGEND = [
+  { id: 1, name: 'Script done', bg: '#00FFFF', fg: '#000000', description: 'Script writing completed and submitted' },
+  { id: 2, name: 'voice over', bg: '#8E7CC3', fg: '#FFFFFF', description: 'Voice-over recorded / in-progress' },
+  { id: 3, name: 'Shoot', bg: '#FF9900', fg: '#000000', description: 'Shooting underway' },
+  { id: 4, name: 'Edit done', bg: '#FFFF00', fg: '#000000', description: 'Video editing completed, submitted for review' },
+  { id: 5, name: 'Scheduling', bg: '#FF00FF', fg: '#FFFFFF', description: 'Approved and ready to schedule / scheduled' },
+  { id: 6, name: 'Upload done', bg: '#00FF00', fg: '#000000', description: 'Final export uploaded to Drive / Completed' },
+  { id: 7, name: 'shoot pachi cancel', bg: '#FF0000', fg: '#FFFFFF', description: 'Shoot cancelled / Post cancelled' },
+  { id: 8, name: 'Client Review', bg: '#CB8754', fg: '#FFFFFF', description: 'Client review & approval' },
+  { id: 9, name: 'Trail', bg: '#B4A7D6', fg: '#000000', description: 'Test or trial variation / In progress' },
+];
+
 /** Columns A to AE (31 Columns) for Content Tracker & Dedicated Sheets */
 export const CONTENT_TRACKER_HEADERS = [
   'Content ID',                   // A
@@ -232,24 +245,19 @@ export async function setupSheetHeadersAndFormulas(spreadsheetId: string) {
     ['Employees', 'Employee directory and task load', 'Tracks active and overdue tasks per member'],
     ['Tasks', 'Individual task breakdown', 'Connected to the SMM Pro task lifecycle'],
     [''],
-    ['STATUS COLOR CODE REFERENCE (AUTOMATICALLY UPDATED)'],
-    ['Status', 'Hex Color', 'Stage Meaning'],
-    ['Script Done', '#00D9E8', 'Script writing completed and submitted'],
-    ['Voice Over', '#9575CD', 'Voice-over recorded / in-progress'],
-    ['Shoot', '#FF9800', 'Shoot scheduled or underway'],
-    ['Shoot Done', '#00E600', 'Shooting completed / raw footage uploaded'],
-    ['Edit Done', '#FFEB00', 'Video editing completed, submitted for review'],
-    ['Scheduling', '#E600E6', 'Approved and ready to schedule'],
-    ['Scheduled', '#E600E6', 'Scheduled in publishing calendar'],
-    ['Upload Done', '#00E600', 'Final export uploaded to Google Drive'],
-    ['Graphic Done', '#00E600', 'Graphic design completed and submitted'],
-    ['Approved', '#00E600', 'Approved by internal review / client'],
-    ['Posted', '#00E600', 'Published live on social media platforms'],
-    ['Shoot Cancelled', '#FF0000', 'Shoot cancelled'],
-    ['Client Review', '#C98555', 'Client approval pending'],
-    ['Needs Review', '#C98555', 'Internal review pending'],
-    ['Trail', '#B39DDB', 'Test or trial creative variation'],
-    ['In Progress', '#B39DDB', 'Active work underway'],
+    ['STATUS COLOR CODE REFERENCE (AUTOMATICALLY UPDATED IN REAL TIME)'],
+    ['Status / Trigger', 'Hex Color', 'Stage Meaning'],
+    ['1. Script done', '#00FFFF', 'Script writing completed and submitted'],
+    ['2. voice over', '#8E7CC3', 'Voice-over recorded / in-progress'],
+    ['3. Shoot', '#FF9900', 'Shoot scheduled or underway'],
+    ['4. Edit done', '#FFFF00', 'Video editing completed, submitted for review'],
+    ['5. Scheduling', '#FF00FF', 'Approved and ready to schedule / scheduled'],
+    ['6. Upload done', '#00FF00', 'Final export uploaded to Google Drive / Completed'],
+    ['7. shoot pachi cancel', '#FF0000', 'Shoot cancelled / Post cancelled'],
+    ['8. Client Review', '#CB8754', 'Client approval pending / Review underway'],
+    ['9: Trail', '#B4A7D6', 'Test or trial creative variation / In Progress'],
+    ['REMAINING (Alert)', '#FFE082', 'Pending deliverables action required'],
+    ['ACTION (Alert)', '#FFCDD2', 'Immediate action required for client package quota'],
   ];
 
   await s.spreadsheets.values.batchUpdate({
@@ -316,37 +324,120 @@ export async function applyStatusConditionalFormatting(spreadsheetId: string) {
   const targetSheets = meta.data.sheets?.filter((sh) => [...CONTENT_TYPE_SHEETS, 'Master Plan', 'Clients', 'Schedule'].includes(sh.properties?.title || '')) || [];
   if (targetSheets.length === 0) return;
 
+  // Clear existing conditional formatting rules to prevent duplicate accumulation
+  const clearRequests: sheets_v4.Schema$Request[] = [];
+  for (const sh of targetSheets) {
+    const sheetId = sh.properties?.sheetId;
+    if (sheetId === undefined || sheetId === null) continue;
+    const count = (sh.conditionalFormats || []).length;
+    for (let i = count - 1; i >= 0; i--) {
+      clearRequests.push({
+        deleteConditionalFormatRule: {
+          sheetId,
+          index: i,
+        },
+      });
+    }
+  }
+
+  if (clearRequests.length > 0) {
+    try {
+      await s.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: { requests: clearRequests },
+      });
+    } catch (e: any) {
+      console.warn('[sheets] Note on clearing old conditional rules:', e.message);
+    }
+  }
+
   const rules: sheets_v4.Schema$Request[] = [];
 
+  // Exact Text Match Colors (Matching the 9 reference statuses)
   const colorConfig: Record<string, { bg: string; fg: string }> = {
-    'Script Done': { bg: '#00D9E8', fg: '#000000' },
-    'Voice Over': { bg: '#9575CD', fg: '#FFFFFF' },
-    'Shoot': { bg: '#FF9800', fg: '#000000' },
-    'Shoot Done': { bg: '#00E600', fg: '#000000' },
-    'Edit Done': { bg: '#FFEB00', fg: '#000000' },
-    'Scheduling': { bg: '#E600E6', fg: '#FFFFFF' },
-    'Scheduled': { bg: '#E600E6', fg: '#FFFFFF' },
-    'Upload Done': { bg: '#00E600', fg: '#000000' },
-    'Graphic Done': { bg: '#00E600', fg: '#000000' },
-    'Approved': { bg: '#00E600', fg: '#000000' },
-    'Completed': { bg: '#00E600', fg: '#000000' },
-    'On Track': { bg: '#00E600', fg: '#000000' },
-    'Posted': { bg: '#00E600', fg: '#000000' },
+    // 1. Script done
+    'Script done': { bg: '#00FFFF', fg: '#000000' },
+    'Script Done': { bg: '#00FFFF', fg: '#000000' },
+    '1. Script done': { bg: '#00FFFF', fg: '#000000' },
+    '1. Script Done': { bg: '#00FFFF', fg: '#000000' },
+
+    // 2. voice over
+    'voice over': { bg: '#8E7CC3', fg: '#FFFFFF' },
+    'Voice over': { bg: '#8E7CC3', fg: '#FFFFFF' },
+    'Voice Over': { bg: '#8E7CC3', fg: '#FFFFFF' },
+    '2. voice over': { bg: '#8E7CC3', fg: '#FFFFFF' },
+    '2. Voice Over': { bg: '#8E7CC3', fg: '#FFFFFF' },
+
+    // 3. Shoot
+    'Shoot': { bg: '#FF9900', fg: '#000000' },
+    'shoot': { bg: '#FF9900', fg: '#000000' },
+    '3. Shoot': { bg: '#FF9900', fg: '#000000' },
+
+    // 4. Edit done
+    'Edit done': { bg: '#FFFF00', fg: '#000000' },
+    'Edit Done': { bg: '#FFFF00', fg: '#000000' },
+    '4. Edit done': { bg: '#FFFF00', fg: '#000000' },
+    '4. Edit Done': { bg: '#FFFF00', fg: '#000000' },
+
+    // 5. Scheduling
+    'Scheduling': { bg: '#FF00FF', fg: '#FFFFFF' },
+    'scheduling': { bg: '#FF00FF', fg: '#FFFFFF' },
+    'Scheduled': { bg: '#FF00FF', fg: '#FFFFFF' },
+    'scheduled': { bg: '#FF00FF', fg: '#FFFFFF' },
+    '5. Scheduling': { bg: '#FF00FF', fg: '#FFFFFF' },
+
+    // 6. Upload done / Done statuses
+    'Upload done': { bg: '#00FF00', fg: '#000000' },
+    'Upload Done': { bg: '#00FF00', fg: '#000000' },
+    '6. Upload done': { bg: '#00FF00', fg: '#000000' },
+    'Shoot Done': { bg: '#00FF00', fg: '#000000' },
+    'Graphic Done': { bg: '#00FF00', fg: '#000000' },
+    'Approved': { bg: '#00FF00', fg: '#000000' },
+    'Completed': { bg: '#00FF00', fg: '#000000' },
+    'Posted': { bg: '#00FF00', fg: '#000000' },
+    'On Track': { bg: '#00FF00', fg: '#000000' },
+    '0 (Done)': { bg: '#00FF00', fg: '#000000' },
+    'ALL QUOTA COMPLETED': { bg: '#00FF00', fg: '#000000' },
+    'All Quota Met': { bg: '#00FF00', fg: '#000000' },
+
+    // 7. shoot pachi cancel / Cancelled
+    'shoot pachi cancel': { bg: '#FF0000', fg: '#FFFFFF' },
+    'Shoot pachi cancel': { bg: '#FF0000', fg: '#FFFFFF' },
+    '7. shoot pachi cancel': { bg: '#FF0000', fg: '#FFFFFF' },
     'Shoot Cancelled': { bg: '#FF0000', fg: '#FFFFFF' },
-    'Client Review': { bg: '#C98555', fg: '#FFFFFF' },
-    'Needs Review': { bg: '#C98555', fg: '#FFFFFF' },
-    'Trail': { bg: '#B39DDB', fg: '#000000' },
-    'In Progress': { bg: '#B39DDB', fg: '#000000' },
+    'Cancelled': { bg: '#FF0000', fg: '#FFFFFF' },
     'YES': { bg: '#FF0000', fg: '#FFFFFF' }, // Overdue Yes
-    'No': { bg: '#DCFCE7', fg: '#006020' },  // Overdue No
     'Action Required': { bg: '#FF0000', fg: '#FFFFFF' },
+
+    // 8. Client Review
+    'Client Review': { bg: '#CB8754', fg: '#FFFFFF' },
+    'client review': { bg: '#CB8754', fg: '#FFFFFF' },
+    '8. Client Review': { bg: '#CB8754', fg: '#FFFFFF' },
+    'Needs Review': { bg: '#CB8754', fg: '#FFFFFF' },
+
+    // 9. Trail / In Progress
+    'Trail': { bg: '#B4A7D6', fg: '#000000' },
+    'trail': { bg: '#B4A7D6', fg: '#000000' },
+    '9: Trail': { bg: '#B4A7D6', fg: '#000000' },
+    '9. Trail': { bg: '#B4A7D6', fg: '#000000' },
+    'In Progress': { bg: '#B4A7D6', fg: '#000000' },
+
+    'No': { bg: '#DCFCE7', fg: '#006020' }, // Overdue No
     'Not Required': { bg: '#CBD5E1', fg: '#334155' },
-    '0 (Done)': { bg: '#DCFCE7', fg: '#166534' },
-    'ALL QUOTA COMPLETED': { bg: '#DCFCE7', fg: '#166534' },
-    'All Quota Met': { bg: '#DCFCE7', fg: '#166534' },
   };
 
+  // Substring Contains Rules (TEXT_CONTAINS)
   const containsColorConfig: Record<string, { bg: string; fg: string }> = {
+    'Script done': { bg: '#00FFFF', fg: '#000000' },
+    'voice over': { bg: '#8E7CC3', fg: '#FFFFFF' },
+    'Edit done': { bg: '#FFFF00', fg: '#000000' },
+    'Scheduling': { bg: '#FF00FF', fg: '#FFFFFF' },
+    'Scheduled': { bg: '#FF00FF', fg: '#FFFFFF' },
+    'Upload done': { bg: '#00FF00', fg: '#000000' },
+    'shoot pachi cancel': { bg: '#FF0000', fg: '#FFFFFF' },
+    'Shoot Cancelled': { bg: '#FF0000', fg: '#FFFFFF' },
+    'Client Review': { bg: '#CB8754', fg: '#FFFFFF' },
+    'Trail': { bg: '#B4A7D6', fg: '#000000' },
     'REMAINING': { bg: '#FFE082', fg: '#7C2D12' }, // Amber highlight for remaining deliverables (e.g. 2 REMAINING)
     'ACTION': { bg: '#FFCDD2', fg: '#991B1B' },    // Soft red alert for pending deliverables
   };
@@ -354,6 +445,41 @@ export async function applyStatusConditionalFormatting(spreadsheetId: string) {
   for (const sh of targetSheets) {
     const sheetId = sh.properties?.sheetId;
     if (sheetId === undefined || sheetId === null) continue;
+
+    // Substring contains formatting rules
+    for (const [text, { bg, fg }] of Object.entries(containsColorConfig)) {
+      const rgbBg = hexToRgbColor(bg);
+      const rgbFg = hexToRgbColor(fg);
+      rules.push({
+        addConditionalFormatRule: {
+          rule: {
+            ranges: [
+              {
+                sheetId,
+                startRowIndex: 1,
+                endRowIndex: 500,
+                startColumnIndex: 0,
+                endColumnIndex: 35,
+              },
+            ],
+            booleanRule: {
+              condition: {
+                type: 'TEXT_CONTAINS',
+                values: [{ userEnteredValue: text }],
+              },
+              format: {
+                backgroundColor: rgbBg,
+                textFormat: {
+                  bold: true,
+                  foregroundColor: rgbFg,
+                },
+              },
+            },
+          },
+          index: 0,
+        },
+      });
+    }
 
     // Exact text match formatting rules
     for (const [text, { bg, fg }] of Object.entries(colorConfig)) {
@@ -374,41 +500,6 @@ export async function applyStatusConditionalFormatting(spreadsheetId: string) {
             booleanRule: {
               condition: {
                 type: 'TEXT_EQ',
-                values: [{ userEnteredValue: text }],
-              },
-              format: {
-                backgroundColor: rgbBg,
-                textFormat: {
-                  bold: true,
-                  foregroundColor: rgbFg,
-                },
-              },
-            },
-          },
-          index: 0,
-        },
-      });
-    }
-
-    // Substring contains formatting rules (e.g. highlights "2 REMAINING", "3 REMAINING")
-    for (const [text, { bg, fg }] of Object.entries(containsColorConfig)) {
-      const rgbBg = hexToRgbColor(bg);
-      const rgbFg = hexToRgbColor(fg);
-      rules.push({
-        addConditionalFormatRule: {
-          rule: {
-            ranges: [
-              {
-                sheetId,
-                startRowIndex: 1,
-                endRowIndex: 500,
-                startColumnIndex: 0,
-                endColumnIndex: 35,
-              },
-            ],
-            booleanRule: {
-              condition: {
-                type: 'TEXT_CONTAINS',
                 values: [{ userEnteredValue: text }],
               },
               format: {
@@ -1146,6 +1237,13 @@ export async function syncAllToGoogleSheets(explicitSpreadsheetId?: string): Pro
       data: updates,
     },
   });
+
+  // Apply/refresh status conditional formatting rules across all sheets
+  try {
+    await applyStatusConditionalFormatting(spreadsheetId);
+  } catch (fmtErr: any) {
+    console.warn('[sheets] Warning applying conditional formatting in sync:', fmtErr.message);
+  }
 
   // Log sync success to SystemSetting and ActivityLog
   await SystemSetting.findOneAndUpdate(

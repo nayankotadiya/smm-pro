@@ -16,6 +16,7 @@ const Approvals = lazy(() => import('@/pages/Approvals'));
 const MediaLibrary = lazy(() => import('@/pages/Media'));
 const Settings = lazy(() => import('@/pages/Settings'));
 const SchedulingPublishing = lazy(() => import('@/pages/SchedulingPublishing'));
+const SheetsHub = lazy(() => import('@/pages/SheetsHub'));
 const L = <T extends Record<string, any>>(load: () => Promise<T>, name: keyof T) => lazy(() => load().then((m) => ({ default: m[name] })));
 const work = () => import('@/pages/Work'); const list = () => import('@/pages/ContentList'); const clients = () => import('@/pages/Clients'); const misc = () => import('@/pages/Misc');
 const contentTypes = () => import('@/pages/ContentTypeViews');
@@ -64,7 +65,7 @@ export default function App() {
             <Route path="scheduling" element={<SchedulingPublishing />} />
             <Route path="tasks" element={<Tasks />} /><Route path="tasks/:id" element={<TaskDetail />} />
             <Route path="blocked" element={<Blocked />} /><Route path="changes-requested" element={<ChangesRequested />} />
-            <Route path="calendar" element={<Calendar />} /><Route path="media" element={<MediaLibrary />} />
+            <Route path="calendar" element={<Calendar />} /><Route path="sheets" element={<SheetsHub />} /><Route path="media" element={<MediaLibrary />} />
             <Route path="chat" element={<Chat />} /><Route path="chat/:roomId" element={<Chat />} />
             <Route path="automation" element={<Need perm="dashboard.org"><Automation /></Need>} />
             <Route path="reminders" element={<Reminders />} />
