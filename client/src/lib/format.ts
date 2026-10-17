@@ -102,4 +102,33 @@ export function fmtTs(s?: number | null) { if (s == null) return ''; return `${S
 export const isOverdue = (x?: any, done?: boolean) => !!x && !done && +d(x) < Date.now();
 export const toLocalInput = (x?: any) => { if (!x) return ''; const v = d(x); const p = (n: number) => String(n).padStart(2, '0'); return `${v.getFullYear()}-${p(v.getMonth() + 1)}-${p(v.getDate())}T${p(v.getHours())}:${p(v.getMinutes())}`; };
 export const initials = (n?: string) => (n || '?').split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
-export const stageNumber = (s: string) => STAGES.indexOf(s) + 1;
+
+export function getWorkflowStagesForType(type?: string): string[] {
+  const t = (type || 'REEL').toUpperCase();
+  if (t === 'POST') {
+    return ['IDEA', 'SCRIPT', 'INTERNAL_REVIEW', 'GRAPHIC_DESIGN', 'SMM_REVIEW', 'FINAL_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'];
+  }
+  if (t === 'CAROUSEL') {
+    return ['IDEA', 'SCRIPT', 'INTERNAL_REVIEW', 'GRAPHIC_DESIGN', 'SMM_REVIEW', 'FINAL_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'];
+  }
+  if (t === 'AI_REEL') {
+    return ['IDEA', 'SCRIPT', 'INTERNAL_REVIEW', 'VOICE_OVER', 'AI_GENERATION', 'EDITING', 'SMM_REVIEW', 'FINAL_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'];
+  }
+  if (t === 'AI_IMAGE') {
+    return ['IDEA', 'AI_GENERATION', 'GRAPHIC_DESIGN', 'SMM_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'];
+  }
+  if (['STORY', 'AD', 'OTHER'].includes(t)) {
+    return ['IDEA', 'SCRIPT', 'GRAPHIC_DESIGN', 'SMM_REVIEW', 'FINAL_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'];
+  }
+  // Default Reel workflow (past complete workflow)
+  return [
+    'IDEA', 'SCRIPT', 'INTERNAL_REVIEW', 'CLIENT_REVIEW', 'SHOOTING', 'RAW_FOOTAGE',
+    'EDITING', 'SMM_REVIEW', 'FINAL_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'
+  ];
+}
+
+export const stageNumber = (s: string, type?: string) => {
+  const stages = getWorkflowStagesForType(type);
+  const idx = stages.indexOf(s);
+  return idx >= 0 ? idx + 1 : 1;
+};

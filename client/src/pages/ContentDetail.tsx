@@ -12,13 +12,26 @@ import { ReasonModal, TaskFormModal, ReminderFormModal } from '@/components/Form
 import { ScriptTab, ShootingTab, EditingTab, ReviewsTab, FilesTab, ScheduleTab } from '@/features/ContentTabs';
 import { ChatThread } from '@/features/ChatThread';
 import { useTeam } from '@/hooks/useData';
-import { ago, fmtDateTime, isOverdue, label, roleLabel, stageNumber, STAGES, toLocalInput } from '@/lib/format';
+import { ago, fmtDateTime, isOverdue, label, roleLabel, stageNumber, STAGES, getWorkflowStagesForType, toLocalInput } from '@/lib/format';
 import { Row } from './Work';
 
 type Tab = 'overview' | 'script' | 'shooting' | 'editing' | 'reviews' | 'files' | 'schedule' | 'activity' | 'chat';
 const TABS: { key: Tab; label: string }[] = [{ key: 'overview', label: 'Overview' }, { key: 'script', label: 'Script' }, { key: 'shooting', label: 'Shooting' }, { key: 'editing', label: 'Editing' }, { key: 'reviews', label: 'Reviews' }, { key: 'files', label: 'Files' }, { key: 'schedule', label: 'Schedule' }, { key: 'activity', label: 'Activity' }, { key: 'chat', label: 'Chat' }];
 /** Which tab holds the work for the current stage */
-const STAGE_TAB: Record<string, Tab> = { IDEA: 'script', SCRIPT: 'script', INTERNAL_REVIEW: 'script', CLIENT_REVIEW: 'reviews', SHOOTING: 'shooting', RAW_FOOTAGE: 'editing', EDITING: 'editing', SMM_REVIEW: 'editing', FINAL_REVIEW: 'editing', CLIENT_FINAL_APPROVAL: 'reviews', SCHEDULE: 'schedule', PUBLISHED: 'schedule' };
+const STAGE_TAB: Record<string, Tab> = {
+  IDEA: 'script', SCRIPT: 'script', INTERNAL_REVIEW: 'script', CLIENT_REVIEW: 'reviews',
+  VOICE_OVER: 'script', SHOOTING: 'shooting', RAW_FOOTAGE: 'editing', GRAPHIC_DESIGN: 'files',
+  AI_GENERATION: 'files', EDITING: 'editing', SMM_REVIEW: 'editing', FINAL_REVIEW: 'editing',
+  CLIENT_FINAL_APPROVAL: 'reviews', FINAL_UPLOAD: 'files', SCHEDULE: 'schedule', PUBLISHED: 'schedule'
+};
+
+function getStageTab(stage: string, type?: string): Tab {
+  const isVideo = !['POST', 'CAROUSEL', 'AI_IMAGE'].includes((type || '').toUpperCase());
+  if (stage === 'SMM_REVIEW' || stage === 'FINAL_REVIEW') {
+    return isVideo ? 'editing' : 'reviews';
+  }
+  return STAGE_TAB[stage] || 'overview';
+}
 
 export default function ContentDetail() {
   const { id } = useParams(); const [sp, setSp] = useSearchParams(); const can = useCan(); const qc = useQueryClient(); const nav = useNavigate();
@@ -48,6 +61,14 @@ export default function ContentDetail() {
     <Async q={q} rows={8}>{(d: any) => {
       const c = d.content; const blocked = c.status === 'BLOCKED'; const done = c.status === 'COMPLETED';
       const unread = 0;
+      const stages = getWorkflowStagesForType(c.type);
+      const isVideo = !['POST', 'CAROUSEL', 'AI_IMAGE'].includes((c.type || '').toUpperCase());
+      const visibleTabs = TABS.filter((t) => {
+        if (!isVideo && (t.key === 'shooting' || t.key === 'editing')) return false;
+        return true;
+      });
+      const activeTab = visibleTabs.some((t) => t.key === tab) ? tab : 'overview';
+
       return (
         <>
           <PageHeader title={c.title}
@@ -72,7 +93,7 @@ export default function ContentDetail() {
                 <div className="flex-1 min-w-0">
                   <Progress value={c.progress} tone={blocked ? 'red' : done ? 'green' : 'blue'} className="!h-2.5" />
                   <div className="mt-1 flex items-center gap-2 text-meta font-semibold text-slate-700 dark:text-slate-300">
-                    <span>Stage {stageNumber(c.stage)} of {STAGES.length}</span>
+                    <span>Stage {stageNumber(c.stage, c.type)} of {stages.length}</span>
                     <span className="text-slate-400 dark:text-slate-600">·</span>
                     <span className="text-primary-ink font-bold truncate">{label(c.stage)}</span>
                   </div>
@@ -84,9 +105,10 @@ export default function ContentDetail() {
             </div>
             <WorkflowBar
               stage={c.stage}
+              contentType={c.type}
               blocked={blocked}
               onSelectStage={(stg) => {
-                const targetTab = STAGE_TAB[stg];
+                const targetTab = getStageTab(stg, c.type);
                 if (targetTab) setSp({ tab: targetTab }, { replace: true });
               }}
             />
@@ -94,17 +116,17 @@ export default function ContentDetail() {
 
           <div className="grid gap-5 xl:grid-cols-[1fr_300px] min-w-0">
             <div className="min-w-0">
-              <Tabs tabs={TABS.map((t) => ({ ...t, count: t.key === 'reviews' ? d.approvals.filter((a: any) => a.status === 'PENDING').length : t.key === 'files' ? d.media.length : t.key === 'chat' ? unread : undefined }))} value={tab} onChange={(k) => setSp(k === 'overview' ? {} : { tab: k }, { replace: true })} />
-              <div key={tab} className="animate-rise min-w-0">
-              {tab === 'overview' && <Overview d={d} onTask={() => setModal('task')} onReminder={() => setModal('reminder')} go={(t) => setSp({ tab: t }, { replace: true })} />}
-              {tab === 'script' && <ScriptTab d={d} />}
-              {tab === 'shooting' && <ShootingTab d={d} />}
-              {tab === 'editing' && <EditingTab d={d} />}
-              {tab === 'reviews' && <ReviewsTab d={d} />}
-              {tab === 'files' && <FilesTab d={d} />}
-              {tab === 'schedule' && <ScheduleTab d={d} />}
-              {tab === 'activity' && <Card pad={false}><ActivityFeed items={d.activity} /></Card>}
-              {tab === 'chat' && <ChatThread roomId={d.roomId} embedded />}
+              <Tabs tabs={visibleTabs.map((t) => ({ ...t, count: t.key === 'reviews' ? d.approvals.filter((a: any) => a.status === 'PENDING').length : t.key === 'files' ? d.media.length : t.key === 'chat' ? unread : undefined }))} value={activeTab} onChange={(k) => setSp(k === 'overview' ? {} : { tab: k }, { replace: true })} />
+              <div key={activeTab} className="animate-rise min-w-0">
+              {activeTab === 'overview' && <Overview d={d} onTask={() => setModal('task')} onReminder={() => setModal('reminder')} go={(t) => setSp({ tab: t }, { replace: true })} />}
+              {activeTab === 'script' && <ScriptTab d={d} />}
+              {activeTab === 'shooting' && <ShootingTab d={d} />}
+              {activeTab === 'editing' && <EditingTab d={d} />}
+              {activeTab === 'reviews' && <ReviewsTab d={d} />}
+              {activeTab === 'files' && <FilesTab d={d} />}
+              {activeTab === 'schedule' && <ScheduleTab d={d} />}
+              {activeTab === 'activity' && <Card pad={false}><ActivityFeed items={d.activity} /></Card>}
+              {activeTab === 'chat' && <ChatThread roomId={d.roomId} embedded />}
               </div>
             </div>
             <aside className="space-y-5 min-w-0">
@@ -118,10 +140,15 @@ export default function ContentDetail() {
                   <Row k="Latest version" v={c.currentVideoVersion ? c.currentVideoVersion.replace('_', ' ') : c.currentScriptVersion ? `Script V${c.currentScriptVersion}` : '—'} />
                   {c.campaignId && <Row k="Campaign" v={c.campaignId.name} />}
                 </dl>
-                {!done && STAGE_TAB[c.stage] !== tab && <Button className="mt-4 w-full" variant="primary" onClick={() => setSp({ tab: STAGE_TAB[c.stage] }, { replace: true })}>Go to {label(c.stage)}<ArrowRight size={15} /></Button>}
+                {!done && getStageTab(c.stage, c.type) !== activeTab && <Button className="mt-4 w-full" variant="primary" onClick={() => setSp({ tab: getStageTab(c.stage, c.type) }, { replace: true })}>Go to {label(c.stage)}<ArrowRight size={15} /></Button>}
               </Card>
               <Card title="Team" action={<button className="link text-[12px] font-semibold text-primary-ink" onClick={() => setSp({ tab: 'activity' }, { replace: true })}>Log History</button>}>
-                <ul className="space-y-2.5 text-[13px]">{([['Writer', c.assignedWriter], ['Shooter', c.assignedShooter], ['Editor', c.assignedEditor], ['SMM', c.assignedSMM], ['Reviewer', c.assignedReviewer]] as [string, any][]).map(([r, u]) => <li key={r} className="flex items-center justify-between gap-2"><span className="font-medium text-ink-2">{r}</span>{u ? <Link to={`/team/${u._id}`} className="flex items-center gap-1.5 font-semibold text-ink hover:text-primary-ink"><PresenceDot userId={u._id} />{u.name}</Link> : <span className="text-ink-3">Unassigned</span>}</li>)}</ul>
+                <ul className="space-y-2.5 text-[13px]">{([
+                  ['Writer', c.assignedWriter],
+                  ...(isVideo ? [['Shooter', c.assignedShooter], ['Editor', c.assignedEditor]] : [['Designer', c.assignedDesigner]]),
+                  ['SMM', c.assignedSMM],
+                  ['Reviewer', c.assignedReviewer]
+                ] as [string, any][]).map(([r, u]) => <li key={r} className="flex items-center justify-between gap-2"><span className="font-medium text-ink-2">{r}</span>{u ? <Link to={`/team/${u._id}`} className="flex items-center gap-1.5 font-semibold text-ink hover:text-primary-ink"><PresenceDot userId={u._id} />{u.name}</Link> : <span className="text-ink-3">Unassigned</span>}</li>)}</ul>
               </Card>
             </aside>
           </div>
@@ -175,9 +202,10 @@ function Overview({ d, onTask, onReminder, go }: { d: any; onTask: () => void; o
 
 function EditContent({ open, onClose, c, onSaved }: { open: boolean; onClose: () => void; c: any; onSaved: () => void }) {
   const team = useTeam(); const can = useCan(); const [v, setV] = useState<any>({});
-  useEffect(() => { if (open) setV({ title: c.title, priority: c.priority, deadline: toLocalInput(c.deadline), description: c.description || '', type: c.type, platform: c.platform, assignedWriter: c.assignedWriter?._id || '', assignedShooter: c.assignedShooter?._id || '', assignedEditor: c.assignedEditor?._id || '', assignedSMM: c.assignedSMM?._id || '', assignedReviewer: c.assignedReviewer?._id || '' }); }, [open]); // eslint-disable-line
+  const isVideo = !['POST', 'CAROUSEL', 'AI_IMAGE'].includes((c?.type || '').toUpperCase());
+  useEffect(() => { if (open) setV({ title: c.title, priority: c.priority, deadline: toLocalInput(c.deadline), description: c.description || '', type: c.type, platform: c.platform, assignedWriter: c.assignedWriter?._id || '', assignedShooter: c.assignedShooter?._id || '', assignedEditor: c.assignedEditor?._id || '', assignedDesigner: c.assignedDesigner?._id || '', assignedSMM: c.assignedSMM?._id || '', assignedReviewer: c.assignedReviewer?._id || '' }); }, [open, c]); // eslint-disable-line
   const m = useMutation({
-    mutationFn: () => { const b: any = { title: v.title, priority: v.priority, description: v.description, type: v.type, platform: v.platform, deadline: v.deadline ? new Date(v.deadline).toISOString() : null }; if (!can('content.write')) Object.keys(b).forEach((k) => delete b[k]); if (can('content.assign')) ['assignedWriter', 'assignedShooter', 'assignedEditor', 'assignedSMM', 'assignedReviewer'].forEach((k) => { b[k] = v[k] || null; }); return patch(`/content/${c._id}`, b); },
+    mutationFn: () => { const b: any = { title: v.title, priority: v.priority, description: v.description, type: v.type, platform: v.platform, deadline: v.deadline ? new Date(v.deadline).toISOString() : null }; if (!can('content.write')) Object.keys(b).forEach((k) => delete b[k]); if (can('content.assign')) ['assignedWriter', 'assignedShooter', 'assignedEditor', 'assignedDesigner', 'assignedSMM', 'assignedReviewer'].forEach((k) => { b[k] = v[k] || null; }); return patch(`/content/${c._id}`, b); },
     onSuccess: () => { toast.success('Content updated.'); onSaved(); onClose(); }, onError: (e) => toast.error(errMsg(e)),
   });
   const set = (k: string) => (e: any) => setV((s: any) => ({ ...s, [k]: e.target.value }));
@@ -192,19 +220,35 @@ function EditContent({ open, onClose, c, onSaved }: { open: boolean; onClose: ()
           <Field label="Deadline"><Input type="datetime-local" value={v.deadline || ''} onChange={set('deadline')} /></Field>
           <div className="sm:col-span-2"><Field label="Brief"><Textarea value={v.description || ''} onChange={set('description')} /></Field></div>
         </>}
-        {can('content.assign') && <><div className="text-meta font-semibold uppercase tracking-wide text-ink-2 sm:col-span-2">Assignments</div>{A('assignedWriter', 'Writer', ['SCRIPT_WRITER'])}{A('assignedShooter', 'Shooter', ['SHOOTER'])}{A('assignedEditor', 'Editor', ['EDITOR', 'DESIGNER'])}{A('assignedSMM', 'SMM', ['SMM'])}{A('assignedReviewer', 'Reviewer', [])}</>}
+        {can('content.assign') && (
+          <>
+            <div className="text-meta font-semibold uppercase tracking-wide text-ink-2 sm:col-span-2">Assignments</div>
+            {A('assignedWriter', 'Writer', ['SCRIPT_WRITER'])}
+            {isVideo ? (
+              <>
+                {A('assignedShooter', 'Shooter', ['SHOOTER'])}
+                {A('assignedEditor', 'Editor', ['EDITOR', 'DESIGNER'])}
+              </>
+            ) : (
+              A('assignedDesigner', 'Graphic Designer', ['DESIGNER', 'EDITOR'])
+            )}
+            {A('assignedSMM', 'SMM', ['SMM'])}
+            {A('assignedReviewer', 'Reviewer', [])}
+          </>
+        )}
       </div>
     </Modal>
   );
 }
 function MoveStage({ open, onClose, c, onSaved }: { open: boolean; onClose: () => void; c: any; onSaved: () => void }) {
   const [stage, setStage] = useState(c.stage); const [reason, setReason] = useState('');
-  useEffect(() => { if (open) { setStage(c.stage); setReason(''); } }, [open]); // eslint-disable-line
+  useEffect(() => { if (open) { setStage(c.stage); setReason(''); } }, [open, c.stage]);
+  const stages = getWorkflowStagesForType(c.type);
   const m = useMutation({ mutationFn: () => post(`/content/${c._id}/stage`, { stage, reason }), onSuccess: () => { toast.success('Stage updated.'); onSaved(); onClose(); }, onError: (e) => toast.error(errMsg(e)) });
   return (
     <Modal open={open} onClose={onClose} title="Move stage manually" footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" loading={m.isPending} disabled={stage === c.stage || reason.trim().length < 3} onClick={() => m.mutate()}>Move</Button></>}>
       <p className="mb-3 text-ink-2">Stages normally move on their own as people submit, upload and approve. Use this only to correct the record. It is logged and posted to the content chat.</p>
-      <div className="space-y-3"><Field label="Stage"><Select value={stage} onChange={(e) => setStage(e.target.value)}>{STAGES.map((s, i) => <option key={s} value={s}>{i + 1}. {label(s)}</option>)}</Select></Field><Field label="Reason"><Textarea value={reason} onChange={(e) => setReason(e.target.value)} /></Field></div>
+      <div className="space-y-3"><Field label="Stage"><Select value={stage} onChange={(e) => setStage(e.target.value)}>{stages.map((s, i) => <option key={s} value={s}>{i + 1}. {label(s)}</option>)}</Select></Field><Field label="Reason"><Textarea value={reason} onChange={(e) => setReason(e.target.value)} /></Field></div>
     </Modal>
   );
 }

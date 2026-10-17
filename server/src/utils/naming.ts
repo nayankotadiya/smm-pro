@@ -1,9 +1,15 @@
-import { STAGES, Stage } from '../config/constants';
-export function progressFor(stage: Stage) {
-  const i = STAGES.indexOf(stage);
-  return Math.round((i / (STAGES.length - 1)) * 100);
+import { STAGES, Stage, getWorkflowStagesForType } from '../config/constants';
+export function progressFor(stage: Stage, type?: string) {
+  const stages = typeof type === 'string' ? getWorkflowStagesForType(type) : STAGES;
+  const i = stages.indexOf(stage);
+  if (i < 0) return 0;
+  return Math.round((i / Math.max(1, stages.length - 1)) * 100);
 }
-export function stageIndex(stage: Stage) { return STAGES.indexOf(stage) + 1; }
+export function stageIndex(stage: Stage, type?: string) {
+  const stages = typeof type === 'string' ? getWorkflowStagesForType(type) : STAGES;
+  const i = stages.indexOf(stage);
+  return i >= 0 ? i + 1 : 1;
+}
 export function slug(s: string) {
   return s.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
 }

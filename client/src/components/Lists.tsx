@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { Check, Circle, CheckCircle2, Play, Film, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { Badge, Progress, Table, Priority, Empty } from './ui';
-import { label, fmtDateTime, isOverdue, STAGES, ago, getStatusMeta } from '@/lib/format';
+import { label, fmtDateTime, isOverdue, STAGES, getWorkflowStagesForType, ago, getStatusMeta } from '@/lib/format';
 import { patch, del, errMsg } from '@/lib/api';
 import { useAuth } from '@/store/auth';
 import { toast } from '@/store/ui';
@@ -290,17 +290,28 @@ export function StatusBadge({ c, status }: { c?: any; status?: string }) {
   );
 }
 
-export function WorkflowBar({ stage, blocked, onSelectStage }: { stage: string; blocked?: boolean; onSelectStage?: (stage: string) => void }) {
-  const i = STAGES.indexOf(stage);
+export function WorkflowBar({
+  stage,
+  contentType,
+  blocked,
+  onSelectStage,
+}: {
+  stage: string;
+  contentType?: string;
+  blocked?: boolean;
+  onSelectStage?: (stage: string) => void;
+}) {
+  const stages = getWorkflowStagesForType(contentType);
+  const i = stages.indexOf(stage);
   const curRef = useRef<HTMLLIElement>(null);
   useEffect(() => {
     curRef.current?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
-  }, [stage]);
+  }, [stage, contentType]);
 
   return (
     <div className="overflow-x-auto pb-2 pt-1 no-scrollbar overscroll-x-contain" style={{ scrollbarWidth: 'thin', WebkitOverflowScrolling: 'touch' }}>
-      <ol className="flex min-w-[880px] items-start px-1">
-        {STAGES.map((s, n) => {
+      <ol className="flex min-w-[720px] items-start px-1">
+        {stages.map((s, n) => {
           const done = n < i; const cur = n === i;
           return (
             <li
