@@ -219,15 +219,154 @@ export default function SchedulingPublishing() {
     onError: (e) => toast.error(errMsg(e)),
   });
 
-  const m = metricsQ.data || {
-    totalContent: allItems.length,
-    awaitingApproval: 0,
-    readyToSchedule: 0,
-    scheduled: 0,
-    dueToday: 0,
-    overdue: 0,
-    posted: 0,
-    cancelled: 0,
+  // Dynamically compute global metrics from loaded deliverable items with real-time fallback
+  const globalCounts = useMemo(() => {
+    const todayStr = dateKey(new Date());
+    let awaitingApproval = 0;
+    let readyToSchedule = 0;
+    let scheduled = 0;
+    let dueToday = 0;
+    let overdue = 0;
+    let upcoming = 0;
+    let posted = 0;
+    let cancelled = 0;
+
+    allItems.forEach((c) => {
+      const pDate = c.plannedPublicationDate ? dateKey(new Date(c.plannedPublicationDate)) : '';
+      const deadlineDate = c.deadline ? dateKey(new Date(c.deadline)) : '';
+      const isPastDeadline = isOverdue(c.deadline, c.status === 'COMPLETED' || c.stage === 'PUBLISHED');
+
+      if (c.productionStatus === 'CANCELLED' || c.productionStatus === 'SHOOT_CANCELLED') {
+        cancelled++;
+        return;
+      }
+      if (c.stage === 'PUBLISHED' || c.status === 'COMPLETED' || c.productionStatus === 'POSTED') {
+        posted++;
+        return;
+      }
+      if (['CLIENT_REVIEW', 'CLIENT_FINAL_APPROVAL', 'INTERNAL_REVIEW', 'FINAL_REVIEW', 'SMM_REVIEW'].includes(c.stage)) {
+        awaitingApproval++;
+      }
+      if (c.stage === 'FINAL_UPLOAD' || c.approvalStatus === 'APPROVED' || c.approvalStatus === 'APPROVED_CLIENT' || (c.stage === 'SCHEDULE' && !c.plannedPublicationDate)) {
+        readyToSchedule++;
+      }
+      if (c.stage === 'SCHEDULE' && !!c.plannedPublicationDate) {
+        scheduled++;
+      }
+      if (pDate === todayStr || deadlineDate === todayStr) {
+        dueToday++;
+      }
+      if (isPastDeadline) {
+        overdue++;
+      }
+      if (c.stage === 'SCHEDULE' && pDate > todayStr) {
+        upcoming++;
+      }
+    });
+
+    return {
+      totalContent: allItems.length,
+      awaitingApproval,
+      readyToSchedule,
+      scheduled,
+      dueToday,
+      overdue,
+      upcoming,
+      posted,
+      cancelled,
+    };
+  }, [allItems]);
+
+  // Tab counts dynamically synced to current filter scope (search + assignee + activeBlockFilter)
+  const tabCounts = useMemo(() => {
+    const todayStr = dateKey(new Date());
+    const base = allItems.filter((c) => {
+      if (search) {
+        const q = search.toLowerCase();
+        const matches = (c.title || '').toLowerCase().includes(q) ||
+          (c.contentId || '').toLowerCase().includes(q) ||
+          (c.clientId?.name || '').toLowerCase().includes(q);
+        if (!matches) return false;
+      }
+      if (selectedAssignee && c.currentOwner?._id !== selectedAssignee && c.assignedSMM?._id !== selectedAssignee) {
+        return false;
+      }
+      if (activeBlockFilter) {
+        if (activeBlockFilter === 'PRODUCED') {
+          const isProduced = ['SCHEDULE', 'PUBLISHED'].includes(c.stage) || c.status === 'COMPLETED' || c.approvalStatus === 'APPROVED_CLIENT' || c.productionStatus === 'POSTED';
+          if (!isProduced) return false;
+        } else if (activeBlockFilter === 'PENDING') {
+          const isProduced = ['SCHEDULE', 'PUBLISHED'].includes(c.stage) || c.status === 'COMPLETED' || c.productionStatus === 'POSTED';
+          const isCancelled = c.productionStatus === 'CANCELLED' || c.productionStatus === 'SHOOT_CANCELLED';
+          if (isProduced || isCancelled) return false;
+        } else if (activeBlockFilter === 'SCHEDULED') {
+          const isScheduled = c.stage === 'SCHEDULE' || !!c.plannedPublicationDate || c.productionStatus === 'SCHEDULED';
+          if (!isScheduled) return false;
+        } else if (activeBlockFilter === 'REELS') {
+          const t = (c.type || '').toUpperCase();
+          if (!['REEL', 'VIDEO', 'SHORT', 'AI_REEL'].includes(t)) return false;
+        } else if (activeBlockFilter === 'POSTS') {
+          const t = (c.type || '').toUpperCase();
+          if (!['POST', 'IMAGE', 'OTHER'].includes(t)) return false;
+        } else if (activeBlockFilter === 'CAROUSELS') {
+          const t = (c.type || '').toUpperCase();
+          if (t !== 'CAROUSEL') return false;
+        }
+      }
+      return true;
+    });
+
+    const getCount = (tab: TabKey) => {
+      return base.filter((c) => {
+        const pDate = c.plannedPublicationDate ? dateKey(new Date(c.plannedPublicationDate)) : '';
+        const deadlineDate = c.deadline ? dateKey(new Date(c.deadline)) : '';
+        const isPastDeadline = isOverdue(c.deadline, c.status === 'COMPLETED' || c.stage === 'PUBLISHED');
+
+        switch (tab) {
+          case 'UPCOMING':
+            return c.stage === 'SCHEDULE' && pDate > todayStr && c.productionStatus !== 'CANCELLED';
+          case 'DUE_TODAY':
+            return (pDate === todayStr || deadlineDate === todayStr) && c.stage !== 'PUBLISHED' && c.productionStatus !== 'CANCELLED';
+          case 'OVERDUE':
+            return isPastDeadline && c.stage !== 'PUBLISHED' && c.productionStatus !== 'CANCELLED';
+          case 'PENDING_APPROVAL':
+            return (c.stage === 'CLIENT_REVIEW' || c.stage === 'CLIENT_FINAL_APPROVAL' || c.stage === 'INTERNAL_REVIEW' || c.stage === 'FINAL_REVIEW' || c.stage === 'SMM_REVIEW') && c.productionStatus !== 'CANCELLED';
+          case 'READY_TO_SCHEDULE':
+            return (c.stage === 'FINAL_UPLOAD' || c.approvalStatus === 'APPROVED' || c.approvalStatus === 'APPROVED_CLIENT' || (c.stage === 'SCHEDULE' && !c.plannedPublicationDate)) && c.stage !== 'PUBLISHED' && c.productionStatus !== 'CANCELLED';
+          case 'SCHEDULED':
+            return c.stage === 'SCHEDULE' && !!c.plannedPublicationDate && c.productionStatus !== 'CANCELLED';
+          case 'POSTED':
+            return c.stage === 'PUBLISHED' || c.status === 'COMPLETED' || c.productionStatus === 'POSTED';
+          case 'CANCELLED':
+            return c.productionStatus === 'CANCELLED' || c.productionStatus === 'SHOOT_CANCELLED';
+          default:
+            return true;
+        }
+      }).length;
+    };
+
+    return {
+      SCHEDULED: getCount('SCHEDULED'),
+      READY_TO_SCHEDULE: getCount('READY_TO_SCHEDULE'),
+      DUE_TODAY: getCount('DUE_TODAY'),
+      OVERDUE: getCount('OVERDUE'),
+      UPCOMING: getCount('UPCOMING'),
+      PENDING_APPROVAL: getCount('PENDING_APPROVAL'),
+      POSTED: getCount('POSTED'),
+      CANCELLED: getCount('CANCELLED'),
+      ALL: base.length,
+    };
+  }, [allItems, search, selectedAssignee, activeBlockFilter]);
+
+  const m = {
+    totalContent: allItems.length || metricsQ.data?.totalContent || 0,
+    awaitingApproval: allItems.length > 0 ? globalCounts.awaitingApproval : (metricsQ.data?.awaitingApproval ?? 0),
+    readyToSchedule: allItems.length > 0 ? globalCounts.readyToSchedule : (metricsQ.data?.readyToSchedule ?? 0),
+    scheduled: allItems.length > 0 ? globalCounts.scheduled : (metricsQ.data?.scheduled ?? 0),
+    dueToday: allItems.length > 0 ? globalCounts.dueToday : (metricsQ.data?.dueToday ?? 0),
+    overdue: allItems.length > 0 ? globalCounts.overdue : (metricsQ.data?.overdue ?? 0),
+    posted: allItems.length > 0 ? globalCounts.posted : (metricsQ.data?.posted ?? 0),
+    cancelled: allItems.length > 0 ? globalCounts.cancelled : (metricsQ.data?.cancelled ?? 0),
   };
 
   const pkg = metricsQ.data?.packageOverview || {
@@ -960,15 +1099,15 @@ export default function SchedulingPublishing() {
           {/* Section Tabs */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-line">
             {[
-              { id: 'SCHEDULED', label: 'Scheduled', count: m.scheduled },
-              { id: 'READY_TO_SCHEDULE', label: 'Ready to Schedule', count: m.readyToSchedule },
-              { id: 'DUE_TODAY', label: 'Due Today', count: m.dueToday },
-              { id: 'OVERDUE', label: 'Overdue', count: m.overdue },
-              { id: 'UPCOMING', label: 'Upcoming', count: allItems.filter(c => c.plannedPublicationDate && dateKey(new Date(c.plannedPublicationDate)) > dateKey(new Date())).length },
-              { id: 'PENDING_APPROVAL', label: 'Pending Approval', count: m.awaitingApproval },
-              { id: 'POSTED', label: 'Posted', count: m.posted },
-              { id: 'CANCELLED', label: 'Cancelled', count: m.cancelled },
-              { id: 'ALL', label: 'All Content', count: allItems.length },
+              { id: 'SCHEDULED', label: 'Scheduled', count: tabCounts.SCHEDULED },
+              { id: 'READY_TO_SCHEDULE', label: 'Ready to Schedule', count: tabCounts.READY_TO_SCHEDULE },
+              { id: 'DUE_TODAY', label: 'Due Today', count: tabCounts.DUE_TODAY },
+              { id: 'OVERDUE', label: 'Overdue', count: tabCounts.OVERDUE },
+              { id: 'UPCOMING', label: 'Upcoming', count: tabCounts.UPCOMING },
+              { id: 'PENDING_APPROVAL', label: 'Pending Approval', count: tabCounts.PENDING_APPROVAL },
+              { id: 'POSTED', label: 'Posted', count: tabCounts.POSTED },
+              { id: 'CANCELLED', label: 'Cancelled', count: tabCounts.CANCELLED },
+              { id: 'ALL', label: 'All Content', count: tabCounts.ALL },
             ].map((tab) => (
               <button
                 key={tab.id}

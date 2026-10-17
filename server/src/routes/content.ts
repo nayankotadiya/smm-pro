@@ -117,9 +117,26 @@ r.get('/scheduling/metrics', ah(async (req, res) => {
     aiReels,
   ] = await Promise.all([
     c({ status: { $ne: 'CANCELLED' } }),
-    c({ stage: { $in: ['SMM_REVIEW', 'FINAL_REVIEW', 'CLIENT_REVIEW', 'CLIENT_FINAL_APPROVAL'] } }),
-    c({ stage: 'FINAL_UPLOAD', status: { $nin: ['COMPLETED', 'CANCELLED'] } }),
-    c({ $or: [{ stage: 'SCHEDULE' }, { scheduledAt: { $ne: null }, status: 'SCHEDULED' }, { plannedPublicationDate: { $ne: null } }] }),
+    c({ stage: { $in: ['SMM_REVIEW', 'FINAL_REVIEW', 'CLIENT_REVIEW', 'CLIENT_FINAL_APPROVAL', 'INTERNAL_REVIEW'] } }),
+    c({
+      status: { $nin: ['COMPLETED', 'CANCELLED'] },
+      stage: { $ne: 'PUBLISHED' },
+      productionStatus: { $nin: ['POSTED', 'CANCELLED', 'SHOOT_CANCELLED'] },
+      $or: [
+        { stage: 'FINAL_UPLOAD' },
+        { approvalStatus: { $in: ['APPROVED', 'APPROVED_CLIENT'] } },
+        { stage: 'SCHEDULE', plannedPublicationDate: null },
+        { stage: 'SCHEDULE', plannedPublicationDate: { $exists: false } },
+      ],
+    }),
+    c({
+      status: { $nin: ['COMPLETED', 'CANCELLED'] },
+      productionStatus: { $nin: ['POSTED', 'CANCELLED', 'SHOOT_CANCELLED'] },
+      $or: [
+        { stage: 'SCHEDULE', plannedPublicationDate: { $ne: null } },
+        { scheduledAt: { $ne: null }, status: 'SCHEDULED' },
+      ],
+    }),
     c({
       status: { $nin: ['COMPLETED', 'CANCELLED'] },
       $or: [
@@ -181,7 +198,9 @@ r.get('/scheduling/metrics', ah(async (req, res) => {
 
     // Ketli Schedule Thay Chhe (Scheduled for publication with date/status)
     const scheduledItems = clItems.filter((it: any) =>
-      it.stage === 'SCHEDULE' || it.status === 'SCHEDULED' || it.plannedPublicationDate != null
+      ((it.stage === 'SCHEDULE' && it.plannedPublicationDate != null) ||
+       (it.scheduledAt != null && it.status === 'SCHEDULED')) &&
+      it.status !== 'CANCELLED' && it.productionStatus !== 'CANCELLED'
     );
     const scheduledReels = scheduledItems.filter((it: any) => ['REEL', 'VIDEO', 'SHORT'].includes(it.type)).length;
     const scheduledPosts = scheduledItems.filter((it: any) => ['POST', 'IMAGE', 'OTHER'].includes(it.type)).length;
@@ -190,8 +209,8 @@ r.get('/scheduling/metrics', ah(async (req, res) => {
 
     // Ready to Schedule (Approved / in Upload, waiting to set date)
     const readyItems = clItems.filter((it: any) =>
-      (it.stage === 'FINAL_UPLOAD' || (it.stage === 'SCHEDULE' && !it.plannedPublicationDate)) &&
-      it.stage !== 'PUBLISHED' && it.status !== 'COMPLETED'
+      (it.stage === 'FINAL_UPLOAD' || (it.approvalStatus === 'APPROVED' || it.approvalStatus === 'APPROVED_CLIENT') || (it.stage === 'SCHEDULE' && !it.plannedPublicationDate)) &&
+      it.stage !== 'PUBLISHED' && it.status !== 'COMPLETED' && it.productionStatus !== 'POSTED' && it.productionStatus !== 'CANCELLED'
     );
     const readyTotal = readyItems.length;
 
