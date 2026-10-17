@@ -13,7 +13,7 @@ import {
   SHEETS_CONFIG,
   sheets,
 } from '../integrations/sheets';
-import { SystemSetting } from '../models';
+import { SystemSetting, Content, Client } from '../models';
 
 const r = Router();
 
@@ -45,11 +45,40 @@ r.get('/data', requirePerm('clients.read'), ah(async (req, res) => {
   const sheetName = String(req.query.sheetName || 'Content Tracker');
   const syncStatus = await SystemSetting.findOne({ key: 'google_sheets_sync_status' }).lean();
 
+  // Fetch contents and clients lookup for instant navigation
+  const [contentsList, clientsList] = await Promise.all([
+    Content.find({}, '_id contentId title type platform stage clientId driveFolderId publishedUrl').lean(),
+    Client.find({}, '_id name code businessName').lean(),
+  ]);
+
+  const contentLookup: Record<string, any> = {};
+  for (const c of contentsList) {
+    if (c.contentId) {
+      contentLookup[c.contentId] = {
+        _id: c._id,
+        title: c.title,
+        type: c.type,
+        platform: c.platform,
+        stage: c.stage,
+        clientId: c.clientId,
+        driveFolderId: c.driveFolderId,
+        publishedUrl: c.publishedUrl,
+      };
+    }
+  }
+
+  const clientLookup: Record<string, string> = {};
+  for (const cl of clientsList) {
+    if (cl.name) clientLookup[cl.name.toLowerCase().trim()] = String(cl._id);
+    if (cl.businessName) clientLookup[cl.businessName.toLowerCase().trim()] = String(cl._id);
+    if (cl.code) clientLookup[cl.code.toLowerCase().trim()] = String(cl._id);
+  }
+
   try {
     const s = sheets();
     const resp = await s.spreadsheets.values.get({
       spreadsheetId,
-      range: `'${sheetName}'!A1:AE500`,
+      range: `'${sheetName}'!A1:AZ500`,
     });
 
     const allRows = resp.data.values || [];
@@ -70,6 +99,8 @@ r.get('/data', requirePerm('clients.read'), ah(async (req, res) => {
       headers,
       rows,
       totalRows: rows.length,
+      contentLookup,
+      clientLookup,
       spreadsheetId,
       spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${spreadsheetId}`,
       availableSheets: SHEETS_CONFIG,

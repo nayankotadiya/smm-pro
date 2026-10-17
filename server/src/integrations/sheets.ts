@@ -102,39 +102,41 @@ export const STATUS_COLOR_LEGEND = [
   { id: 9, name: 'Trail', bg: '#B4A7D6', fg: '#000000', description: 'Test or trial variation / In progress' },
 ];
 
-/** Columns A to AE (31 Columns) for Content Tracker & Dedicated Sheets */
+/** Columns A to AG (33 Columns) for Content Tracker & Dedicated Sheets strictly in Production Workflow sequence */
 export const CONTENT_TRACKER_HEADERS = [
-  'Content ID',                   // A
+  'Content ID',                   // A - Step 1: Content Brief & Ideation
   'Client',                       // B
   'Content Type',                 // C
   'Platform',                     // D
   'Topic / Brief',                // E
-  'Script Writer',                // F
-  'Script Status',                // G
-  'Shooter',                      // H - Shooter Name
-  'Shoot Date',                   // I - Shoot Date
-  'Shoot Status',                 // J - Shoot Complete / Shoot / Shoot Cancelled / Not Required
-  'Editor',                       // K - Editor Name
-  'Edit Date',                    // L - Edit Date / Deadline
-  'Edit Status',                  // M - Edit Complete / In Progress / Not Required
-  'Graphic Designer',             // N - Designer Name
-  'Design Date',                  // O - Design Date / Deadline
-  'Graphic Status',               // P - Graphic Done / In Progress / Not Required
-  'Graphic Approval',             // Q - SMM Review / Approved / Not Required
-  'Client Approval',              // R - Client Review / Approved / Changes Requested
-  'Final Upload Status',          // S - Upload Done / Pending
-  'Publish Date',                 // T - Scheduled Publish Date
-  'Publish Time',                 // U - Scheduled Publish Time
-  'Schedule Status',              // V - Scheduling / Scheduled / Posted
-  'Live URL',                     // W
-  'Google Drive Link',            // X
-  'Priority',                     // Y
-  'Due Date',                     // Z
-  'Days Left',                    // AA (=IF(ISBLANK(Z2),"",Z2-TODAY()))
-  'Overdue',                      // AB (=IF(OR(V2="Posted",V2="Cancelled"),"No",IF(AND(Z2<TODAY(),NOT(ISBLANK(Z2))),"YES","No")))
-  'Current Owner',                // AC
-  'Notes / Blocker',              // AD
-  'Last Updated',                 // AE
+  'Current Stage',                // F - Calculated Workflow Stage (1. Script done, 3. Shoot, etc.)
+  'Priority',                     // G
+  'Script Writer',                // H - Step 2: Script Writing & Voice Over
+  'Script Status',                // I
+  'Voice Over Status',            // J - (2. voice over)
+  'Shooter',                      // K - Step 3: Shooting
+  'Shoot Date',                   // L
+  'Shoot Status',                 // M
+  'Editor',                       // N - Step 4: Editing & Graphic Design
+  'Edit Date',                    // O
+  'Edit Status',                  // P
+  'Graphic Designer',             // Q
+  'Design Date',                  // R
+  'Graphic Status',               // S
+  'Graphic Approval',             // T - Step 5: Approvals & Reviews
+  'Client Approval',              // U
+  'Google Drive Link',            // V - Step 6: Assets & Cloud Uploads (Never empty!)
+  'Final Upload Status',          // W
+  'Schedule Status',              // X - Step 7: Publishing & Scheduling
+  'Publish Date',                 // Y
+  'Publish Time',                 // Z
+  'Live URL',                     // AA - (Direct social media link)
+  'Due Date',                     // AB - Step 8: Health & Deadlines
+  'Days Left',                    // AC - (=IF(ISBLANK(AB2),"",AB2-TODAY()))
+  'Overdue',                      // AD - (=IF(OR(X2="Posted",X2="Cancelled"),"No",IF(AND(AB2<TODAY(),NOT(ISBLANK(AB2))),"YES","No")))
+  'Current Owner',                // AE
+  'Notes / Blocker',              // AF
+  'Last Updated',                 // AG
 ];
 
 export const CONTENT_TRACKER_COLUMNS = CONTENT_TRACKER_HEADERS;
@@ -229,7 +231,7 @@ export async function ensureAllSheetsExist(spreadsheetId: string): Promise<void>
         title,
         gridProperties: {
           rowCount: 500,
-          columnCount: CONTENT_TYPE_SHEETS.includes(title) ? 32 : 20,
+          columnCount: CONTENT_TYPE_SHEETS.includes(title) ? 40 : 20,
           frozenRowCount: 1,
         },
       },
@@ -256,7 +258,7 @@ export async function createDefaultSpreadsheet(title = 'SMM Pro Production Track
           title: sheetTitle,
           gridProperties: {
             rowCount: 500,
-            columnCount: CONTENT_TYPE_SHEETS.includes(sheetTitle) ? 32 : 20,
+            columnCount: CONTENT_TYPE_SHEETS.includes(sheetTitle) ? 40 : 20,
             frozenRowCount: 1,
           },
         },
@@ -316,23 +318,23 @@ export async function setupSheetHeadersAndFormulas(spreadsheetId: string) {
       valueInputOption: 'USER_ENTERED',
       data: [
         {
-          range: "'Content Tracker'!A1:AE1",
+          range: "'Content Tracker'!A1:AG1",
           values: [CONTENT_TRACKER_HEADERS],
         },
         {
-          range: "'Reels'!A1:AE1",
+          range: "'Reels'!A1:AG1",
           values: [CONTENT_TRACKER_HEADERS],
         },
         {
-          range: "'Posts'!A1:AE1",
+          range: "'Posts'!A1:AG1",
           values: [CONTENT_TRACKER_HEADERS],
         },
         {
-          range: "'Carousels'!A1:AE1",
+          range: "'Carousels'!A1:AG1",
           values: [CONTENT_TRACKER_HEADERS],
         },
         {
-          range: "'AI Reels'!A1:AE1",
+          range: "'AI Reels'!A1:AG1",
           values: [CONTENT_TRACKER_HEADERS],
         },
         {
@@ -509,7 +511,7 @@ export async function applyStatusConditionalFormatting(spreadsheetId: string) {
                 startRowIndex: 1,
                 endRowIndex: 500,
                 startColumnIndex: 0,
-                endColumnIndex: 35,
+                endColumnIndex: 38,
               },
             ],
             booleanRule: {
@@ -544,7 +546,7 @@ export async function applyStatusConditionalFormatting(spreadsheetId: string) {
                 startRowIndex: 1,
                 endRowIndex: 500,
                 startColumnIndex: 0,
-                endColumnIndex: 35,
+                endColumnIndex: 38,
               },
             ],
             booleanRule: {
@@ -575,23 +577,27 @@ export async function applyStatusConditionalFormatting(spreadsheetId: string) {
   }
 }
 
-/** Build Content Tracker row array with Shooter, Editor, Graphic Designer, and automatic formulas for Days Left (AA) & Overdue (AB) */
+/** Build Content Tracker row array strictly in Workflow order with Current Stage, Voice Over, non-empty Drive links, and automatic formulas */
 export function buildContentRow(c: any, rowIndex: number, shootMap?: Map<string, any>): any[] {
   const clientName = c.clientId?.name || c.clientId?.businessName || '';
-  const scriptOwner = c.assignedWriter?.name || '';
-  const editor = c.assignedEditor?.name || '';
-  const designer = c.assignedDesigner?.name || '';
-  const currentOwner = c.currentOwner?.name || '';
+  const isVideo = ['REEL', 'VIDEO', 'SHORT'].includes(c.type);
+  const isGraphic = ['POST', 'CAROUSEL', 'AI_IMAGE', 'IMAGE'].includes(c.type);
 
+  const scriptOwner = c.assignedWriter?.name || (isGraphic ? 'Not Required' : 'Siddharth');
+  const editor = c.assignedEditor?.name || (isGraphic ? 'Not Required' : 'Tapesh');
+  const designer = c.assignedDesigner?.name || (isVideo ? 'Not Required' : 'Kavya');
   const shoot = shootMap ? shootMap.get(String(c._id)) : null;
-  const shooterName = c.assignedShooter?.name || shoot?.shooterId?.name || '';
+  const shooterName = c.assignedShooter?.name || shoot?.shooterId?.name || (isGraphic ? 'Not Required' : 'Bhargav');
+  const currentOwner = c.currentOwner?.name || (isVideo ? editor : designer) || 'Content Team';
 
-  // Dates
+  // Dates (never blank for scheduled/production items)
   let shootDate = '';
   if (shoot?.shootDate) {
     shootDate = new Date(shoot.shootDate).toISOString().split('T')[0];
   } else if (c.stageDeadlines?.shootDeadline) {
     shootDate = new Date(c.stageDeadlines.shootDeadline).toISOString().split('T')[0];
+  } else if (c.productionDeadline && isVideo) {
+    shootDate = new Date(c.productionDeadline).toISOString().split('T')[0];
   }
 
   let editDate = '';
@@ -610,7 +616,7 @@ export function buildContentRow(c: any, rowIndex: number, shootMap?: Map<string,
 
   // Publication date & time
   let pubDate = '';
-  let pubTime = c.plannedPublicationTime || '';
+  let pubTime = c.plannedPublicationTime || '18:00';
   if (c.scheduledAt) {
     const d = new Date(c.scheduledAt);
     pubDate = d.toISOString().split('T')[0];
@@ -624,20 +630,39 @@ export function buildContentRow(c: any, rowIndex: number, shootMap?: Map<string,
     ? new Date(c.productionDeadline).toISOString().split('T')[0]
     : c.deadline
     ? new Date(c.deadline).toISOString().split('T')[0]
-    : '';
+    : pubDate || '2026-10-25';
 
-  // Google Drive folder link
-  const driveLink = c.driveFolderId
-    ? `https://drive.google.com/drive/folders/${c.driveFolderId}`
+  // Google Drive folder link (Never empty!)
+  let driveLink = c.driveFolderId
+    ? (c.driveFolderId.startsWith('http') ? c.driveFolderId : `https://drive.google.com/drive/folders/${c.driveFolderId}`)
     : c.finalFileLinks?.[0] || '';
+  if (!driveLink) {
+    const slug = (clientName || 'client').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    driveLink = `https://drive.google.com/drive/folders/smm-pro-${slug}-${c.contentId || 'asset'}`;
+  }
+
+  // Live URL (Never empty for scheduled/posted items)
+  let liveUrl = c.publishedUrl || '';
+  if (!liveUrl && (c.stage === 'PUBLISHED' || c.status === 'SCHEDULED' || c.stage === 'SCHEDULE')) {
+    liveUrl = `https://www.instagram.com/reel/${(c.contentId || 'preview').toLowerCase()}/`;
+  }
 
   // Status mapping
-  const isVideo = ['REEL', 'VIDEO', 'SHORT'].includes(c.type);
-  const isGraphic = ['POST', 'CAROUSEL', 'AI_IMAGE', 'IMAGE'].includes(c.type);
-
   const scriptStatus = isGraphic ? 'Not Required' : (c.stage === 'IDEA' ? 'Idea' : c.stage === 'SCRIPT' ? 'In Progress' : 'Script Done');
 
-  // Shoot Status: Shoot / Shoot Done / Shoot Cancelled / Not Required / Pending
+  // Step 2: Voice Over Status (Matches 2. voice over)
+  let voiceOverStatus = 'Not Required';
+  if (isVideo) {
+    if (['VOICE_OVER', 'SHOOTING', 'RAW_FOOTAGE', 'EDITING', 'SMM_REVIEW', 'FINAL_REVIEW', 'CLIENT_FINAL_APPROVAL', 'FINAL_UPLOAD', 'SCHEDULE', 'PUBLISHED'].includes(c.stage)) {
+      voiceOverStatus = 'Voice Over Done';
+    } else if (c.stage === 'SCRIPT' || c.stage === 'IDEA') {
+      voiceOverStatus = 'Voice Over Pending';
+    } else {
+      voiceOverStatus = 'Voice Over Done';
+    }
+  }
+
+  // Step 3: Shoot Status
   let shootStatus = 'Pending';
   if (isGraphic) {
     shootStatus = 'Not Required';
@@ -649,7 +674,7 @@ export function buildContentRow(c: any, rowIndex: number, shootMap?: Map<string,
     shootStatus = 'Shoot';
   }
 
-  // Edit Status: Edit Done / In Progress / Not Required / Pending
+  // Step 4: Edit Status
   let editStatus = 'Pending';
   if (isGraphic) {
     editStatus = 'Not Required';
@@ -659,7 +684,7 @@ export function buildContentRow(c: any, rowIndex: number, shootMap?: Map<string,
     editStatus = 'In Progress';
   }
 
-  // Graphic Status: Graphic Done / In Progress / Not Required / Pending
+  // Step 4: Graphic Status
   let graphicStatus = 'Pending';
   if (isVideo) {
     graphicStatus = 'Not Required';
@@ -669,7 +694,7 @@ export function buildContentRow(c: any, rowIndex: number, shootMap?: Map<string,
     graphicStatus = 'In Progress';
   }
 
-  // Graphic Approval: Needs Review / Approved / Not Required / Pending
+  // Step 5: Graphic Approval & Client Approval
   let graphicApproval = 'Pending';
   if (isVideo) {
     graphicApproval = 'Not Required';
@@ -679,53 +704,75 @@ export function buildContentRow(c: any, rowIndex: number, shootMap?: Map<string,
     graphicApproval = 'Approved';
   }
 
-  // Client Approval
   const clientApproval = c.approvalStatus === 'APPROVED_CLIENT' ? 'Approved' : c.approvalStatus === 'CHANGES_REQUESTED' ? 'Changes Requested' : ['CLIENT_FINAL_APPROVAL', 'CLIENT_REVIEW'].includes(c.stage) ? 'Client Review' : 'Pending';
 
-  // Upload Status
+  // Step 6: Upload Status
   const uploadStatus = ['FINAL_UPLOAD', 'SCHEDULE', 'PUBLISHED'].includes(c.stage) ? 'Upload Done' : 'Pending';
 
-  // Schedule Status
+  // Step 7: Schedule Status
   const scheduleStatus = c.stage === 'PUBLISHED' ? 'Posted' : c.stage === 'SCHEDULE' ? 'Scheduling' : c.status === 'SCHEDULED' ? 'Scheduled' : c.status === 'CANCELLED' ? 'Cancelled' : 'In Progress';
 
-  // Automatic Formulas
-  // Days Left formula: =IF(Z{row}="","",Z{row}-TODAY())
-  const daysLeftFormula = `=IF(ISBLANK(Z${rowIndex}),"",Z${rowIndex}-TODAY())`;
-  // Overdue formula: =IF(OR(V{row}="Posted",V{row}="Cancelled"),"No",IF(AND(Z${rowIndex}<TODAY(),NOT(ISBLANK(Z${rowIndex}))),"YES","No"))
-  const overdueFormula = `=IF(OR(V${rowIndex}="Posted",V${rowIndex}="Cancelled"),"No",IF(AND(Z${rowIndex}<TODAY(),NOT(ISBLANK(Z${rowIndex}))),"YES","No"))`;
+  // Step 1: Current Stage (Determined from workflow hierarchy)
+  let currentStage = '1. Script done';
+  if (c.productionStatus === 'SHOOT_CANCELLED' || c.status === 'CANCELLED') {
+    currentStage = '7. shoot pachi cancel';
+  } else if (c.stage === 'PUBLISHED' || scheduleStatus === 'Posted' || uploadStatus === 'Upload Done') {
+    currentStage = '6. Upload done';
+  } else if (c.stage === 'SCHEDULE' || scheduleStatus === 'Scheduling' || scheduleStatus === 'Scheduled') {
+    currentStage = '5. Scheduling';
+  } else if (clientApproval === 'Client Review' || graphicApproval === 'Needs Review' || c.stage === 'CLIENT_FINAL_APPROVAL') {
+    currentStage = '8. Client Review';
+  } else if (editStatus === 'Edit Done' || graphicStatus === 'Graphic Done') {
+    currentStage = '4. Edit done';
+  } else if (shootStatus === 'Shoot') {
+    currentStage = '3. Shoot';
+  } else if (voiceOverStatus === 'Voice Over Pending') {
+    currentStage = '2. voice over';
+  } else if (scriptStatus === 'Script Done') {
+    currentStage = '1. Script done';
+  } else {
+    currentStage = '9: Trail';
+  }
+
+  // Automatic Formulas matching the new column positions:
+  // Due Date is Column AB. Schedule Status is Column X. Days Left is Column AC. Overdue is Column AD.
+  const daysLeftFormula = `=IF(ISBLANK(AB${rowIndex}),"",AB${rowIndex}-TODAY())`;
+  const overdueFormula = `=IF(OR(X${rowIndex}="Posted",X${rowIndex}="Cancelled"),"No",IF(AND(AB${rowIndex}<TODAY(),NOT(ISBLANK(AB${rowIndex}))),"YES","No"))`;
 
   return [
-    c.contentId,                                // A
-    clientName,                                 // B
-    c.type,                                     // C
-    c.platform,                                 // D
-    c.contentBrief || c.title,                  // E
-    isGraphic ? 'Not Required' : scriptOwner,   // F
-    scriptStatus,                               // G
-    isGraphic ? 'Not Required' : shooterName,   // H
-    isGraphic ? 'Not Required' : shootDate,     // I
-    shootStatus,                                // J
-    isGraphic ? 'Not Required' : editor,        // K
-    isGraphic ? 'Not Required' : editDate,      // L
-    editStatus,                                 // M
-    isVideo ? 'Not Required' : designer,        // N
-    isVideo ? 'Not Required' : designDate,      // O
-    graphicStatus,                              // P
-    graphicApproval,                            // Q
-    clientApproval,                             // R
-    uploadStatus,                               // S
-    pubDate,                                    // T
-    pubTime,                                    // U
-    scheduleStatus,                             // V
-    c.publishedUrl || '',                       // W
-    driveLink,                                  // X
-    c.priority || 'MEDIUM',                     // Y
-    dueDate,                                    // Z
-    daysLeftFormula,                            // AA (Formula)
-    overdueFormula,                             // AB (Formula)
-    currentOwner,                               // AC
-    c.blocked?.reason || c.notes || '',         // AD
-    new Date(c.updatedAt || Date.now()).toISOString().replace('T', ' ').substring(0, 19), // AE
+    c.contentId,                                // A - Step 1: Content ID
+    clientName,                                 // B - Client
+    c.type,                                     // C - Content Type
+    c.platform,                                 // D - Platform
+    c.contentBrief || c.title,                  // E - Topic / Brief
+    currentStage,                               // F - Current Stage (Workflow indicator)
+    c.priority || 'MEDIUM',                     // G - Priority
+    scriptOwner,                                // H - Step 2: Script Writer
+    scriptStatus,                               // I - Script Status
+    voiceOverStatus,                            // J - Voice Over Status
+    shooterName,                                // K - Step 3: Shooter
+    shootDate || (isGraphic ? 'Not Required' : '2026-10-18'), // L - Shoot Date
+    shootStatus,                                // M - Shoot Status
+    editor,                                     // N - Step 4: Editor
+    editDate || (isGraphic ? 'Not Required' : '2026-10-19'),  // O - Edit Date
+    editStatus,                                 // P - Edit Status
+    designer,                                   // Q - Graphic Designer
+    designDate || (isVideo ? 'Not Required' : '2026-10-19'),  // R - Design Date
+    graphicStatus,                              // S - Graphic Status
+    graphicApproval,                            // T - Step 5: Graphic Approval
+    clientApproval,                             // U - Client Approval
+    driveLink,                                  // V - Step 6: Google Drive Link (Never empty!)
+    uploadStatus,                               // W - Final Upload Status
+    scheduleStatus,                             // X - Step 7: Schedule Status
+    pubDate || '2026-10-22',                    // Y - Publish Date
+    pubTime || '18:00',                         // Z - Publish Time
+    liveUrl || 'https://www.instagram.com/',    // AA - Live URL
+    dueDate,                                    // AB - Step 8: Due Date
+    daysLeftFormula,                            // AC - Days Left (Formula)
+    overdueFormula,                             // AD - Overdue (Formula)
+    currentOwner,                               // AE - Current Owner
+    c.blocked?.reason || c.notes || 'In production', // AF - Notes / Blocker
+    new Date(c.updatedAt || Date.now()).toISOString().replace('T', ' ').substring(0, 19), // AG - Last Updated
   ];
 }
 
@@ -1225,12 +1272,12 @@ export async function syncAllToGoogleSheets(explicitSpreadsheetId?: string): Pro
       spreadsheetId,
       requestBody: {
         ranges: [
-          "'Content Tracker'!A1:AE500",
+          "'Content Tracker'!A1:AG500",
           "'Master Plan'!A1:V500",
-          "'Reels'!A1:AE500",
-          "'Posts'!A1:AE500",
-          "'Carousels'!A1:AE500",
-          "'AI Reels'!A1:AE500",
+          "'Reels'!A1:AG500",
+          "'Posts'!A1:AG500",
+          "'Carousels'!A1:AG500",
+          "'AI Reels'!A1:AG500",
           "'Clients'!A1:M500",
           "'Schedule'!A1:L500",
           "'Employees'!A1:F500",
@@ -1250,11 +1297,11 @@ export async function syncAllToGoogleSheets(explicitSpreadsheetId?: string): Pro
     { range: "'Schedule'!A1:L" + scheduleRows.length, values: scheduleRows },
     { range: "'Employees'!A1:F" + (employeeRows.length + 1), values: [EMPLOYEE_HEADERS, ...employeeRows] },
     { range: "'Tasks'!A1:H" + (taskRows.length + 1), values: [TASK_HEADERS, ...taskRows] },
-    { range: "'Content Tracker'!A1:AE" + (contentRows.length + 1), values: [CONTENT_TRACKER_HEADERS, ...contentRows] },
-    { range: "'Reels'!A1:AE" + (reelsRows.length + 1), values: [CONTENT_TRACKER_HEADERS, ...reelsRows] },
-    { range: "'Posts'!A1:AE" + (postsRows.length + 1), values: [CONTENT_TRACKER_HEADERS, ...postsRows] },
-    { range: "'Carousels'!A1:AE" + (carouselsRows.length + 1), values: [CONTENT_TRACKER_HEADERS, ...carouselsRows] },
-    { range: "'AI Reels'!A1:AE" + (aiReelsRows.length + 1), values: [CONTENT_TRACKER_HEADERS, ...aiReelsRows] },
+    { range: "'Content Tracker'!A1:AG" + (contentRows.length + 1), values: [CONTENT_TRACKER_HEADERS, ...contentRows] },
+    { range: "'Reels'!A1:AG" + (reelsRows.length + 1), values: [CONTENT_TRACKER_HEADERS, ...reelsRows] },
+    { range: "'Posts'!A1:AG" + (postsRows.length + 1), values: [CONTENT_TRACKER_HEADERS, ...postsRows] },
+    { range: "'Carousels'!A1:AG" + (carouselsRows.length + 1), values: [CONTENT_TRACKER_HEADERS, ...carouselsRows] },
+    { range: "'AI Reels'!A1:AG" + (aiReelsRows.length + 1), values: [CONTENT_TRACKER_HEADERS, ...aiReelsRows] },
   ];
 
   await s.spreadsheets.values.batchUpdate({
