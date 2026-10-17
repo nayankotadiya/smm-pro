@@ -22,13 +22,15 @@ function getStageDisplay(stage?: string): { label: string; variant: 'neutral' | 
       return { label: 'Shoot Production', variant: 'primary' };
     case 'RAW_FOOTAGE':
       return { label: 'Footage Uploaded', variant: 'neutral' };
+    case 'GRAPHIC_DESIGN':
+      return { label: 'Designing Graphics', variant: 'primary' };
     case 'EDITING':
       return { label: 'Video Editing', variant: 'primary' };
     case 'SMM_REVIEW':
     case 'FINAL_REVIEW':
       return { label: 'Quality Review', variant: 'neutral' };
     case 'CLIENT_FINAL_APPROVAL':
-      return { label: 'Final Video Cut', variant: 'warning' };
+      return { label: 'Final Sign-off', variant: 'warning' };
     case 'SCHEDULE':
       return { label: 'Scheduled', variant: 'primary' };
     case 'PUBLISHED':
@@ -46,6 +48,7 @@ function getStageDetailedName(stage?: string): string {
     case 'CLIENT_REVIEW': return 'Waiting for Your Review';
     case 'SHOOTING': return 'Filming / Shooting';
     case 'RAW_FOOTAGE': return 'Raw Footage Ingest';
+    case 'GRAPHIC_DESIGN': return 'Designing Graphics & Layout';
     case 'EDITING': return 'Editing & Color';
     case 'SMM_REVIEW': return 'Social Lead Review';
     case 'FINAL_REVIEW': return 'Agency Final Polish';
