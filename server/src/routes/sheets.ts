@@ -48,7 +48,7 @@ r.get('/data', requirePerm('clients.read'), ah(async (req, res) => {
   // Fetch contents and clients lookup for instant navigation
   const [contentsList, clientsList] = await Promise.all([
     Content.find({}, '_id contentId title type platform stage clientId driveFolderId publishedUrl').lean(),
-    Client.find({}, '_id name code businessName').lean(),
+    Client.find({}, '_id name clientCode businessName').lean(),
   ]);
 
   const contentLookup: Record<string, any> = {};
@@ -71,7 +71,7 @@ r.get('/data', requirePerm('clients.read'), ah(async (req, res) => {
   for (const cl of clientsList) {
     if (cl.name) clientLookup[cl.name.toLowerCase().trim()] = String(cl._id);
     if (cl.businessName) clientLookup[cl.businessName.toLowerCase().trim()] = String(cl._id);
-    if (cl.code) clientLookup[cl.code.toLowerCase().trim()] = String(cl._id);
+    if (cl.clientCode) clientLookup[cl.clientCode.toLowerCase().trim()] = String(cl._id);
   }
 
   try {

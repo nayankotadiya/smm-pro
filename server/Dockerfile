@@ -4,6 +4,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY server/package.json server/
 COPY client/package.json client/
+COPY client-portal/package.json client-portal/
 RUN npm ci --workspace server --include-workspace-root
 COPY server server
 RUN npm run build --workspace server
@@ -14,6 +15,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY server/package.json server/
 COPY client/package.json client/
+COPY client-portal/package.json client-portal/
 RUN npm ci --workspace server --include-workspace-root --omit=dev && npm cache clean --force
 COPY --from=build /app/server/dist server/dist
 WORKDIR /app/server
