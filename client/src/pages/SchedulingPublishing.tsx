@@ -1207,7 +1207,7 @@ export default function SchedulingPublishing() {
             )}
           </div>
           <div>
-            <label className="text-[11px] font-bold text-ink-3 uppercase tracking-wider mb-1 block flex items-center gap-1">
+            <label className="text-[11px] font-bold text-ink-3 uppercase tracking-wider mb-1 flex items-center gap-1">
               <Film size={12} className="text-amber-500" /> Shooter
             </label>
             <Select value={selectedShooter} onChange={(e) => setSelectedShooter(e.target.value)}>
@@ -1218,7 +1218,7 @@ export default function SchedulingPublishing() {
             </Select>
           </div>
           <div>
-            <label className="text-[11px] font-bold text-ink-3 uppercase tracking-wider mb-1 block flex items-center gap-1">
+            <label className="text-[11px] font-bold text-ink-3 uppercase tracking-wider mb-1 flex items-center gap-1">
               <Clock size={12} className="text-purple-500" /> Editor
             </label>
             <Select value={selectedEditor} onChange={(e) => setSelectedEditor(e.target.value)}>
