@@ -123,17 +123,61 @@ export const CONTENT_TRACKER_HEADERS = [
 
 export const CONTENT_TRACKER_COLUMNS = CONTENT_TRACKER_HEADERS;
 
-const SHEETS_CONFIG = [
+export const SHEETS_CONFIG = [
   'Dashboard',
   'Clients',
   'Content Tracker',
+  'Reels',
+  'Posts',
+  'Carousels',
+  'AI Reels',
   'Schedule',
   'Employees',
   'Tasks',
   'Setup Guide',
 ];
 
-/** Create a new Google Spreadsheet with the 7 standard sheets and formatting */
+export const CONTENT_TYPE_SHEETS = ['Content Tracker', 'Reels', 'Posts', 'Carousels', 'AI Reels'];
+
+export function getDedicatedSheetForType(type: string): string {
+  if (['REEL', 'VIDEO', 'SHORT'].includes(type)) return 'Reels';
+  if (['POST', 'IMAGE', 'OTHER'].includes(type)) return 'Posts';
+  if (type === 'CAROUSEL') return 'Carousels';
+  if (['AI_REEL', 'AI_IMAGE'].includes(type)) return 'AI Reels';
+  return 'Content Tracker';
+}
+
+/** Ensure all 11 required sheets exist in the spreadsheet, creating any that are missing */
+export async function ensureAllSheetsExist(spreadsheetId: string): Promise<void> {
+  const s = sheets();
+  const meta = await s.spreadsheets.get({ spreadsheetId });
+  const existingTitles = new Set((meta.data.sheets || []).map((sh) => sh.properties?.title));
+
+  const missing = SHEETS_CONFIG.filter((t) => !existingTitles.has(t));
+  if (missing.length === 0) return;
+
+  const requests: sheets_v4.Schema$Request[] = missing.map((title) => ({
+    addSheet: {
+      properties: {
+        title,
+        gridProperties: {
+          rowCount: 500,
+          columnCount: CONTENT_TYPE_SHEETS.includes(title) ? 32 : 20,
+          frozenRowCount: 1,
+        },
+      },
+    },
+  }));
+
+  await s.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: { requests },
+  });
+
+  await setupSheetHeadersAndFormulas(spreadsheetId);
+}
+
+/** Create a new Google Spreadsheet with all standard and dedicated content sheets */
 export async function createDefaultSpreadsheet(title = 'SMM Pro Production Tracker'): Promise<{ spreadsheetId: string; url: string }> {
   const s = sheets();
   const res = await s.spreadsheets.create({
@@ -145,7 +189,7 @@ export async function createDefaultSpreadsheet(title = 'SMM Pro Production Track
           title: sheetTitle,
           gridProperties: {
             rowCount: 500,
-            columnCount: sheetTitle === 'Content Tracker' ? 32 : 20,
+            columnCount: CONTENT_TYPE_SHEETS.includes(sheetTitle) ? 32 : 20,
             frozenRowCount: 1,
           },
         },
@@ -163,7 +207,7 @@ export async function createDefaultSpreadsheet(title = 'SMM Pro Production Track
   return { spreadsheetId, url };
 }
 
-/** Setup headers, column widths, and formulas on the spreadsheet */
+/** Setup headers, column widths, and formulas on all sheets */
 export async function setupSheetHeadersAndFormulas(spreadsheetId: string) {
   const s = sheets();
 
@@ -174,7 +218,11 @@ export async function setupSheetHeadersAndFormulas(spreadsheetId: string) {
     ['Sheet Name', 'Purpose', 'Notes'],
     ['Dashboard', 'Executive metrics & production counts', 'Calculated in real-time from SMM Pro DB'],
     ['Clients', 'Master list of agency clients', 'Syncs client profile and active campaigns'],
-    ['Content Tracker', 'Central production tracker across all content', 'Features dynamic Days Left, Overdue formulas & Status Colors'],
+    ['Content Tracker', 'Master central production tracker', 'Contains all content types with Days Left, Overdue formulas & Status Colors'],
+    ['Reels', 'Dedicated Reels & Video production pipeline', 'Contains REEL, VIDEO, and SHORT content items'],
+    ['Posts', 'Dedicated Graphic Posts pipeline', 'Contains POST and static graphic content items'],
+    ['Carousels', 'Dedicated Educational Carousels pipeline', 'Contains multi-slide CAROUSEL content items'],
+    ['AI Reels', 'Dedicated AI Video pipeline', 'Contains AI_REEL and AI generated video content items'],
     ['Schedule', 'Scheduled calendar for social media publishing', 'Updated upon scheduling and publishing'],
     ['Employees', 'Employee directory and task load', 'Tracks active and overdue tasks per member'],
     ['Tasks', 'Individual task breakdown', 'Connected to the SMM Pro task lifecycle'],
@@ -202,6 +250,22 @@ export async function setupSheetHeadersAndFormulas(spreadsheetId: string) {
           values: [CONTENT_TRACKER_HEADERS],
         },
         {
+          range: "'Reels'!A1:AB1",
+          values: [CONTENT_TRACKER_HEADERS],
+        },
+        {
+          range: "'Posts'!A1:AB1",
+          values: [CONTENT_TRACKER_HEADERS],
+        },
+        {
+          range: "'Carousels'!A1:AB1",
+          values: [CONTENT_TRACKER_HEADERS],
+        },
+        {
+          range: "'AI Reels'!A1:AB1",
+          values: [CONTENT_TRACKER_HEADERS],
+        },
+        {
           range: "'Clients'!A1:G1",
           values: [['Client ID', 'Client Name', 'Business Name', 'Contact Person', 'Phone', 'Status', 'Last Synced']],
         },
@@ -218,14 +282,14 @@ export async function setupSheetHeadersAndFormulas(spreadsheetId: string) {
           values: [['Task ID', 'Content ID', 'Title', 'Assigned To', 'Kind', 'Priority', 'Status', 'Due Date']],
         },
         {
-          range: "'Setup Guide'!A1:C22",
+          range: "'Setup Guide'!A1:C26",
           values: setupGuideValues,
         },
       ],
     },
   });
 
-  // Apply conditional formatting rules for status colors on Content Tracker
+  // Apply conditional formatting rules for status colors on all content sheets
   try {
     await applyStatusConditionalFormatting(spreadsheetId);
   } catch (err: any) {
@@ -233,12 +297,12 @@ export async function setupSheetHeadersAndFormulas(spreadsheetId: string) {
   }
 }
 
-/** Apply Google Sheets conditional formatting based on user status colors */
+/** Apply Google Sheets conditional formatting based on user status colors across all content sheets */
 export async function applyStatusConditionalFormatting(spreadsheetId: string) {
   const s = sheets();
   const meta = await s.spreadsheets.get({ spreadsheetId });
-  const contentSheet = meta.data.sheets?.find((sh) => sh.properties?.title === 'Content Tracker');
-  const sheetId = contentSheet?.properties?.sheetId || 0;
+  const targetSheets = meta.data.sheets?.filter((sh) => CONTENT_TYPE_SHEETS.includes(sh.properties?.title || '')) || [];
+  if (targetSheets.length === 0) return;
 
   const rules: sheets_v4.Schema$Request[] = [];
 
@@ -256,37 +320,42 @@ export async function applyStatusConditionalFormatting(spreadsheetId: string) {
     'No': '#DCFCE7',  // Overdue No
   };
 
-  for (const [text, hex] of Object.entries(colorMap)) {
-    const rgb = hexToRgbColor(hex);
-    rules.push({
-      addConditionalFormatRule: {
-        rule: {
-          ranges: [
-            {
-              sheetId,
-              startRowIndex: 1,
-              endRowIndex: 500,
-              startColumnIndex: 0,
-              endColumnIndex: 28,
-            },
-          ],
-          booleanRule: {
-            condition: {
-              type: 'TEXT_EQ',
-              values: [{ userEnteredValue: text }],
-            },
-            format: {
-              backgroundColor: rgb,
-              textFormat: {
-                bold: true,
-                foregroundColor: ['YES', 'Shoot Cancelled'].includes(text) ? { red: 0.8, green: 0, blue: 0 } : { red: 0, green: 0, blue: 0 },
+  for (const sh of targetSheets) {
+    const sheetId = sh.properties?.sheetId;
+    if (sheetId === undefined || sheetId === null) continue;
+
+    for (const [text, hex] of Object.entries(colorMap)) {
+      const rgb = hexToRgbColor(hex);
+      rules.push({
+        addConditionalFormatRule: {
+          rule: {
+            ranges: [
+              {
+                sheetId,
+                startRowIndex: 1,
+                endRowIndex: 500,
+                startColumnIndex: 0,
+                endColumnIndex: 28,
+              },
+            ],
+            booleanRule: {
+              condition: {
+                type: 'TEXT_EQ',
+                values: [{ userEnteredValue: text }],
+              },
+              format: {
+                backgroundColor: rgb,
+                textFormat: {
+                  bold: true,
+                  foregroundColor: ['YES', 'Shoot Cancelled'].includes(text) ? { red: 0.8, green: 0, blue: 0 } : { red: 0, green: 0, blue: 0 },
+                },
               },
             },
           },
+          index: 0,
         },
-        index: 0,
-      },
-    });
+      });
+    }
   }
 
   if (rules.length > 0) {
@@ -381,6 +450,10 @@ export function buildContentRow(c: any, rowIndex: number): any[] {
 export async function syncAllToGoogleSheets(): Promise<{
   success: boolean;
   contentCount: number;
+  reelsCount: number;
+  postsCount: number;
+  carouselsCount: number;
+  aiReelsCount: number;
   clientCount: number;
   scheduleCount: number;
   taskCount: number;
@@ -393,6 +466,9 @@ export async function syncAllToGoogleSheets(): Promise<{
   }
 
   const s = sheets();
+
+  // Ensure all 11 sheets exist (Dashboard, Clients, Content Tracker, Reels, Posts, Carousels, AI Reels, Schedule, Employees, Tasks, Setup Guide)
+  await ensureAllSheetsExist(spreadsheetId);
 
   // 1. Fetch all active data from MongoDB
   const [contents, clients, tasks, employees, scheduledPosts] = await Promise.all([
@@ -408,8 +484,20 @@ export async function syncAllToGoogleSheets(): Promise<{
     ScheduledPost.find({}).sort({ scheduledAt: -1 }).populate('clientId', 'name').populate('contentId', 'contentId title').lean(),
   ]);
 
-  // 2. Build Content Tracker rows
+  // 2. Build rows for Master Content Tracker and Dedicated Type Trackers
   const contentRows = contents.map((c, index) => buildContentRow(c, index + 2));
+
+  const reelsContents = contents.filter((c) => ['REEL', 'VIDEO', 'SHORT'].includes(c.type));
+  const reelsRows = reelsContents.map((c, index) => buildContentRow(c, index + 2));
+
+  const postsContents = contents.filter((c) => ['POST', 'IMAGE', 'OTHER'].includes(c.type));
+  const postsRows = postsContents.map((c, index) => buildContentRow(c, index + 2));
+
+  const carouselsContents = contents.filter((c) => c.type === 'CAROUSEL');
+  const carouselsRows = carouselsContents.map((c, index) => buildContentRow(c, index + 2));
+
+  const aiReelsContents = contents.filter((c) => ['AI_REEL', 'AI_IMAGE'].includes(c.type));
+  const aiReelsRows = aiReelsContents.map((c, index) => buildContentRow(c, index + 2));
 
   // 3. Build Client rows
   const clientRows = clients.map((cl) => [
@@ -462,10 +550,6 @@ export async function syncAllToGoogleSheets(): Promise<{
   ]);
 
   // 7. Calculate Dashboard summary
-  const reels = contents.filter((c) => c.type === 'REEL').length;
-  const posts = contents.filter((c) => c.type === 'POST').length;
-  const carousels = contents.filter((c) => c.type === 'CAROUSEL').length;
-  const aiReels = contents.filter((c) => c.type === 'AI_REEL').length;
   const overdue = contents.filter((c) => c.deadline && new Date(c.deadline) < new Date() && c.status !== 'COMPLETED').length;
   const scheduled = contents.filter((c) => c.stage === 'SCHEDULE' || c.status === 'SCHEDULED').length;
   const posted = contents.filter((c) => c.stage === 'PUBLISHED' || c.status === 'COMPLETED').length;
@@ -476,25 +560,62 @@ export async function syncAllToGoogleSheets(): Promise<{
     [''],
     ['METRIC', 'COUNT', 'REMARKS'],
     ['Total Clients', clients.length, 'Active Agency Clients'],
-    ['Total Content Items', contents.length, 'All Tracked Content'],
-    ['Reels in Production', reels, 'Standard Reel Pipeline'],
-    ['Posts in Production', posts, 'Static Graphics & Posts'],
-    ['Carousels in Production', carousels, 'Multi-Slide Content'],
-    ['AI Reels in Production', aiReels, 'AI Video Generation Pipeline'],
+    ['Total Content Items', contents.length, 'All Tracked Content across all types'],
+    ['Reels in Production', reelsContents.length, 'Standard Reels, Videos & Shorts'],
+    ['Posts in Production', postsContents.length, 'Static Graphics & Single Posts'],
+    ['Carousels in Production', carouselsContents.length, 'Multi-Slide Educational Content'],
+    ['AI Reels in Production', aiReelsContents.length, 'AI Video & Synthetic Generation'],
     ['Overdue Content', overdue, 'Exceeded Target Deadline'],
     ['Scheduled Posts', scheduled, 'Ready for Publishing'],
     ['Published Content', posted, 'Live on Social Media'],
   ];
 
-  // 8. Execute batch update to Google Sheets
-  const updates = [
+  // 8. Clear previous rows to ensure clean sync
+  try {
+    await s.spreadsheets.values.batchClear({
+      spreadsheetId,
+      requestBody: {
+        ranges: [
+          "'Content Tracker'!A2:AB500",
+          "'Reels'!A2:AB500",
+          "'Posts'!A2:AB500",
+          "'Carousels'!A2:AB500",
+          "'AI Reels'!A2:AB500",
+          "'Clients'!A2:G500",
+          "'Schedule'!A2:H500",
+          "'Employees'!A2:F500",
+          "'Tasks'!A2:H500",
+        ],
+      },
+    });
+  } catch (clearErr: any) {
+    console.warn('[sheets] Warning clearing previous rows:', clearErr.message);
+  }
+
+  // 9. Execute batch update to Google Sheets across all sheets
+  const updates: sheets_v4.Schema$ValueRange[] = [
     { range: "'Dashboard'!A1:C14", values: dashboardRows },
-    { range: "'Content Tracker'!A2:AB" + (contentRows.length + 1), values: contentRows },
     { range: "'Clients'!A2:G" + (clientRows.length + 1), values: clientRows },
     { range: "'Schedule'!A2:H" + (scheduleRows.length + 1), values: scheduleRows },
     { range: "'Employees'!A2:F" + (employeeRows.length + 1), values: employeeRows },
     { range: "'Tasks'!A2:H" + (taskRows.length + 1), values: taskRows },
   ];
+
+  if (contentRows.length > 0) {
+    updates.push({ range: "'Content Tracker'!A2:AB" + (contentRows.length + 1), values: contentRows });
+  }
+  if (reelsRows.length > 0) {
+    updates.push({ range: "'Reels'!A2:AB" + (reelsRows.length + 1), values: reelsRows });
+  }
+  if (postsRows.length > 0) {
+    updates.push({ range: "'Posts'!A2:AB" + (postsRows.length + 1), values: postsRows });
+  }
+  if (carouselsRows.length > 0) {
+    updates.push({ range: "'Carousels'!A2:AB" + (carouselsRows.length + 1), values: carouselsRows });
+  }
+  if (aiReelsRows.length > 0) {
+    updates.push({ range: "'AI Reels'!A2:AB" + (aiReelsRows.length + 1), values: aiReelsRows });
+  }
 
   await s.spreadsheets.values.batchUpdate({
     spreadsheetId,
@@ -513,6 +634,10 @@ export async function syncAllToGoogleSheets(): Promise<{
         lastSyncedAt: new Date(),
         status: 'SUCCESS',
         contentCount: contents.length,
+        reelsCount: reelsContents.length,
+        postsCount: postsContents.length,
+        carouselsCount: carouselsContents.length,
+        aiReelsCount: aiReelsContents.length,
         clientCount: clients.length,
         taskCount: tasks.length,
       },
@@ -523,22 +648,33 @@ export async function syncAllToGoogleSheets(): Promise<{
   await ActivityLog.create({
     actorType: 'SYSTEM',
     action: 'sheets.sync',
-    message: `Synchronized ${contents.length} content items and ${clients.length} clients to Google Sheets`,
-    meta: { contentCount: contents.length, clientCount: clients.length },
+    message: `Synchronized ${contents.length} contents (Reels: ${reelsContents.length}, Posts: ${postsContents.length}, Carousels: ${carouselsContents.length}, AI Reels: ${aiReelsContents.length}) and ${clients.length} clients to Google Sheets`,
+    meta: {
+      contentCount: contents.length,
+      reelsCount: reelsContents.length,
+      postsCount: postsContents.length,
+      carouselsCount: carouselsContents.length,
+      aiReelsCount: aiReelsContents.length,
+      clientCount: clients.length,
+    },
   });
 
   return {
     success: true,
     contentCount: contents.length,
+    reelsCount: reelsContents.length,
+    postsCount: postsContents.length,
+    carouselsCount: carouselsContents.length,
+    aiReelsCount: aiReelsContents.length,
     clientCount: clients.length,
     scheduleCount: scheduleRows.length,
     taskCount: tasks.length,
     employeeCount: employees.length,
-    message: `Successfully synchronized ${contents.length} content records to Google Sheets`,
+    message: `Successfully synchronized ${contents.length} content records across Master and Dedicated sheets (Reels, Posts, Carousels, AI Reels) in Google Sheets`,
   };
 }
 
-/** Synchronizes a single content item row into Google Sheets idempotently */
+/** Synchronizes a single content item row into Google Sheets (both Master and Dedicated sheet) */
 export async function syncSingleContentToSheet(contentId: string): Promise<void> {
   const spreadsheetId = await getSpreadsheetId();
   if (!spreadsheetId) return; // Silent if not configured
@@ -553,36 +689,44 @@ export async function syncSingleContentToSheet(contentId: string): Promise<void>
 
     if (!content) return;
 
-    // Fetch existing Column A (Content IDs) to check for row match
-    const colA = await s.spreadsheets.values.get({
-      spreadsheetId,
-      range: "'Content Tracker'!A2:A500",
-    });
+    const targetSheetsToUpdate = ['Content Tracker'];
+    const dedicated = getDedicatedSheetForType(content.type);
+    if (dedicated && !targetSheetsToUpdate.includes(dedicated)) {
+      targetSheetsToUpdate.push(dedicated);
+    }
 
-    const rows = colA.data.values || [];
-    let targetRow = -1;
+    for (const sheetName of targetSheetsToUpdate) {
+      // Fetch existing Column A (Content IDs) to check for row match
+      const colA = await s.spreadsheets.values.get({
+        spreadsheetId,
+        range: `'${sheetName}'!A2:A500`,
+      });
 
-    for (let i = 0; i < rows.length; i++) {
-      if (rows[i][0] === content.contentId) {
-        targetRow = i + 2; // +2 for 1-based index and header row
-        break;
+      const rows = colA.data.values || [];
+      let targetRow = -1;
+
+      for (let i = 0; i < rows.length; i++) {
+        if (rows[i][0] === content.contentId) {
+          targetRow = i + 2; // +2 for 1-based index and header row
+          break;
+        }
       }
+
+      if (targetRow === -1) {
+        targetRow = rows.length + 2;
+      }
+
+      const rowData = buildContentRow(content, targetRow);
+
+      await s.spreadsheets.values.update({
+        spreadsheetId,
+        range: `'${sheetName}'!A${targetRow}:AB${targetRow}`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: {
+          values: [rowData],
+        },
+      });
     }
-
-    if (targetRow === -1) {
-      targetRow = rows.length + 2;
-    }
-
-    const rowData = buildContentRow(content, targetRow);
-
-    await s.spreadsheets.values.update({
-      spreadsheetId,
-      range: `'Content Tracker'!A${targetRow}:AB${targetRow}`,
-      valueInputOption: 'USER_ENTERED',
-      requestBody: {
-        values: [rowData],
-      },
-    });
   } catch (err: any) {
     console.warn(`[sheets] Failed to sync content ${contentId} to Google Sheets:`, err.message);
   }

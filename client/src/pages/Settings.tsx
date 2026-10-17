@@ -977,7 +977,7 @@ function GoogleSheetsConfigCard() {
     >
       <div className="space-y-4 text-[13px]">
         <p className="text-ink-2 leading-relaxed">
-          Bi-directional internal synchronization between SMM Pro's MongoDB database and the Google Sheets Master Tracker. SMM Pro is the primary source of truth. Contains all 7 configured sheets: <strong>Dashboard, Clients, Content Tracker (Cols A–AB), Schedule, Employees, Tasks, Setup Guide</strong> with automated formulas (Days Left, Overdue) and status conditional formatting.
+          Bi-directional internal synchronization between SMM Pro's MongoDB database and the Google Sheets Master Tracker. SMM Pro is the primary source of truth. Features 11 synchronized sheets: <strong>Dashboard, Clients, Content Tracker (Master), Reels, Posts, Carousels, AI Reels, Schedule, Employees, Tasks, Setup Guide</strong> with automated formulas (Days Left, Overdue) and status conditional formatting.
         </p>
 
         {d.spreadsheetUrl && (
