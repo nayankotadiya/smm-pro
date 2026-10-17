@@ -1212,8 +1212,9 @@ export default function SheetsHub() {
                   <tbody className="divide-y divide-line/40">
                     {filteredRows.map((row, rowIdx) => {
                       const stage = getRowStage(row, rawHeaders, customColors);
-                      const contentIdCell = row[0] || '';
-                      const contentMeta = contentLookup[contentIdCell];
+                      const contentIdColIdx = rawHeaders.findIndex(h => (h || '').toLowerCase().trim() === 'content id');
+                      const contentIdCell = contentIdColIdx >= 0 ? (row[contentIdColIdx] || '') : (row[0] || '');
+                      const contentMeta = contentLookup[contentIdCell] || contentLookup[contentIdCell.toUpperCase()];
                       const isHighlighted = filterMode === 'highlight' && doesRowMatchSelectedFilters(row);
 
                       return (
@@ -1260,39 +1261,37 @@ export default function SheetsHub() {
                             const style = getCellStyle(cellStr);
 
                             // 1. Content ID column: Clickable directly to Content Workspace
-                            if (headerName === 'content id') {
-                              if (contentMeta) {
-                                return (
-                                  <td key={origColIdx} className="py-2 px-3 whitespace-nowrap border-r border-line/30 text-xs font-medium">
-                                    <Link
-                                      to={`/content/${contentMeta._id}`}
-                                      className="inline-flex items-center gap-1.5 font-mono font-black text-primary hover:underline hover:text-primary-ink bg-primary/10 border border-primary/25 rounded-md px-2 py-0.5 transition-all shadow-2xs group/link"
-                                      title={`Open ${cell} Workspace (${contentMeta.type})`}
-                                    >
-                                      <span>{cell}</span>
-                                      <ExternalLink size={10} className="opacity-70 group-hover/link:opacity-100" />
-                                    </Link>
-                                  </td>
-                                );
-                              }
+                            if (headerName === 'content id' && cellStr) {
+                              const contentTargetUrl = contentMeta?._id ? `/content/${contentMeta._id}` : `/content?search=${encodeURIComponent(cellStr)}`;
+                              return (
+                                <td key={origColIdx} className="py-2 px-3 whitespace-nowrap border-r border-line/30 text-xs font-medium">
+                                  <Link
+                                    to={contentTargetUrl}
+                                    className="inline-flex items-center gap-1.5 font-mono font-black text-primary hover:underline hover:text-primary-ink bg-primary/10 border border-primary/25 rounded-md px-2 py-0.5 transition-all shadow-2xs group/link"
+                                    title={`Open ${cell} Workspace ${contentMeta ? `(${contentMeta.type})` : ''}`}
+                                  >
+                                    <span>{cell}</span>
+                                    <ExternalLink size={10} className="opacity-70 group-hover/link:opacity-100" />
+                                  </Link>
+                                </td>
+                              );
                             }
 
                             // 2. Client column: Clickable directly to Client Dashboard
                             if (headerName === 'client' && cellStr) {
-                              const clientId = clientLookup[cellStr.toLowerCase()];
-                              if (clientId) {
-                                return (
-                                  <td key={origColIdx} className="py-2 px-3 whitespace-nowrap border-r border-line/30 text-xs font-semibold text-ink">
-                                    <Link
-                                      to={`/clients/${clientId}`}
-                                      className="font-bold text-ink hover:text-primary hover:underline transition-colors"
-                                      title={`View ${cell} Client Profile`}
-                                    >
-                                      {cell}
-                                    </Link>
-                                  </td>
-                                );
-                              }
+                              const clientId = clientLookup[cellStr.toLowerCase()] || clientLookup[cellStr];
+                              const clientTargetUrl = clientId ? `/clients/${clientId}` : `/clients?search=${encodeURIComponent(cellStr)}`;
+                              return (
+                                <td key={origColIdx} className="py-2 px-3 whitespace-nowrap border-r border-line/30 text-xs font-semibold text-ink">
+                                  <Link
+                                    to={clientTargetUrl}
+                                    className="font-bold text-ink hover:text-primary hover:underline transition-colors"
+                                    title={`View ${cell} Client Profile`}
+                                  >
+                                    {cell}
+                                  </Link>
+                                </td>
+                              );
                             }
 
                             // 3. Content Type column: Clickable filter to dedicated sheet
@@ -1318,13 +1317,14 @@ export default function SheetsHub() {
                             }
 
                             // 4. Topic / Brief column: Clickable directly to content workspace
-                            if ((headerName.includes('topic') || headerName.includes('brief') || headerName === 'title') && contentMeta) {
+                            if ((headerName.includes('topic') || headerName.includes('brief') || headerName === 'title') && cellStr) {
+                              const topicTargetUrl = contentMeta?._id ? `/content/${contentMeta._id}` : `/content?search=${encodeURIComponent(cellStr)}`;
                               return (
                                 <td key={origColIdx} className="py-2 px-3 whitespace-nowrap border-r border-line/30 text-xs font-medium text-ink max-w-sm truncate">
                                   <Link
-                                    to={`/content/${contentMeta._id}`}
+                                    to={topicTargetUrl}
                                     className="hover:text-primary hover:underline transition-colors truncate block font-medium"
-                                    title={`Open ${contentMeta.title || cell}`}
+                                    title={`Open ${contentMeta?.title || cell}`}
                                   >
                                     {cell || '—'}
                                   </Link>
