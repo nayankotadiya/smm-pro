@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, ArrowRight, CheckCircle2, Clock, Calendar, Sparkles, User, Video, FileText, ChevronRight, Send, MessageSquare, BellRing, Check } from 'lucide-react';
+import { AlertCircle, ArrowRight, CheckCircle2, Clock, Calendar, Sparkles, User, Video, FileText, ChevronRight, Send, MessageSquare, BellRing, Check, Package, AlertTriangle } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/store/auth';
 import { PendingApproval, DashboardStats, UpcomingPost, ClientBrief } from '@/lib/types';
@@ -223,6 +223,114 @@ export function DashboardPage() {
             ))}
           </div>
         </section>
+      )}
+
+      {/* Monthly Content Package Quota Fulfillment */}
+      {stats?.packageProgress && (
+        <Card className="p-4 sm:p-6 bg-gradient-to-br from-surface to-surface-2 border-line">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+            <div>
+              <h2 className="text-sm sm:text-base font-bold text-ink flex items-center gap-2">
+                <Package size={17} className="text-primary" /> Monthly Deliverables Package
+              </h2>
+              <p className="text-xs text-ink-3">
+                Package Target: {stats.packageProgress.reels.target} Reels, {stats.packageProgress.posts.target} Posts, {stats.packageProgress.carousels.target} Carousels
+              </p>
+            </div>
+            <div className="text-left sm:text-right">
+              <span className="text-2xl font-black text-ink">{stats.packageProgress.total.done}</span>
+              <span className="text-xs text-ink-3 font-medium"> / {stats.packageProgress.total.target} Completed ({stats.packageProgress.fulfillmentPct}%)</span>
+            </div>
+          </div>
+
+          {stats.packageProgress.total.remaining > 0 ? (
+            <div className="mb-4 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 flex items-center gap-2.5">
+              <AlertTriangle size={18} className="text-amber-500 shrink-0" />
+              <div className="text-xs font-semibold text-ink">
+                Deliverables In Production: <span className="text-amber-500 font-bold">{[
+                  stats.packageProgress.reels.remaining > 0 ? `${stats.packageProgress.reels.remaining} Reels` : '',
+                  stats.packageProgress.posts.remaining > 0 ? `${stats.packageProgress.posts.remaining} Posts` : '',
+                  stats.packageProgress.carousels.remaining > 0 ? `${stats.packageProgress.carousels.remaining} Carousels` : '',
+                ].filter(Boolean).join(', ')} pending</span> to complete this month's package.
+              </div>
+            </div>
+          ) : (
+            <div className="mb-4 rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3 flex items-center gap-2.5">
+              <CheckCircle2 size={18} className="text-emerald-500 shrink-0" />
+              <div className="text-xs font-bold text-emerald-500">
+                100% Package Deliverables Completed for this cycle!
+              </div>
+            </div>
+          )}
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            {/* Reels */}
+            <div className="rounded-xl border border-line/80 bg-surface p-3 space-y-2">
+              <div className="flex items-center justify-between text-xs font-bold text-ink">
+                <span>🎬 Reels</span>
+                {stats.packageProgress.reels.remaining === 0 ? (
+                  <span className="text-[10px] text-emerald-500 bg-emerald-500/15 px-2 py-0.5 rounded-full">✓ Completed</span>
+                ) : (
+                  <span className="text-[10px] text-amber-500 bg-amber-500/15 px-2 py-0.5 rounded-full">{stats.packageProgress.reels.remaining} Remaining</span>
+                )}
+              </div>
+              <div className="flex items-baseline justify-between text-xs">
+                <span className="text-ink-3">Delivered:</span>
+                <span className="font-mono font-bold text-ink text-sm">{stats.packageProgress.reels.done} / {stats.packageProgress.reels.target}</span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-surface-2 overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${stats.packageProgress.reels.remaining === 0 ? 'bg-emerald-500' : 'bg-primary'}`}
+                  style={{ width: `${Math.min(100, Math.round((stats.packageProgress.reels.done / Math.max(1, stats.packageProgress.reels.target)) * 100))}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Posts */}
+            <div className={`rounded-xl border p-3 space-y-2 ${stats.packageProgress.posts.remaining > 0 ? 'border-rose-500/40 bg-rose-500/5' : 'border-line/80 bg-surface'}`}>
+              <div className="flex items-center justify-between text-xs font-bold text-ink">
+                <span>🖼️ Posts</span>
+                {stats.packageProgress.posts.remaining === 0 ? (
+                  <span className="text-[10px] text-emerald-500 bg-emerald-500/15 px-2 py-0.5 rounded-full">✓ Completed</span>
+                ) : (
+                  <span className="text-[10px] font-black text-rose-500 bg-rose-500/20 px-2 py-0.5 rounded-full animate-pulse">⚠️ {stats.packageProgress.posts.remaining} REMAINING</span>
+                )}
+              </div>
+              <div className="flex items-baseline justify-between text-xs">
+                <span className="text-ink-3">Delivered:</span>
+                <span className="font-mono font-bold text-ink text-sm">{stats.packageProgress.posts.done} / {stats.packageProgress.posts.target}</span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-surface-2 overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${stats.packageProgress.posts.remaining === 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                  style={{ width: `${Math.min(100, Math.round((stats.packageProgress.posts.done / Math.max(1, stats.packageProgress.posts.target)) * 100))}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Carousels */}
+            <div className="rounded-xl border border-line/80 bg-surface p-3 space-y-2">
+              <div className="flex items-center justify-between text-xs font-bold text-ink">
+                <span>📑 Carousels</span>
+                {stats.packageProgress.carousels.remaining === 0 ? (
+                  <span className="text-[10px] text-emerald-500 bg-emerald-500/15 px-2 py-0.5 rounded-full">✓ Completed</span>
+                ) : (
+                  <span className="text-[10px] text-amber-500 bg-amber-500/15 px-2 py-0.5 rounded-full">{stats.packageProgress.carousels.remaining} Remaining</span>
+                )}
+              </div>
+              <div className="flex items-baseline justify-between text-xs">
+                <span className="text-ink-3">Delivered:</span>
+                <span className="font-mono font-bold text-ink text-sm">{stats.packageProgress.carousels.done} / {stats.packageProgress.carousels.target}</span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-surface-2 overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${stats.packageProgress.carousels.remaining === 0 ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                  style={{ width: `${Math.min(100, Math.round((stats.packageProgress.carousels.done / Math.max(1, stats.packageProgress.carousels.target)) * 100))}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </Card>
       )}
 
       {/* Deliverable Pace Progress */}

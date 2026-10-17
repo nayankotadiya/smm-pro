@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Plus, Pencil, Phone, Mail, Globe, Instagram, Facebook, MapPin, ExternalLink, MessageSquareText, Eye, EyeOff, Copy, Check, KeyRound, Trash2, Sparkles, Shield } from 'lucide-react';
+import { Plus, Pencil, Phone, Mail, Globe, Instagram, Facebook, MapPin, ExternalLink, MessageSquareText, Eye, EyeOff, Copy, Check, KeyRound, Trash2, Sparkles, Shield, Package, AlertTriangle, CheckCircle2, TrendingUp } from 'lucide-react';
 import { get, post, patch, del, errMsg } from '@/lib/api';
 import { useAuth, useCan } from '@/store/auth';
 import { toast } from '@/store/ui';
@@ -93,6 +93,32 @@ export function Clients() {
                   )}
                 </div>
 
+                {c.packageProgress && (
+                  <div className="mt-2.5 p-2 rounded-xl bg-surface-2/60 border border-line/60 space-y-1.5 text-[12px]">
+                    <div className="flex items-center justify-between font-semibold text-ink">
+                      <span className="flex items-center gap-1 text-[11px] uppercase tracking-wider text-ink-3">
+                        <Package size={12} className="text-primary" /> Monthly Quota
+                      </span>
+                      <span className="text-primary font-bold text-[11px]">{c.packageProgress.fulfillmentPct}% Complete</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-surface border border-line/80">
+                        🎬 {c.packageProgress.reels.done}/{c.packageProgress.reels.target} Reels
+                        {c.packageProgress.reels.remaining === 0 ? ' (✓ Done)' : ` (${c.packageProgress.reels.remaining} left)`}
+                      </span>
+                      <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${c.packageProgress.posts.remaining > 0 ? 'bg-rose-500/15 text-rose-500 border border-rose-500/40 shadow-sm' : 'bg-surface border border-line/80'}`}>
+                        🖼️ {c.packageProgress.posts.done}/{c.packageProgress.posts.target} Posts
+                        {c.packageProgress.posts.remaining > 0 ? ` (⚠️ ${c.packageProgress.posts.remaining} REMAINING)` : ' (✓ Done)'}
+                      </span>
+                      {c.packageProgress.carousels.target > 0 && (
+                        <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-surface border border-line/80 text-ink-3">
+                          📑 {c.packageProgress.carousels.done}/{c.packageProgress.carousels.target} Carousels
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <div className="mt-2.5 flex items-center justify-between text-[12px] text-ink-3 pt-2 border-t border-line/40">
                   <span className="truncate max-w-[65%]">
                     👥 {(c.assignedTeam || []).slice(0, 3).map((u: any) => u.name).join(', ') || 'No team'}
@@ -108,7 +134,7 @@ export function Clients() {
 
           {/* Desktop Table View */}
           <div className="hidden sm:block">
-            <Table head={['Client', 'Category', 'Contact', 'Team', 'Active content', 'Status', ...(user?.role === 'SUPER_ADMIN' || can('clients.delete') ? ['Actions'] : [])]}>
+            <Table head={['Client', 'Category', 'Contact', 'Team', 'Active content', 'Monthly Package & Balance', 'Status', ...(user?.role === 'SUPER_ADMIN' || can('clients.delete') ? ['Actions'] : [])]}>
               {d.map((c) => (
                 <tr key={c._id} onClick={() => nav(`/clients/${c._id}`)} className="group cursor-pointer hover:bg-surface-2 transition-colors">
                   <td className="td">
@@ -126,6 +152,54 @@ export function Clients() {
                   </td>
                   <td className="td tabular font-semibold text-ink">
                     {c.contentCount.active} <span className="font-normal text-ink-3">/ {c.contentCount.total}</span>
+                  </td>
+                  <td className="td">
+                    {c.packageProgress ? (
+                      <div className="space-y-1 text-[11.5px] min-w-[170px]">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="font-semibold text-ink flex items-center gap-1">
+                            🎬 Reels: <span className="font-mono text-ink-2">{c.packageProgress.reels.done}/{c.packageProgress.reels.target}</span>
+                          </span>
+                          {c.packageProgress.reels.remaining === 0 ? (
+                            <span className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/30">
+                              ✓ Done
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-amber-500 bg-amber-500/10 px-1.5 py-0.2 rounded border border-amber-500/30">
+                              {c.packageProgress.reels.remaining} left
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="font-semibold text-ink flex items-center gap-1">
+                            🖼️ Posts: <span className="font-mono text-ink-2">{c.packageProgress.posts.done}/{c.packageProgress.posts.target}</span>
+                          </span>
+                          {c.packageProgress.posts.remaining === 0 ? (
+                            <span className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/30">
+                              ✓ Done
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-black text-rose-500 bg-rose-500/15 px-1.5 py-0.2 rounded border border-rose-500/40 shadow-sm animate-pulse">
+                              ⚠️ {c.packageProgress.posts.remaining} REMAINING
+                            </span>
+                          )}
+                        </div>
+                        {c.packageProgress.carousels.target > 0 && (
+                          <div className="flex items-center justify-between gap-1 text-ink-3">
+                            <span className="flex items-center gap-1">
+                              📑 Carousels: <span className="font-mono">{c.packageProgress.carousels.done}/{c.packageProgress.carousels.target}</span>
+                            </span>
+                            {c.packageProgress.carousels.remaining > 0 && (
+                              <span className="text-[10px] font-medium text-amber-500">
+                                {c.packageProgress.carousels.remaining} left
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-ink-3">—</span>
+                    )}
                   </td>
                   <td className="td"><Badge status={c.status} /></td>
                   {(user?.role === 'SUPER_ADMIN' || can('clients.delete')) && (
@@ -192,6 +266,9 @@ const schema = z.object({
   location: z.string().optional(),
   category: z.string().optional(),
   status: z.string().optional(),
+  packageReels: z.coerce.number().min(0).default(10).optional(),
+  packagePosts: z.coerce.number().min(0).default(5).optional(),
+  packageCarousels: z.coerce.number().min(0).default(2).optional(),
   description: z.string().optional(),
   products: z.string().optional(),
   services: z.string().optional(),
@@ -224,7 +301,20 @@ function ClientForm({ open, onClose, client }: { open: boolean; onClose: () => v
     setShowFbPass(false);
     setShowPortalPass(false);
     setPortalEnabled(!client);
-    f.reset(client ? { ...client, brandColors: (client.brandColors || []).join(', '), fonts: (client.fonts || []).join(', '), status: client.status } : { status: 'ACTIVE' });
+    f.reset(client ? {
+      ...client,
+      packageReels: client.monthlyPackage?.reels ?? 10,
+      packagePosts: client.monthlyPackage?.posts ?? 5,
+      packageCarousels: client.monthlyPackage?.carousels ?? 2,
+      brandColors: (client.brandColors || []).join(', '),
+      fonts: (client.fonts || []).join(', '),
+      status: client.status,
+    } : {
+      status: 'ACTIVE',
+      packageReels: 10,
+      packagePosts: 5,
+      packageCarousels: 2,
+    });
     setAssigned((client?.assignedTeam || []).map((u: any) => u._id || u));
     setDt(Object.fromEntries(Object.entries(client?.defaultTeam || {}).map(([k, v]: any) => [k, v?._id || v || ''])));
   }, [open, client?._id]); // eslint-disable-line
@@ -235,6 +325,11 @@ function ClientForm({ open, onClose, client }: { open: boolean; onClose: () => v
       b.fonts = String(v.fonts || '').split(',').map((s) => s.trim()).filter(Boolean);
       b.assignedTeam = assigned;
       b.defaultTeam = Object.fromEntries(['writer', 'shooter', 'editor', 'smm', 'reviewer'].map((k) => [k, dt[k] || null]));
+      b.monthlyPackage = {
+        reels: Number(v.packageReels ?? 10),
+        posts: Number(v.packagePosts ?? 5),
+        carousels: Number(v.packageCarousels ?? 2),
+      };
       if (!client && portalEnabled) {
         const pEmail = (v.portalEmail || v.email || '').trim().toLowerCase();
         if (pEmail && v.portalPassword) {
@@ -272,6 +367,53 @@ function ClientForm({ open, onClose, client }: { open: boolean; onClose: () => v
             </Select>
           </Field>
           {I('youtube', 'YouTube channel', { placeholder: '@channel' })}
+        </div>
+
+        {/* Monthly Content Package Quota (10 Reels, 5 Posts, etc.) */}
+        <div className="rounded-2xl border border-primary/40 bg-primary/5 p-4 space-y-3 backdrop-blur-md">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-[13.5px] font-bold text-ink">
+              <Package size={16} className="text-primary" />
+              <span>Monthly Content Package &amp; Quotas</span>
+              <Badge t="blue">Auto-Tracked</Badge>
+            </div>
+            <span className="text-[12px] font-semibold text-primary">
+              Total Deliverables: {Number(f.watch('packageReels') || 0) + Number(f.watch('packagePosts') || 0) + Number(f.watch('packageCarousels') || 0)} / month
+            </span>
+          </div>
+
+          <p className="text-[12px] text-ink-3">
+            Define monthly deliverable targets for this client (e.g. 10 Reels, 5 Posts, 2 Carousels). Completion and remaining balances are tracked in real-time across dashboards and Google Sheets.
+          </p>
+
+          <div className="grid gap-3 sm:grid-cols-3 pt-1 border-t border-line/50">
+            <Field label="Monthly Reels Target" hint="e.g. 10 Reels" error={e.packageReels?.message}>
+              <Input
+                type="number"
+                min="0"
+                placeholder="10"
+                {...f.register('packageReels')}
+              />
+            </Field>
+
+            <Field label="Monthly Posts Target" hint="e.g. 5 Posts" error={e.packagePosts?.message}>
+              <Input
+                type="number"
+                min="0"
+                placeholder="5"
+                {...f.register('packagePosts')}
+              />
+            </Field>
+
+            <Field label="Monthly Carousels Target" hint="e.g. 2 Carousels" error={e.packageCarousels?.message}>
+              <Input
+                type="number"
+                min="0"
+                placeholder="2"
+                {...f.register('packageCarousels')}
+              />
+            </Field>
+          </div>
         </div>
 
         {/* Client Portal Credentials block (for initial client onboarding) */}
@@ -452,7 +594,22 @@ export function ClientDetail() {
         <Tabs value={tab} onChange={(k) => setSp(k === 'overview' ? {} : { tab: k }, { replace: true })} tabs={[{ key: 'overview', label: 'Overview' }, { key: 'campaigns', label: 'Campaigns' }, { key: 'content', label: 'Content', count: ov.data?.stats.active }, { key: 'scripts', label: 'Scripts' }, { key: 'reviews', label: 'Client Reviews', count: ov.data?.stats.approvalsOpen }, { key: 'communication', label: 'Communication' }, { key: 'files', label: 'Files' }, { key: 'calendar', label: 'Calendar' }, { key: 'reports', label: 'Reports' }, { key: 'activity', label: 'Activity' }, { key: 'chat', label: 'Internal Chat' }, { key: 'portal', label: 'Client Portal' }]} />
         {tab === 'overview' && <div className="grid gap-5 lg:grid-cols-3">
           <div className="space-y-5 lg:col-span-2">
-            {ov.data && <div className="grid grid-cols-2 gap-3 sm:grid-cols-4"><Stat label="Active content" value={ov.data.stats.active} /><Stat label="Published" value={ov.data.stats.published} /><Stat label="Open client reviews" value={ov.data.stats.approvalsOpen} tone="amber" /><Stat label="Overdue" value={ov.data.stats.overdue} tone="red" /></div>}
+            {ov.data && (
+              <>
+                <ClientPackageCard
+                  c={c}
+                  pkg={ov.data.stats?.packageProgress}
+                  onNewContent={() => setNewContent(true)}
+                  onEditPackage={() => setEdit(true)}
+                />
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <Stat label="Active content" value={ov.data.stats.active} />
+                  <Stat label="Published" value={ov.data.stats.published} />
+                  <Stat label="Open client reviews" value={ov.data.stats.approvalsOpen} tone="amber" />
+                  <Stat label="Overdue" value={ov.data.stats.overdue} tone="red" />
+                </div>
+              </>
+            )}
             <Card title="About"><dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">{TEXT.filter(([k]) => c[k]).map(([k, l]) => <div key={k}><dt className="text-meta text-ink-2">{l}</dt><dd className="whitespace-pre-wrap">{c[k]}</dd></div>)}</dl>{!TEXT.some(([k]) => c[k]) && <p className="text-ink-3">No brand notes yet. Add products, audience, goals and tone so the team has context.</p>}</Card>
             <Card title="Upcoming follow-ups" pad={false}>{!ov.data?.followUps.length ? <Empty title="No follow-ups scheduled" /> : <ul className="divide-y divide-line">{ov.data.followUps.map((r: any) => <li key={r._id} className="flex justify-between gap-3 px-4 py-2.5"><span>{r.title}</span><span className="shrink-0 text-meta text-ink-2">{fmtDateTime(r.remindAt)}</span></li>)}</ul>}</Card>
           </div>
@@ -560,6 +717,187 @@ export function ClientDetail() {
     )}</Async>
   );
 }
+
+function ClientPackageCard({ c, pkg, onNewContent, onEditPackage }: { c: any; pkg: any; onNewContent: () => void; onEditPackage: () => void }) {
+  const p = pkg || {
+    monthlyPackage: c?.monthlyPackage || { reels: 10, posts: 5, carousels: 2 },
+    reels: { target: c?.monthlyPackage?.reels ?? 10, done: 0, remaining: c?.monthlyPackage?.reels ?? 10 },
+    posts: { target: c?.monthlyPackage?.posts ?? 5, done: 0, remaining: c?.monthlyPackage?.posts ?? 5 },
+    carousels: { target: c?.monthlyPackage?.carousels ?? 2, done: 0, remaining: c?.monthlyPackage?.carousels ?? 2 },
+    total: { target: 17, done: 0, remaining: 17 },
+    fulfillmentPct: 0,
+    allCompleted: false,
+  };
+
+  const hasRemaining = p.total.remaining > 0;
+  const pendingItems: string[] = [];
+  if (p.reels.remaining > 0) pendingItems.push(`${p.reels.remaining} Reels`);
+  if (p.posts.remaining > 0) pendingItems.push(`${p.posts.remaining} Posts`);
+  if (p.carousels.remaining > 0) pendingItems.push(`${p.carousels.remaining} Carousels`);
+
+  return (
+    <Card
+      title={
+        <span className="flex items-center gap-2">
+          <Package size={17} className="text-primary-ink" />
+          <span>Monthly Content Package Quota</span>
+          <span className="text-[12px] font-normal text-ink-3">
+            ({p.monthlyPackage?.reels ?? 10} Reels, {p.monthlyPackage?.posts ?? 5} Posts, {p.monthlyPackage?.carousels ?? 2} Carousels)
+          </span>
+        </span>
+      }
+      action={
+        <div className="flex items-center gap-2">
+          <button onClick={onEditPackage} className="text-meta font-semibold text-primary-ink hover:underline">
+            Edit Quota
+          </button>
+        </div>
+      }
+    >
+      <div className="space-y-4">
+        {hasRemaining ? (
+          <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3.5 flex flex-wrap items-center justify-between gap-3 backdrop-blur-md">
+            <div className="flex items-center gap-2.5">
+              <div className="h-8 w-8 rounded-lg bg-amber-500/20 text-amber-500 flex items-center justify-center shrink-0">
+                <AlertTriangle size={18} />
+              </div>
+              <div>
+                <div className="text-[13.5px] font-bold text-ink">
+                  Deliverables Pending: <span className="text-amber-500 font-black">{pendingItems.join(', ')} remaining to be made</span>.
+                </div>
+                <div className="text-[12px] text-ink-3">
+                  Connected live to Google Sheets Master Plan &amp; Production Tracker.
+                </div>
+              </div>
+            </div>
+            <Button size="sm" variant="primary" icon={<Plus size={14} />} onClick={onNewContent}>
+              Create Pending Deliverable
+            </Button>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3.5 flex items-center gap-2.5 backdrop-blur-md">
+            <div className="h-8 w-8 rounded-lg bg-emerald-500/20 text-emerald-500 flex items-center justify-center shrink-0">
+              <CheckCircle2 size={18} />
+            </div>
+            <div>
+              <div className="text-[13.5px] font-bold text-emerald-500">
+                100% Monthly Package Quota Fulfilled!
+              </div>
+              <div className="text-[12px] text-ink-3">
+                All scheduled and published deliverables for this client's package have been successfully produced.
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          {/* Reels */}
+          <div className="rounded-xl border border-line/80 bg-surface-2/40 p-3.5 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-[13px] text-ink flex items-center gap-1.5">
+                🎬 Reels Quota
+              </span>
+              {p.reels.remaining === 0 ? (
+                <span className="text-[11px] font-bold text-emerald-500 bg-emerald-500/15 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                  ✓ Done
+                </span>
+              ) : (
+                <span className="text-[11px] font-bold text-amber-500 bg-amber-500/15 px-2 py-0.5 rounded-full border border-amber-500/30">
+                  {p.reels.remaining} Remaining
+                </span>
+              )}
+            </div>
+            <div className="flex items-baseline justify-between text-[13px]">
+              <span className="text-ink-2">Completed:</span>
+              <span className="font-mono font-bold text-ink text-[16px]">{p.reels.done} <span className="text-ink-3 font-normal text-[12px]">/ {p.reels.target}</span></span>
+            </div>
+            <div className="h-2 w-full rounded-full bg-surface overflow-hidden border border-line/60">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${p.reels.remaining === 0 ? 'bg-emerald-500' : 'bg-primary'}`}
+                style={{ width: `${Math.min(100, Math.round((p.reels.done / Math.max(1, p.reels.target)) * 100))}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-[11px] text-ink-3">
+              <span>Target: {p.reels.target}</span>
+              <span className={p.reels.remaining > 0 ? 'text-amber-500 font-bold' : 'text-emerald-500 font-medium'}>
+                {p.reels.remaining === 0 ? 'Quota Met ✓' : `${p.reels.remaining} Remaining`}
+              </span>
+            </div>
+          </div>
+
+          {/* Posts */}
+          <div className={`rounded-xl border p-3.5 space-y-2 ${p.posts.remaining > 0 ? 'border-rose-500/40 bg-rose-500/5' : 'border-line/80 bg-surface-2/40'}`}>
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-[13px] text-ink flex items-center gap-1.5">
+                🖼️ Posts Quota
+              </span>
+              {p.posts.remaining === 0 ? (
+                <span className="text-[11px] font-bold text-emerald-500 bg-emerald-500/15 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                  ✓ Done
+                </span>
+              ) : (
+                <span className="text-[11px] font-black text-rose-500 bg-rose-500/20 px-2.5 py-0.5 rounded-full border border-rose-500/50 shadow-sm animate-pulse">
+                  ⚠️ {p.posts.remaining} REMAINING
+                </span>
+              )}
+            </div>
+            <div className="flex items-baseline justify-between text-[13px]">
+              <span className="text-ink-2">Completed:</span>
+              <span className="font-mono font-bold text-ink text-[16px]">{p.posts.done} <span className="text-ink-3 font-normal text-[12px]">/ {p.posts.target}</span></span>
+            </div>
+            <div className="h-2 w-full rounded-full bg-surface overflow-hidden border border-line/60">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${p.posts.remaining === 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                style={{ width: `${Math.min(100, Math.round((p.posts.done / Math.max(1, p.posts.target)) * 100))}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-[11px]">
+              <span className="text-ink-3">Target: {p.posts.target}</span>
+              <span className={p.posts.remaining > 0 ? 'text-rose-500 font-bold' : 'text-emerald-500 font-medium'}>
+                {p.posts.remaining === 0 ? 'Quota Met ✓' : `${p.posts.remaining} Remaining to make`}
+              </span>
+            </div>
+          </div>
+
+          {/* Carousels */}
+          <div className={`rounded-xl border p-3.5 space-y-2 ${p.carousels.remaining > 0 ? 'border-amber-500/30 bg-amber-500/5' : 'border-line/80 bg-surface-2/40'}`}>
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-[13px] text-ink flex items-center gap-1.5">
+                📑 Carousels Quota
+              </span>
+              {p.carousels.remaining === 0 ? (
+                <span className="text-[11px] font-bold text-emerald-500 bg-emerald-500/15 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                  ✓ Done
+                </span>
+              ) : (
+                <span className="text-[11px] font-bold text-amber-500 bg-amber-500/15 px-2 py-0.5 rounded-full border border-amber-500/30">
+                  {p.carousels.remaining} Remaining
+                </span>
+              )}
+            </div>
+            <div className="flex items-baseline justify-between text-[13px]">
+              <span className="text-ink-2">Completed:</span>
+              <span className="font-mono font-bold text-ink text-[16px]">{p.carousels.done} <span className="text-ink-3 font-normal text-[12px]">/ {p.carousels.target}</span></span>
+            </div>
+            <div className="h-2 w-full rounded-full bg-surface overflow-hidden border border-line/60">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${p.carousels.remaining === 0 ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                style={{ width: `${Math.min(100, Math.round((p.carousels.done / Math.max(1, p.carousels.target)) * 100))}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-[11px]">
+              <span className="text-ink-3">Target: {p.carousels.target}</span>
+              <span className={p.carousels.remaining > 0 ? 'text-amber-500 font-bold' : 'text-emerald-500 font-medium'}>
+                {p.carousels.remaining === 0 ? 'Quota Met ✓' : `${p.carousels.remaining} Remaining`}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 function SocialCredentialsCard({ c, onEdit }: { c: any; onEdit: () => void }) {
   const [showIg, setShowIg] = useState(false);
   const [showFb, setShowFb] = useState(false);

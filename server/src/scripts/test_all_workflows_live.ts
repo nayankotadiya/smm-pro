@@ -158,7 +158,7 @@ async function main() {
   post.stage = 'CLIENT_FINAL_APPROVAL';
   await post.save();
 
-  const authUser: any = { _id: smm?._id || admin._id, name: smm?.name || admin.name, email: smm?.email || admin.email, role: smm?.role || admin.role };
+  const authUser: any = { _id: smm?._id || admin?._id, name: smm?.name || admin?.name || 'Admin', email: smm?.email || admin?.email || 'admin@smmpro.com', role: smm?.role || admin?.role || 'SUPER_ADMIN' };
   const reviewResult = await sendClientReview(
     authUser,
     { contentId: post._id.toString(), kind: 'FINAL', sendWhatsApp: false },

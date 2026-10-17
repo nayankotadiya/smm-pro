@@ -278,8 +278,8 @@ export async function setupSheetHeadersAndFormulas(spreadsheetId: string) {
           values: [CONTENT_TRACKER_HEADERS],
         },
         {
-          range: "'Clients'!A1:G1",
-          values: [['Client ID', 'Client Name', 'Business Name', 'Contact Person', 'Phone', 'Status', 'Last Synced']],
+          range: "'Clients'!A1:M1",
+          values: [['Client Code', 'Client Name', 'Business Name', 'Contact Person', 'Phone', 'Status', 'Monthly Package Target', 'Reels Progress', 'Posts Progress', 'Carousels Progress', 'Remaining Deliverables (Alert)', 'Fulfillment %', 'Last Synced']],
         },
         {
           range: "'Schedule'!A1:H1",
@@ -313,7 +313,7 @@ export async function setupSheetHeadersAndFormulas(spreadsheetId: string) {
 export async function applyStatusConditionalFormatting(spreadsheetId: string) {
   const s = sheets();
   const meta = await s.spreadsheets.get({ spreadsheetId });
-  const targetSheets = meta.data.sheets?.filter((sh) => CONTENT_TYPE_SHEETS.includes(sh.properties?.title || '')) || [];
+  const targetSheets = meta.data.sheets?.filter((sh) => [...CONTENT_TYPE_SHEETS, 'Master Plan', 'Clients'].includes(sh.properties?.title || '')) || [];
   if (targetSheets.length === 0) return;
 
   const rules: sheets_v4.Schema$Request[] = [];
@@ -341,12 +341,21 @@ export async function applyStatusConditionalFormatting(spreadsheetId: string) {
     'No': { bg: '#DCFCE7', fg: '#006020' },  // Overdue No
     'Action Required': { bg: '#FF0000', fg: '#FFFFFF' },
     'Not Required': { bg: '#CBD5E1', fg: '#334155' },
+    '0 (Done)': { bg: '#DCFCE7', fg: '#166534' },
+    'ALL QUOTA COMPLETED': { bg: '#DCFCE7', fg: '#166534' },
+    'All Quota Met': { bg: '#DCFCE7', fg: '#166534' },
+  };
+
+  const containsColorConfig: Record<string, { bg: string; fg: string }> = {
+    'REMAINING': { bg: '#FFE082', fg: '#7C2D12' }, // Amber highlight for remaining deliverables (e.g. 2 REMAINING)
+    'ACTION': { bg: '#FFCDD2', fg: '#991B1B' },    // Soft red alert for pending deliverables
   };
 
   for (const sh of targetSheets) {
     const sheetId = sh.properties?.sheetId;
     if (sheetId === undefined || sheetId === null) continue;
 
+    // Exact text match formatting rules
     for (const [text, { bg, fg }] of Object.entries(colorConfig)) {
       const rgbBg = hexToRgbColor(bg);
       const rgbFg = hexToRgbColor(fg);
@@ -365,6 +374,41 @@ export async function applyStatusConditionalFormatting(spreadsheetId: string) {
             booleanRule: {
               condition: {
                 type: 'TEXT_EQ',
+                values: [{ userEnteredValue: text }],
+              },
+              format: {
+                backgroundColor: rgbBg,
+                textFormat: {
+                  bold: true,
+                  foregroundColor: rgbFg,
+                },
+              },
+            },
+          },
+          index: 0,
+        },
+      });
+    }
+
+    // Substring contains formatting rules (e.g. highlights "2 REMAINING", "3 REMAINING")
+    for (const [text, { bg, fg }] of Object.entries(containsColorConfig)) {
+      const rgbBg = hexToRgbColor(bg);
+      const rgbFg = hexToRgbColor(fg);
+      rules.push({
+        addConditionalFormatRule: {
+          rule: {
+            ranges: [
+              {
+                sheetId,
+                startRowIndex: 1,
+                endRowIndex: 500,
+                startColumnIndex: 0,
+                endColumnIndex: 35,
+              },
+            ],
+            booleanRule: {
+              condition: {
+                type: 'TEXT_CONTAINS',
                 values: [{ userEnteredValue: text }],
               },
               format: {
@@ -663,47 +707,52 @@ export function buildMasterPlanRows(contents: any[], clients: any[], shoots: any
   // SECTION 2: CLIENT PACKAGE MASTER PLAN ("SAME GRAPHIC IN 10 REELS , 5 POST WORK FLOW")
   rows.push(['SECTION 2: CLIENT MONTHLY PACKAGE & QUOTA FULFILLMENT (10 REELS, 5 POSTS TRACKER)']);
   rows.push([
-    'Client Code',        // A
-    'Client Name',        // B
-    'Target Reels',       // C
-    'Reels Done',         // D
-    'Reels In-Progress',  // E
-    'Target Posts',       // F
-    'Posts Done',         // G
-    'Posts In-Progress',  // H
-    'Target Carousels',   // I
-    'Carousels Done',     // J
-    'Total Quota',        // K
-    'Total Completed',    // L
-    'Shoots Done',        // M
-    'Edits Done',         // N
-    'Graphics Approved',  // O
-    'Client Approved',    // P
-    'Live / Posted',      // Q
-    'Fulfillment %',      // R
-    'Package Health',     // S
+    'Client Code',            // A
+    'Client Name',            // B
+    'Target Reels',           // C
+    'Reels Done',             // D
+    'Reels Remaining',        // E - [HIGHLIGHTED REMAINING]
+    'Target Posts',           // F
+    'Posts Done',             // G
+    'Posts Remaining',        // H - [HIGHLIGHTED REMAINING]
+    'Target Carousels',       // I
+    'Carousels Done',         // J
+    'Carousels Remaining',    // K - [HIGHLIGHTED REMAINING]
+    'Total Quota Target',     // L
+    'Total Completed',        // M
+    'Total Remaining',        // N - [HIGHLIGHTED REMAINING]
+    'Pending Deliverables',   // O - e.g. "ACTION: 2 Posts REMAINING to make"
+    'Shoots Done',            // P
+    'Edits Done',             // Q
+    'Graphics Approved',      // R
+    'Client Approved',        // S
+    'Live / Posted',          // T
+    'Fulfillment %',          // U
+    'Package Health',         // V
   ]);
 
   for (const cl of clients) {
     const clientContents = contents.filter((x) => String(x.clientId?._id || x.clientId) === String(cl._id));
 
-    const targetReels = cl.monthlyPackage?.reels || 10;
-    const targetPosts = cl.monthlyPackage?.posts || 5;
-    const targetCarousels = cl.monthlyPackage?.carousels || 2;
+    const targetReels = Number(cl.monthlyPackage?.reels ?? 10);
+    const targetPosts = Number(cl.monthlyPackage?.posts ?? 5);
+    const targetCarousels = Number(cl.monthlyPackage?.carousels ?? 2);
     const totalTarget = targetReels + targetPosts + targetCarousels;
 
     const reels = clientContents.filter((x) => ['REEL', 'VIDEO', 'SHORT'].includes(x.type));
-    const reelsDone = reels.filter((x) => x.stage === 'PUBLISHED' || x.status === 'COMPLETED').length;
-    const reelsInProgress = reels.length - reelsDone;
+    const reelsDone = reels.filter((x) => x.stage === 'PUBLISHED' || x.status === 'COMPLETED' || x.approvalStatus === 'APPROVED_CLIENT').length;
+    const reelsRemaining = Math.max(0, targetReels - reelsDone);
 
     const posts = clientContents.filter((x) => ['POST', 'IMAGE', 'OTHER'].includes(x.type));
     const postsDone = posts.filter((x) => x.stage === 'PUBLISHED' || x.status === 'COMPLETED').length;
-    const postsInProgress = posts.length - postsDone;
+    const postsRemaining = Math.max(0, targetPosts - postsDone);
 
     const carousels = clientContents.filter((x) => x.type === 'CAROUSEL');
-    const carouselsDone = carousels.filter((x) => x.stage === 'PUBLISHED' || x.status === 'COMPLETED').length;
+    const carouselsDone = carousels.filter((x) => ['SCHEDULE', 'PUBLISHED'].includes(x.stage) || x.status === 'COMPLETED').length;
+    const carouselsRemaining = Math.max(0, targetCarousels - carouselsDone);
 
     const totalDone = reelsDone + postsDone + carouselsDone;
+    const totalRemaining = reelsRemaining + postsRemaining + carouselsRemaining;
 
     const shootsDone = reels.filter((x) => {
       const sh = shootMap.get(String(x._id));
@@ -716,21 +765,33 @@ export function buildMasterPlanRows(contents: any[], clients: any[], shoots: any
     const livePosted = clientContents.filter((x) => x.stage === 'PUBLISHED' || x.status === 'COMPLETED').length;
 
     const fulfillmentPct = Math.min(100, Math.round((totalDone / Math.max(1, totalTarget)) * 100));
-    const healthStatus = fulfillmentPct >= 100 ? 'Completed' : fulfillmentPct >= 50 ? 'On Track' : 'In Progress';
+
+    const pendingParts: string[] = [];
+    if (reelsRemaining > 0) pendingParts.push(`${reelsRemaining} Reels`);
+    if (postsRemaining > 0) pendingParts.push(`${postsRemaining} Posts`);
+    if (carouselsRemaining > 0) pendingParts.push(`${carouselsRemaining} Carousels`);
+    const pendingAlert = pendingParts.length > 0
+      ? `ACTION: ${pendingParts.join(', ')} REMAINING`
+      : 'ALL QUOTA COMPLETED';
+
+    const healthStatus = totalRemaining === 0 ? 'Completed' : (reelsDone > 0 || postsDone > 0) ? 'Action Required' : 'In Progress';
 
     rows.push([
       cl.clientCode || String(cl._id).substring(0, 6).toUpperCase(),
       cl.name,
       targetReels,
       reelsDone,
-      reelsInProgress,
+      reelsRemaining === 0 ? '0 (Done)' : `${reelsRemaining} REMAINING`,
       targetPosts,
       postsDone,
-      postsInProgress,
+      postsRemaining === 0 ? '0 (Done)' : `${postsRemaining} REMAINING`,
       targetCarousels,
       carouselsDone,
+      carouselsRemaining === 0 ? '0 (Done)' : `${carouselsRemaining} REMAINING`,
       totalTarget,
       totalDone,
+      totalRemaining === 0 ? '0 (Done)' : `${totalRemaining} REMAINING`,
+      pendingAlert,
       shootsDone,
       editsDone,
       graphicsApproved,
@@ -804,15 +865,50 @@ export async function syncAllToGoogleSheets(explicitSpreadsheetId?: string): Pro
   const masterPlanRows = buildMasterPlanRows(contents, clients, shoots);
 
   // 4. Build Client rows
-  const clientRows = clients.map((cl) => [
-    String(cl._id),
-    cl.name,
-    cl.businessName || '',
-    cl.contactPerson || '',
-    cl.phone || '',
-    cl.status || 'ACTIVE',
-    new Date().toISOString().replace('T', ' ').substring(0, 19),
-  ]);
+  const clientRows = clients.map((cl) => {
+    const clientContents = contents.filter((x) => String(x.clientId?._id || x.clientId) === String(cl._id));
+    const targetReels = Number(cl.monthlyPackage?.reels ?? 10);
+    const targetPosts = Number(cl.monthlyPackage?.posts ?? 5);
+    const targetCarousels = Number(cl.monthlyPackage?.carousels ?? 2);
+
+    const reels = clientContents.filter((x) => ['REEL', 'VIDEO', 'SHORT'].includes(x.type));
+    const reelsDone = reels.filter((x) => x.stage === 'PUBLISHED' || x.status === 'COMPLETED' || x.approvalStatus === 'APPROVED_CLIENT').length;
+    const reelsRemaining = Math.max(0, targetReels - reelsDone);
+
+    const posts = clientContents.filter((x) => ['POST', 'IMAGE', 'OTHER'].includes(x.type));
+    const postsDone = posts.filter((x) => x.stage === 'PUBLISHED' || x.status === 'COMPLETED').length;
+    const postsRemaining = Math.max(0, targetPosts - postsDone);
+
+    const carousels = clientContents.filter((x) => x.type === 'CAROUSEL');
+    const carouselsDone = carousels.filter((x) => ['SCHEDULE', 'PUBLISHED'].includes(x.stage) || x.status === 'COMPLETED').length;
+    const carouselsRemaining = Math.max(0, targetCarousels - carouselsDone);
+
+    const totalTarget = targetReels + targetPosts + targetCarousels;
+    const totalDone = reelsDone + postsDone + carouselsDone;
+    const fulfillmentPct = Math.min(100, Math.round((totalDone / Math.max(1, totalTarget)) * 100));
+
+    const pendingList: string[] = [];
+    if (reelsRemaining > 0) pendingList.push(`${reelsRemaining} Reels`);
+    if (postsRemaining > 0) pendingList.push(`${postsRemaining} Posts`);
+    if (carouselsRemaining > 0) pendingList.push(`${carouselsRemaining} Carousels`);
+    const pendingSummary = pendingList.length > 0 ? `ACTION: ${pendingList.join(', ')} REMAINING` : 'All Quota Met';
+
+    return [
+      cl.clientCode || String(cl._id).substring(0, 8).toUpperCase(),
+      cl.name,
+      cl.businessName || '',
+      cl.contactPerson || '',
+      cl.phone || '',
+      cl.status || 'ACTIVE',
+      `${targetReels} Reels, ${targetPosts} Posts, ${targetCarousels} Carousels`,
+      `${reelsDone} / ${targetReels} ${reelsRemaining > 0 ? `(${reelsRemaining} REMAINING)` : '(Done)'}`,
+      `${postsDone} / ${targetPosts} ${postsRemaining > 0 ? `(${postsRemaining} REMAINING)` : '(Done)'}`,
+      `${carouselsDone} / ${targetCarousels} ${carouselsRemaining > 0 ? `(${carouselsRemaining} REMAINING)` : '(Done)'}`,
+      pendingSummary,
+      `${fulfillmentPct}%`,
+      new Date().toISOString().replace('T', ' ').substring(0, 19),
+    ];
+  });
 
   // 5. Build Schedule rows
   const scheduleRows = scheduledPosts.map((p: any) => [
@@ -881,12 +977,12 @@ export async function syncAllToGoogleSheets(explicitSpreadsheetId?: string): Pro
       requestBody: {
         ranges: [
           "'Content Tracker'!A2:AE500",
-          "'Master Plan'!A1:S500",
+          "'Master Plan'!A1:V500",
           "'Reels'!A2:AE500",
           "'Posts'!A2:AE500",
           "'Carousels'!A2:AE500",
           "'AI Reels'!A2:AE500",
-          "'Clients'!A2:G500",
+          "'Clients'!A2:M500",
           "'Schedule'!A2:H500",
           "'Employees'!A2:F500",
           "'Tasks'!A2:H500",
@@ -900,8 +996,8 @@ export async function syncAllToGoogleSheets(explicitSpreadsheetId?: string): Pro
   // 10. Execute batch update to Google Sheets across all sheets
   const updates: sheets_v4.Schema$ValueRange[] = [
     { range: "'Dashboard'!A1:C14", values: dashboardRows },
-    { range: "'Master Plan'!A1:S" + masterPlanRows.length, values: masterPlanRows },
-    { range: "'Clients'!A2:G" + (clientRows.length + 1), values: clientRows },
+    { range: "'Master Plan'!A1:V" + masterPlanRows.length, values: masterPlanRows },
+    { range: "'Clients'!A2:M" + (clientRows.length + 1), values: clientRows },
     { range: "'Schedule'!A2:H" + (scheduleRows.length + 1), values: scheduleRows },
     { range: "'Employees'!A2:F" + (employeeRows.length + 1), values: employeeRows },
     { range: "'Tasks'!A2:H" + (taskRows.length + 1), values: taskRows },

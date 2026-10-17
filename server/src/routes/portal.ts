@@ -598,11 +598,43 @@ r.get('/dashboard', ah(async (req, res) => {
     status: { $in: ['SUBMITTED', 'IN_REVIEW'] },
   });
 
-  // 5. Client's Brand info
+  // 5. Client's Brand info & Monthly Package Quota
   const client = await Client.findById(clientId)
     .populate('defaultTeam.smm', 'name email title')
-    .select('name businessName defaultTeam')
+    .select('name businessName defaultTeam monthlyPackage')
     .lean();
+
+  const pkg = client?.monthlyPackage || { reels: 10, posts: 5, carousels: 2 };
+  const targetReels = Number(pkg.reels ?? 10);
+  const targetPosts = Number(pkg.posts ?? 5);
+  const targetCarousels = Number(pkg.carousels ?? 2);
+
+  const reels = monthContent.filter((c: any) => ['REEL', 'VIDEO', 'SHORT'].includes(c.type));
+  const reelsDone = reels.filter((c: any) => ['SCHEDULE', 'PUBLISHED'].includes(c.stage) || c.status === 'COMPLETED').length;
+  const reelsRemaining = Math.max(0, targetReels - reelsDone);
+
+  const posts = monthContent.filter((c: any) => ['POST', 'IMAGE', 'OTHER'].includes(c.type));
+  const postsDone = posts.filter((c: any) => ['SCHEDULE', 'PUBLISHED'].includes(c.stage) || c.status === 'COMPLETED').length;
+  const postsRemaining = Math.max(0, targetPosts - postsDone);
+
+  const carousels = monthContent.filter((c: any) => c.type === 'CAROUSEL');
+  const carouselsDone = carousels.filter((c: any) => ['SCHEDULE', 'PUBLISHED'].includes(c.stage) || c.status === 'COMPLETED').length;
+  const carouselsRemaining = Math.max(0, targetCarousels - carouselsDone);
+
+  const totalTarget = targetReels + targetPosts + targetCarousels;
+  const totalDone = reelsDone + postsDone + carouselsDone;
+  const totalRemaining = reelsRemaining + postsRemaining + carouselsRemaining;
+  const fulfillmentPct = Math.min(100, Math.round((totalDone / Math.max(1, totalTarget)) * 100));
+
+  const packageProgress = {
+    monthlyPackage: { reels: targetReels, posts: targetPosts, carousels: targetCarousels },
+    reels: { target: targetReels, done: reelsDone, totalCreated: reels.length, remaining: reelsRemaining },
+    posts: { target: targetPosts, done: postsDone, totalCreated: posts.length, remaining: postsRemaining },
+    carousels: { target: targetCarousels, done: carouselsDone, totalCreated: carousels.length, remaining: carouselsRemaining },
+    total: { target: totalTarget, done: totalDone, remaining: totalRemaining },
+    fulfillmentPct,
+    allCompleted: totalRemaining === 0,
+  };
 
   res.json({
     pendingApprovals: pendingApprovals.map((a: any) => ({
@@ -623,6 +655,7 @@ r.get('/dashboard', ah(async (req, res) => {
       inProductionCount,
       pendingApprovalCount: pendingApprovals.length,
       openRequestsCount,
+      packageProgress,
     },
     recentBriefs,
     upcomingPosts,

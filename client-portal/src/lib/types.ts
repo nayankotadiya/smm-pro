@@ -46,6 +46,15 @@ export interface DashboardStats {
   inProductionCount: number;
   pendingApprovalCount: number;
   openRequestsCount?: number;
+  packageProgress?: {
+    monthlyPackage: { reels: number; posts: number; carousels: number };
+    reels: { target: number; done: number; totalCreated: number; remaining: number };
+    posts: { target: number; done: number; totalCreated: number; remaining: number };
+    carousels: { target: number; done: number; totalCreated: number; remaining: number };
+    total: { target: number; done: number; remaining: number };
+    fulfillmentPct: number;
+    allCompleted: boolean;
+  };
 }
 
 export interface UpcomingPost {

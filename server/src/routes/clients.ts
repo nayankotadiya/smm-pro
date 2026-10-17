@@ -26,6 +26,11 @@ const clientBody = z.object({
   location: str, category: str, description: str, products: str, services: str, usp: str, targetAudience: str, goals: str, expectations: str, marketTrend: str,
   sellingPurpose: str, brandTone: str, brandColors: z.array(z.string().max(30)).max(12).optional(), fonts: z.array(z.string().max(60)).max(8).optional(), brandGuidelines: str,
   assignedTeam: z.array(z.string()).optional(), status: z.enum(['ACTIVE', 'PAUSED', 'ONBOARDING', 'ARCHIVED']).optional(),
+  monthlyPackage: z.object({
+    reels: z.coerce.number().min(0).default(10),
+    posts: z.coerce.number().min(0).default(5),
+    carousels: z.coerce.number().min(0).default(2),
+  }).optional(),
   defaultTeam: z.object({ writer: z.string().nullable().optional(), shooter: z.string().nullable().optional(), editor: z.string().nullable().optional(), designer: z.string().nullable().optional(), smm: z.string().nullable().optional(), reviewer: z.string().nullable().optional() }).optional(),
   portalUser: portalUserSchema,
 });
@@ -36,9 +41,85 @@ r.get('/', requirePerm('clients.read'), ah(async (req, res) => {
   if (req.query.q) q.$or = [{ name: new RegExp(escapeRx(String(req.query.q)), 'i') }, { businessName: new RegExp(escapeRx(String(req.query.q)), 'i') }];
   const clients = await Client.find(q).sort({ name: 1 }).populate('assignedTeam', 'name role').lean();
   const grp = (match: any) => Content.aggregate([{ $match: { deletedAt: null, ...match } }, { $group: { _id: '$clientId', n: { $sum: 1 } } }]);
-  const [total, active] = await Promise.all([grp({}), grp({ status: { $in: ['ACTIVE', 'CHANGES_REQUESTED', 'BLOCKED'] } })]);
+  const [total, active, contentStats] = await Promise.all([
+    grp({}),
+    grp({ status: { $in: ['ACTIVE', 'CHANGES_REQUESTED', 'BLOCKED'] } }),
+    Content.aggregate([
+      { $match: { deletedAt: null } },
+      {
+        $group: {
+          _id: { clientId: '$clientId', type: '$type' },
+          total: { $sum: 1 },
+          done: {
+            $sum: {
+              $cond: [
+                { $or: [{ $in: ['$stage', ['SCHEDULE', 'PUBLISHED']] }, { $eq: ['$status', 'COMPLETED'] }, { $eq: ['$approvalStatus', 'APPROVED_CLIENT'] }] },
+                1,
+                0,
+              ],
+            },
+          },
+        },
+      },
+    ]),
+  ]);
+
+  const clientStatsMap = new Map<string, { reels: { done: number; total: number }; posts: { done: number; total: number }; carousels: { done: number; total: number } }>();
+  for (const s of contentStats) {
+    if (!s._id?.clientId) continue;
+    const cId = String(s._id.clientId);
+    if (!clientStatsMap.has(cId)) {
+      clientStatsMap.set(cId, { reels: { done: 0, total: 0 }, posts: { done: 0, total: 0 }, carousels: { done: 0, total: 0 } });
+    }
+    const cur = clientStatsMap.get(cId)!;
+    const type = s._id.type;
+    if (['REEL', 'VIDEO', 'SHORT'].includes(type)) {
+      cur.reels.done += s.done;
+      cur.reels.total += s.total;
+    } else if (['POST', 'IMAGE', 'OTHER'].includes(type)) {
+      cur.posts.done += s.done;
+      cur.posts.total += s.total;
+    } else if (type === 'CAROUSEL') {
+      cur.carousels.done += s.done;
+      cur.carousels.total += s.total;
+    }
+  }
+
   const n = (rows: any[], id: any) => rows.find((x) => String(x._id) === String(id))?.n || 0;
-  res.json(clients.map((c) => ({ ...c, contentCount: { total: n(total, c._id), active: n(active, c._id) } })));
+  res.json(clients.map((c) => {
+    const pkg = c.monthlyPackage || { reels: 10, posts: 5, carousels: 2 };
+    const targetReels = Number(pkg.reels ?? 10);
+    const targetPosts = Number(pkg.posts ?? 5);
+    const targetCarousels = Number(pkg.carousels ?? 2);
+    const cStats = clientStatsMap.get(String(c._id)) || { reels: { done: 0, total: 0 }, posts: { done: 0, total: 0 }, carousels: { done: 0, total: 0 } };
+
+    const reelsDone = cStats.reels.done;
+    const postsDone = cStats.posts.done;
+    const carouselsDone = cStats.carousels.done;
+
+    const reelsRemaining = Math.max(0, targetReels - reelsDone);
+    const postsRemaining = Math.max(0, targetPosts - postsDone);
+    const carouselsRemaining = Math.max(0, targetCarousels - carouselsDone);
+
+    const totalTarget = targetReels + targetPosts + targetCarousels;
+    const totalDone = reelsDone + postsDone + carouselsDone;
+    const totalRemaining = reelsRemaining + postsRemaining + carouselsRemaining;
+    const fulfillmentPct = Math.min(100, Math.round((totalDone / Math.max(1, totalTarget)) * 100));
+
+    return {
+      ...c,
+      monthlyPackage: { reels: targetReels, posts: targetPosts, carousels: targetCarousels },
+      contentCount: { total: n(total, c._id), active: n(active, c._id) },
+      packageProgress: {
+        reels: { target: targetReels, done: reelsDone, totalCreated: cStats.reels.total, remaining: reelsRemaining },
+        posts: { target: targetPosts, done: postsDone, totalCreated: cStats.posts.total, remaining: postsRemaining },
+        carousels: { target: targetCarousels, done: carouselsDone, totalCreated: cStats.carousels.total, remaining: carouselsRemaining },
+        total: { target: totalTarget, done: totalDone, remaining: totalRemaining },
+        fulfillmentPct,
+        allCompleted: totalRemaining === 0,
+      },
+    };
+  }));
 }));
 export const escapeRx = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -131,15 +212,57 @@ r.delete('/:id', requirePerm('clients.delete'), ah(async (req, res) => {
 // ----- Client workspace tabs -----
 r.get('/:id/overview', requirePerm('clients.read'), ah(async (req, res) => {
   const id = req.params.id; const vis = visibilityFilter(req.user!);
-  const [content, scripts, reviews, files, room, followUps] = await Promise.all([
+  const [content, scripts, reviews, files, room, followUps, clientObj] = await Promise.all([
     Content.find({ $and: [{ clientId: id }, vis] }).sort({ updatedAt: -1 }).populate('currentOwner', 'name').lean(),
     Script.find({ clientId: id }).populate('contentId', 'contentId title stage').populate('writerId', 'name').lean(),
     Approval.find({ clientId: id, type: { $in: ['CLIENT_SCRIPT', 'CLIENT_FINAL'] } }).sort({ createdAt: -1 }).populate('contentId', 'contentId title').lean(),
     Media.find({ clientId: id, status: { $nin: ['UPLOADING', 'FAILED'] } }).sort({ createdAt: -1 }).limit(100).populate('uploadedBy', 'name').populate('contentId', 'contentId title').lean(),
     ensureClientRoom(await Client.findById(id)),
     Reminder.find({ clientId: id, completed: false }).sort({ remindAt: 1 }).limit(20).lean(),
+    Client.findById(id).lean(),
   ]);
-  const stats = { total: content.length, published: content.filter((c) => c.stage === 'PUBLISHED').length, active: content.filter((c) => !['COMPLETED', 'CANCELLED'].includes(c.status)).length, blocked: content.filter((c) => c.status === 'BLOCKED').length, overdue: content.filter((c) => c.deadline && c.deadline < new Date() && c.status !== 'COMPLETED').length, approvalsOpen: reviews.filter((a) => ['SENT', 'DELIVERED', 'OPENED', 'WAITING_FOR_CLIENT'].includes(a.status)).length };
+
+  const pkg = clientObj?.monthlyPackage || { reels: 10, posts: 5, carousels: 2 };
+  const targetReels = Number(pkg.reels ?? 10);
+  const targetPosts = Number(pkg.posts ?? 5);
+  const targetCarousels = Number(pkg.carousels ?? 2);
+
+  const reels = content.filter((c) => ['REEL', 'VIDEO', 'SHORT'].includes(c.type));
+  const reelsDone = reels.filter((c) => ['SCHEDULE', 'PUBLISHED'].includes(c.stage) || c.status === 'COMPLETED' || c.approvalStatus === 'APPROVED_CLIENT').length;
+  const reelsRemaining = Math.max(0, targetReels - reelsDone);
+
+  const posts = content.filter((c) => ['POST', 'IMAGE', 'OTHER'].includes(c.type));
+  const postsDone = posts.filter((c) => ['SCHEDULE', 'PUBLISHED'].includes(c.stage) || c.status === 'COMPLETED').length;
+  const postsRemaining = Math.max(0, targetPosts - postsDone);
+
+  const carousels = content.filter((c) => c.type === 'CAROUSEL');
+  const carouselsDone = carousels.filter((c) => ['SCHEDULE', 'PUBLISHED'].includes(c.stage) || c.status === 'COMPLETED').length;
+  const carouselsRemaining = Math.max(0, targetCarousels - carouselsDone);
+
+  const totalTarget = targetReels + targetPosts + targetCarousels;
+  const totalDone = reelsDone + postsDone + carouselsDone;
+  const totalRemaining = reelsRemaining + postsRemaining + carouselsRemaining;
+  const fulfillmentPct = Math.min(100, Math.round((totalDone / Math.max(1, totalTarget)) * 100));
+
+  const packageProgress = {
+    monthlyPackage: { reels: targetReels, posts: targetPosts, carousels: targetCarousels },
+    reels: { target: targetReels, done: reelsDone, totalCreated: reels.length, remaining: reelsRemaining },
+    posts: { target: targetPosts, done: postsDone, totalCreated: posts.length, remaining: postsRemaining },
+    carousels: { target: targetCarousels, done: carouselsDone, totalCreated: carousels.length, remaining: carouselsRemaining },
+    total: { target: totalTarget, done: totalDone, remaining: totalRemaining },
+    fulfillmentPct,
+    allCompleted: totalRemaining === 0,
+  };
+
+  const stats = {
+    total: content.length,
+    published: content.filter((c) => c.stage === 'PUBLISHED').length,
+    active: content.filter((c) => !['COMPLETED', 'CANCELLED'].includes(c.status)).length,
+    blocked: content.filter((c) => c.status === 'BLOCKED').length,
+    overdue: content.filter((c) => c.deadline && c.deadline < new Date() && c.status !== 'COMPLETED').length,
+    approvalsOpen: reviews.filter((a) => ['SENT', 'DELIVERED', 'OPENED', 'WAITING_FOR_CLIENT'].includes(a.status)).length,
+    packageProgress,
+  };
   res.json({ content, scripts, reviews, files, roomId: room._id, followUps, stats });
 }));
 r.get('/:id/activity', requirePerm('clients.read'), ah(async (req, res) => { res.json(await ActivityLog.find({ clientId: req.params.id }).sort({ createdAt: -1 }).limit(100).lean()); }));
