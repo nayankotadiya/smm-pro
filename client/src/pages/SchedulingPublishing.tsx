@@ -17,6 +17,17 @@ import { toast } from '@/store/ui';
 
 type TabKey = 'ALL' | 'UPCOMING' | 'DUE_TODAY' | 'OVERDUE' | 'PENDING_APPROVAL' | 'READY_TO_SCHEDULE' | 'SCHEDULED' | 'POSTED' | 'CANCELLED';
 type CalendarMode = 'month' | 'week' | 'day';
+type BlockFilterKey = 'ALL' | 'PRODUCED' | 'PENDING' | 'SCHEDULED' | 'REELS' | 'POSTS' | 'CAROUSELS';
+
+const blockFilterLabels: Record<BlockFilterKey, string> = {
+  ALL: 'Monthly Target Quota (All Items)',
+  PRODUCED: 'Produced & Completed Deliverables',
+  PENDING: 'Pending Production / Remaining Deliverables',
+  SCHEDULED: 'Scheduled for Publishing',
+  REELS: 'Reels & Videos',
+  POSTS: 'Posts & Graphics',
+  CAROUSELS: 'Carousels',
+};
 
 const sod = (d: Date) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
 const add = (d: Date, n: number) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
@@ -32,9 +43,24 @@ export default function SchedulingPublishing() {
 
   // Tab & View States
   const [activeTab, setActiveTab] = useState<TabKey>('SCHEDULED');
-  const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
+  const [viewMode, setViewMode] = useState<'calendar' | 'list'>('list');
+  const [activeBlockFilter, setActiveBlockFilter] = useState<BlockFilterKey | null>(null);
   const [calMode, setCalMode] = useState<CalendarMode>('month');
   const [curDate, setCurDate] = useState(() => sod(new Date()));
+
+  const handleBlockClick = (key: BlockFilterKey) => {
+    if (activeBlockFilter === key) {
+      setActiveBlockFilter(null);
+    } else {
+      setActiveBlockFilter(key);
+      setViewMode('list');
+      if (key === 'SCHEDULED') {
+        setActiveTab('SCHEDULED');
+      } else {
+        setActiveTab('ALL');
+      }
+    }
+  };
 
   // Filters
   const [search, setSearch] = useState('');
@@ -86,6 +112,30 @@ export default function SchedulingPublishing() {
         return false;
       }
 
+      // Active Block Filter (from top Hero & Breakdown Cards)
+      if (activeBlockFilter) {
+        if (activeBlockFilter === 'PRODUCED') {
+          const isProduced = ['SCHEDULE', 'PUBLISHED'].includes(c.stage) || c.status === 'COMPLETED' || c.approvalStatus === 'APPROVED_CLIENT' || c.productionStatus === 'POSTED';
+          if (!isProduced) return false;
+        } else if (activeBlockFilter === 'PENDING') {
+          const isProduced = ['SCHEDULE', 'PUBLISHED'].includes(c.stage) || c.status === 'COMPLETED' || c.productionStatus === 'POSTED';
+          const isCancelled = c.productionStatus === 'CANCELLED' || c.productionStatus === 'SHOOT_CANCELLED';
+          if (isProduced || isCancelled) return false;
+        } else if (activeBlockFilter === 'SCHEDULED') {
+          const isScheduled = c.stage === 'SCHEDULE' || !!c.plannedPublicationDate || c.productionStatus === 'SCHEDULED';
+          if (!isScheduled) return false;
+        } else if (activeBlockFilter === 'REELS') {
+          const t = (c.type || '').toUpperCase();
+          if (!['REEL', 'VIDEO', 'SHORT', 'AI_REEL'].includes(t)) return false;
+        } else if (activeBlockFilter === 'POSTS') {
+          const t = (c.type || '').toUpperCase();
+          if (!['POST', 'IMAGE', 'OTHER'].includes(t)) return false;
+        } else if (activeBlockFilter === 'CAROUSELS') {
+          const t = (c.type || '').toUpperCase();
+          if (t !== 'CAROUSEL') return false;
+        }
+      }
+
       const pDate = c.plannedPublicationDate ? dateKey(new Date(c.plannedPublicationDate)) : '';
       const deadlineDate = c.deadline ? dateKey(new Date(c.deadline)) : '';
       const isPastDeadline = isOverdue(c.deadline, c.status === 'COMPLETED' || c.stage === 'PUBLISHED');
@@ -111,7 +161,7 @@ export default function SchedulingPublishing() {
           return true;
       }
     });
-  }, [allItems, activeTab, search, selectedAssignee]);
+  }, [allItems, activeTab, search, selectedAssignee, activeBlockFilter]);
 
   // Calendar calculations
   const calRange = useMemo(() => {
@@ -352,10 +402,23 @@ export default function SchedulingPublishing() {
         {/* 4 Core Hero Balance Cards */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {/* 1. Target Quota */}
-          <div className="rounded-xl border border-line bg-surface-2/60 p-3.5">
+          <button
+            type="button"
+            onClick={() => handleBlockClick('ALL')}
+            title="Click to view all deliverables for this client in the Pipeline List"
+            className={clsx(
+              'rounded-xl border p-3.5 text-left transition-all cursor-pointer relative group hover:-translate-y-0.5 shadow-2xs',
+              activeBlockFilter === 'ALL'
+                ? 'border-primary ring-2 ring-primary ring-offset-2 ring-offset-surface bg-primary/10 shadow-md scale-[1.01]'
+                : 'border-line bg-surface-2/60 hover:bg-surface-2 hover:border-line-2'
+            )}
+          >
             <div className="text-[11px] font-bold text-ink-3 uppercase tracking-wider flex items-center justify-between">
-              <span>Monthly Target Quota</span>
-              <Package size={14} className="text-ink-3" />
+              <span className={activeBlockFilter === 'ALL' ? 'text-primary' : ''}>Monthly Target Quota</span>
+              <div className="flex items-center gap-1">
+                {activeBlockFilter === 'ALL' && <Check size={12} className="text-primary stroke-[3]" />}
+                <Package size={14} className={activeBlockFilter === 'ALL' ? 'text-primary' : 'text-ink-3'} />
+              </div>
             </div>
             <div className="mt-1.5 text-2xl font-black tabular tracking-tight text-ink">
               {pkg.target.total} <span className="text-xs font-medium text-ink-3">items</span>
@@ -363,13 +426,29 @@ export default function SchedulingPublishing() {
             <div className="mt-1 text-[11px] font-semibold text-ink-2 truncate">
               {pkg.target.reels} Reels · {pkg.target.posts} Posts · {pkg.target.carousels} Carousels
             </div>
-          </div>
+            <div className="mt-2 text-[10px] font-bold text-ink-4 group-hover:text-primary transition-colors flex items-center gap-1">
+              {activeBlockFilter === 'ALL' ? '✓ Filter Active' : 'Click to filter ➔'}
+            </div>
+          </button>
 
           {/* 2. Made / Produced */}
-          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3.5">
+          <button
+            type="button"
+            onClick={() => handleBlockClick('PRODUCED')}
+            title="Click to view all produced & completed deliverables in the Pipeline List"
+            className={clsx(
+              'rounded-xl border p-3.5 text-left transition-all cursor-pointer relative group hover:-translate-y-0.5 shadow-2xs',
+              activeBlockFilter === 'PRODUCED'
+                ? 'border-emerald-500 ring-2 ring-emerald-500 ring-offset-2 ring-offset-surface bg-emerald-500/15 shadow-md scale-[1.01]'
+                : 'border-emerald-500/30 bg-emerald-500/5 hover:bg-emerald-500/10'
+            )}
+          >
             <div className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider flex items-center justify-between">
               <span>Produced / Completed</span>
-              <CheckCircle2 size={14} className="text-emerald-500" />
+              <div className="flex items-center gap-1">
+                {activeBlockFilter === 'PRODUCED' && <Check size={12} className="text-emerald-500 stroke-[3]" />}
+                <CheckCircle2 size={14} className="text-emerald-500" />
+              </div>
             </div>
             <div className="mt-1.5 text-2xl font-black tabular tracking-tight text-emerald-500">
               {pkg.made.total} <span className="text-xs font-semibold text-ink-3">/ {pkg.target.total}</span>
@@ -377,24 +456,37 @@ export default function SchedulingPublishing() {
             <div className="mt-1 text-[11px] font-semibold text-ink-2 truncate">
               {pkg.fulfillmentPct}% Produced ({pkg.made.reels}R · {pkg.made.posts}P · {pkg.made.carousels}C)
             </div>
-          </div>
+            <div className="mt-2 text-[10px] font-bold text-emerald-500/70 group-hover:text-emerald-500 transition-colors flex items-center gap-1">
+              {activeBlockFilter === 'PRODUCED' ? '✓ Filter Active' : 'Click to filter ➔'}
+            </div>
+          </button>
 
           {/* 3. Remaining Deliverables to Make (Highlighted!) */}
-          <div className={clsx(
-            'rounded-xl border p-3.5 transition-all',
-            pkg.remaining.total > 0
-              ? 'border-amber-500/40 bg-amber-500/10 ring-2 ring-amber-500/20'
-              : 'border-emerald-500/30 bg-emerald-500/5'
-          )}>
+          <button
+            type="button"
+            onClick={() => handleBlockClick('PENDING')}
+            title="Click to view all deliverables currently pending production in the Pipeline List"
+            className={clsx(
+              'rounded-xl border p-3.5 text-left transition-all cursor-pointer relative group hover:-translate-y-0.5 shadow-2xs',
+              activeBlockFilter === 'PENDING'
+                ? 'border-amber-500 ring-2 ring-amber-500 ring-offset-2 ring-offset-surface bg-amber-500/20 shadow-md scale-[1.01]'
+                : pkg.remaining.total > 0
+                  ? 'border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/15'
+                  : 'border-emerald-500/30 bg-emerald-500/5 hover:bg-emerald-500/10'
+            )}
+          >
             <div className="text-[11px] font-bold uppercase tracking-wider flex items-center justify-between">
               <span className={pkg.remaining.total > 0 ? 'text-amber-500' : 'text-emerald-500'}>
                 Pending Production / Remaining
               </span>
-              {pkg.remaining.total > 0 ? (
-                <AlertTriangle size={14} className="text-amber-500 animate-bounce" />
-              ) : (
-                <Check size={14} className="text-emerald-500" />
-              )}
+              <div className="flex items-center gap-1">
+                {activeBlockFilter === 'PENDING' && <Check size={12} className="text-amber-500 stroke-[3]" />}
+                {pkg.remaining.total > 0 ? (
+                  <AlertTriangle size={14} className="text-amber-500 animate-bounce" />
+                ) : (
+                  <Check size={14} className="text-emerald-500" />
+                )}
+              </div>
             </div>
             <div className={clsx(
               'mt-1.5 text-2xl font-black tabular tracking-tight',
@@ -411,13 +503,29 @@ export default function SchedulingPublishing() {
                 ? `${pkg.remaining.reels} Reels, ${pkg.remaining.posts} Posts, ${pkg.remaining.carousels} Carousels`
                 : 'All monthly deliverables produced!'}
             </div>
-          </div>
+            <div className="mt-2 text-[10px] font-bold text-amber-500/70 group-hover:text-amber-500 transition-colors flex items-center gap-1">
+              {activeBlockFilter === 'PENDING' ? '✓ Filter Active' : 'Click to filter ➔'}
+            </div>
+          </button>
 
           {/* 4. Scheduled for Posting */}
-          <div className="rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/5 p-3.5">
+          <button
+            type="button"
+            onClick={() => handleBlockClick('SCHEDULED')}
+            title="Click to view all scheduled deliverables in the Pipeline List"
+            className={clsx(
+              'rounded-xl border p-3.5 text-left transition-all cursor-pointer relative group hover:-translate-y-0.5 shadow-2xs',
+              activeBlockFilter === 'SCHEDULED'
+                ? 'border-fuchsia-500 ring-2 ring-fuchsia-500 ring-offset-2 ring-offset-surface bg-fuchsia-500/15 shadow-md scale-[1.01]'
+                : 'border-fuchsia-500/30 bg-fuchsia-500/5 hover:bg-fuchsia-500/10'
+            )}
+          >
             <div className="text-[11px] font-bold text-fuchsia-500 uppercase tracking-wider flex items-center justify-between">
               <span>Scheduled for Publishing</span>
-              <CalendarDays size={14} className="text-fuchsia-500" />
+              <div className="flex items-center gap-1">
+                {activeBlockFilter === 'SCHEDULED' && <Check size={12} className="text-fuchsia-500 stroke-[3]" />}
+                <CalendarDays size={14} className="text-fuchsia-500" />
+              </div>
             </div>
             <div className="mt-1.5 text-2xl font-black tabular tracking-tight text-fuchsia-500">
               {pkg.scheduled.total} <span className="text-xs font-semibold text-ink-3">items</span>
@@ -425,20 +533,36 @@ export default function SchedulingPublishing() {
             <div className="mt-1 text-[11px] font-semibold text-ink-2 truncate">
               {pkg.readyToSchedule} Ready to Schedule · {pkg.posted} Posted Live
             </div>
-          </div>
+            <div className="mt-2 text-[10px] font-bold text-fuchsia-500/70 group-hover:text-fuchsia-500 transition-colors flex items-center gap-1">
+              {activeBlockFilter === 'SCHEDULED' ? '✓ Filter Active' : 'Click to filter ➔'}
+            </div>
+          </button>
         </div>
 
         {/* Deliverables Breakdown by Type (Reels, Posts, Carousels) with progress */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
           {/* Reels Breakdown */}
-          <div className="rounded-xl border border-line bg-surface-2/40 p-3 flex flex-col justify-between">
+          <button
+            type="button"
+            onClick={() => handleBlockClick('REELS')}
+            title="Click to view Reels & video deliverables in the Pipeline List"
+            className={clsx(
+              'rounded-xl border p-3 flex flex-col justify-between text-left transition-all cursor-pointer relative group hover:-translate-y-0.5 shadow-2xs',
+              activeBlockFilter === 'REELS'
+                ? 'border-primary ring-2 ring-primary ring-offset-2 ring-offset-surface bg-primary/10 shadow-md scale-[1.01]'
+                : 'border-line bg-surface-2/40 hover:bg-surface-2/80'
+            )}
+          >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
                   <Film size={14} />
                 </div>
                 <div>
-                  <span className="text-xs font-bold text-ink">Reels</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-ink">Reels</span>
+                    {activeBlockFilter === 'REELS' && <Check size={12} className="text-primary stroke-[3]" />}
+                  </div>
                   <div className="text-[10px] text-ink-3">Target: {pkg.target.reels} Reels</div>
                 </div>
               </div>
@@ -464,17 +588,30 @@ export default function SchedulingPublishing() {
                 />
               </div>
             </div>
-          </div>
+          </button>
 
           {/* Posts Breakdown */}
-          <div className="rounded-xl border border-line bg-surface-2/40 p-3 flex flex-col justify-between">
+          <button
+            type="button"
+            onClick={() => handleBlockClick('POSTS')}
+            title="Click to view Posts & graphics deliverables in the Pipeline List"
+            className={clsx(
+              'rounded-xl border p-3 flex flex-col justify-between text-left transition-all cursor-pointer relative group hover:-translate-y-0.5 shadow-2xs',
+              activeBlockFilter === 'POSTS'
+                ? 'border-emerald-500 ring-2 ring-emerald-500 ring-offset-2 ring-offset-surface bg-emerald-500/10 shadow-md scale-[1.01]'
+                : 'border-line bg-surface-2/40 hover:bg-surface-2/80'
+            )}
+          >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500">
                   <ImageIcon size={14} />
                 </div>
                 <div>
-                  <span className="text-xs font-bold text-ink">Posts & Graphics</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-ink">Posts & Graphics</span>
+                    {activeBlockFilter === 'POSTS' && <Check size={12} className="text-emerald-500 stroke-[3]" />}
+                  </div>
                   <div className="text-[10px] text-ink-3">Target: {pkg.target.posts} Posts</div>
                 </div>
               </div>
@@ -500,17 +637,30 @@ export default function SchedulingPublishing() {
                 />
               </div>
             </div>
-          </div>
+          </button>
 
           {/* Carousels Breakdown */}
-          <div className="rounded-xl border border-line bg-surface-2/40 p-3 flex flex-col justify-between">
+          <button
+            type="button"
+            onClick={() => handleBlockClick('CAROUSELS')}
+            title="Click to view Carousel deliverables in the Pipeline List"
+            className={clsx(
+              'rounded-xl border p-3 flex flex-col justify-between text-left transition-all cursor-pointer relative group hover:-translate-y-0.5 shadow-2xs',
+              activeBlockFilter === 'CAROUSELS'
+                ? 'border-purple-500 ring-2 ring-purple-500 ring-offset-2 ring-offset-surface bg-purple-500/10 shadow-md scale-[1.01]'
+                : 'border-line bg-surface-2/40 hover:bg-surface-2/80'
+            )}
+          >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-500/10 text-purple-500">
                   <Layers size={14} />
                 </div>
                 <div>
-                  <span className="text-xs font-bold text-ink">Carousels</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-ink">Carousels</span>
+                    {activeBlockFilter === 'CAROUSELS' && <Check size={12} className="text-purple-500 stroke-[3]" />}
+                  </div>
                   <div className="text-[10px] text-ink-3">Target: {pkg.target.carousels} Carousels</div>
                 </div>
               </div>
@@ -536,7 +686,7 @@ export default function SchedulingPublishing() {
                 />
               </div>
             </div>
-          </div>
+          </button>
         </div>
       </div>
 
@@ -784,6 +934,29 @@ export default function SchedulingPublishing() {
       ) : (
         /* PIPELINE / SECTION LIST VIEW */
         <div className="space-y-4">
+          {/* Active Block Filter Indicator Banner */}
+          {activeBlockFilter && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/40 bg-primary/10 px-4 py-2.5 shadow-sm animate-rise">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-2.5 w-2.5 rounded-full bg-primary animate-pulse" />
+                <span className="text-xs font-bold text-ink">
+                  Filtering Deliverables by Block: <span className="text-primary font-black">{blockFilterLabels[activeBlockFilter]}</span>
+                </span>
+                <span className="rounded-full bg-primary/20 px-2 py-0.5 text-[10px] font-bold text-primary">
+                  {filteredItems.length} matching {filteredItems.length === 1 ? 'deliverable' : 'deliverables'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveBlockFilter(null)}
+                className="flex items-center gap-1.5 rounded-lg bg-surface-2 hover:bg-surface-3 px-2.5 py-1 text-xs font-semibold text-ink-2 hover:text-ink transition-colors cursor-pointer border border-line"
+              >
+                <X size={13} />
+                <span>Reset Block Filter</span>
+              </button>
+            </div>
+          )}
+
           {/* Section Tabs */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-line">
             {[
