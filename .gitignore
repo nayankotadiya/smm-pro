@@ -12,3 +12,6 @@ backups/
 Thumbs.db
 scratch/
 mongo-data/
+.gradle/
+**/build/
+local.properties

@@ -3,6 +3,7 @@ import { ObjectId, ts, softDelete } from './common';
 
 const clientSchema = new Schema({
   name: { type: String, required: true, trim: true },
+  clientCode: { type: String, trim: true, uppercase: true }, // e.g. SAG, ZEM, etc.
   businessName: String, contactPerson: String, phone: String, email: String, website: String,
   instagram: String, instagramPassword: String, facebook: String, facebookPassword: String, youtube: String, location: String, category: String,
   description: String, products: String, services: String, usp: String, targetAudience: String,
@@ -11,7 +12,7 @@ const clientSchema = new Schema({
   assignedTeam: [{ type: ObjectId, ref: 'User' }],
   defaultTeam: {
     writer: { type: ObjectId, ref: 'User' }, shooter: { type: ObjectId, ref: 'User' }, editor: { type: ObjectId, ref: 'User' },
-    smm: { type: ObjectId, ref: 'User' }, reviewer: { type: ObjectId, ref: 'User' },
+    designer: { type: ObjectId, ref: 'User' }, smm: { type: ObjectId, ref: 'User' }, reviewer: { type: ObjectId, ref: 'User' },
   },
   status: { type: String, enum: ['ACTIVE', 'PAUSED', 'ONBOARDING', 'ARCHIVED'], default: 'ACTIVE' },
   driveFolderId: String,

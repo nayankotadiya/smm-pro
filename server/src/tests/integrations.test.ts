@@ -36,9 +36,13 @@ describe('Push and Drive are honest about configuration', () => {
     env.vapid.publicKey = oldPub; env.vapid.privateKey = oldPriv;
   });
   it('drive is off without credentials and storage falls back to local', async () => {
+    const { env } = await import('../config/env');
+    const oldB64 = env.google.serviceAccountB64; const oldRef = env.google.refreshToken;
+    env.google.serviceAccountB64 = ''; env.google.refreshToken = '';
     const { driveConfigured } = await import('../integrations/drive');
     const { storageMode } = await import('../services/storage');
     expect(driveConfigured()).toBe(false); expect(storageMode()).toBe('LOCAL');
+    env.google.serviceAccountB64 = oldB64; env.google.refreshToken = oldRef;
   });
 });
 

@@ -2,7 +2,12 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
-import { LayoutDashboard, Building2, Clapperboard, FileText, Camera, Scissors, ShieldCheck, CalendarDays, FolderOpen, MessageSquare, Workflow, AlarmClock, Users, BarChart3, Settings, Menu, X, ListChecks, CheckSquare } from 'lucide-react';
+import {
+  LayoutDashboard, Building2, Clapperboard, FileText, Camera, Scissors,
+  ShieldCheck, CalendarDays, FolderOpen, MessageSquare, Workflow, AlarmClock,
+  Users, BarChart3, Settings, Menu, X, ListChecks, CheckSquare,
+  Film, Image as ImageIcon, Layers, Sparkles, Send
+} from 'lucide-react';
 import { useCan } from '@/store/auth';
 import { useUI } from '@/store/ui';
 import { GlobalSearch, NotificationBell, UserMenu, ThemeToggle } from '@/components/Header';
@@ -29,12 +34,17 @@ export default function AppLayout() {
     { to: '/', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/my-work', label: 'My Work', icon: ListChecks },
     { to: '/clients', label: 'Clients', icon: Building2, show: can('clients.read'), section: 'Production' },
-    { to: '/content', label: 'Content', icon: Clapperboard },
+    { to: '/content', label: 'All Content', icon: Clapperboard },
+    { to: '/reels', label: 'Reels', icon: Film },
+    { to: '/posts', label: 'Posts', icon: ImageIcon },
+    { to: '/carousels', label: 'Carousels', icon: Layers },
+    { to: '/ai-reels', label: 'AI Reels', icon: Sparkles },
     { to: '/scripts', label: 'Scripts', icon: FileText },
     { to: '/shooting', label: 'Shooting', icon: Camera },
     { to: '/editing', label: 'Editing', icon: Scissors },
     { to: '/approvals', label: 'Approvals', icon: ShieldCheck, badge: pending },
-    { to: '/tasks', label: 'Tasks', icon: CheckSquare, section: 'Workspace' },
+    { to: '/scheduling', label: 'Scheduling & Publish', icon: Send, section: 'Workspace' },
+    { to: '/tasks', label: 'Tasks', icon: CheckSquare },
     { to: '/calendar', label: 'Calendar', icon: CalendarDays },
     { to: '/media', label: 'Media', icon: FolderOpen },
     { to: '/chat', label: 'Chat', icon: MessageSquare, badge: unread.data?.count },

@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { Check, Circle, CheckCircle2, Play, Film, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { Badge, Progress, Table, Priority, Empty } from './ui';
-import { label, fmtDateTime, isOverdue, STAGES, ago } from '@/lib/format';
+import { label, fmtDateTime, isOverdue, STAGES, ago, getStatusMeta } from '@/lib/format';
 import { patch, del, errMsg } from '@/lib/api';
 import { useAuth } from '@/store/auth';
 import { toast } from '@/store/ui';
@@ -229,17 +229,20 @@ export function StageBadge({ s }: { s: string }) {
 
 export function TypeBadge({ t }: { t: string }) {
   const tp = (t || '').toUpperCase();
-  const c = tp.includes('REEL') 
-    ? 'text-rose-950 dark:text-rose-200 bg-rose-100/90 dark:bg-rose-950/40 border-rose-300 dark:border-rose-700/50' 
-    : tp.includes('VIDEO') 
-      ? 'text-indigo-950 dark:text-indigo-200 bg-indigo-100/90 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-700/50' 
-      : tp.includes('AD') 
-        ? 'text-purple-950 dark:text-purple-200 bg-purple-100/90 dark:bg-purple-950/40 border-purple-300 dark:border-purple-700/50' 
-        : tp.includes('POST') || tp.includes('CAROUSEL') 
-          ? 'text-teal-950 dark:text-teal-200 bg-teal-100/90 dark:bg-teal-950/40 border-teal-300 dark:border-teal-700/50' 
-          : tp.includes('STORY') 
-            ? 'text-orange-950 dark:text-orange-200 bg-orange-100/90 dark:bg-orange-950/40 border-orange-300 dark:border-orange-700/50' 
-            : 'text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-surface-3 border-slate-300 dark:border-line/70';
+  let c = 'text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-surface-3 border-slate-300 dark:border-line/70';
+  if (tp === 'AI_REEL' || tp.includes('AI')) {
+    c = 'text-purple-950 dark:text-purple-200 bg-purple-100/90 dark:bg-purple-950/40 border-purple-300 dark:border-purple-600/50 shadow-purple-500/10';
+  } else if (tp === 'REEL' || tp.includes('VIDEO')) {
+    c = 'text-rose-950 dark:text-rose-200 bg-rose-100/90 dark:bg-rose-950/40 border-rose-300 dark:border-rose-700/50';
+  } else if (tp === 'CAROUSEL') {
+    c = 'text-teal-950 dark:text-teal-200 bg-teal-100/90 dark:bg-teal-950/40 border-teal-300 dark:border-teal-700/50';
+  } else if (tp === 'POST') {
+    c = 'text-blue-950 dark:text-blue-200 bg-blue-100/90 dark:bg-blue-950/40 border-blue-300 dark:border-blue-700/50';
+  } else if (tp === 'AD') {
+    c = 'text-amber-950 dark:text-amber-200 bg-amber-100/90 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700/50';
+  } else if (tp === 'STORY') {
+    c = 'text-orange-950 dark:text-orange-200 bg-orange-100/90 dark:bg-orange-950/40 border-orange-300 dark:border-orange-700/50';
+  }
   return (
     <span className={clsx('inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-bold shadow-xs', c)}>
       {label(t)}
@@ -247,12 +250,44 @@ export function TypeBadge({ t }: { t: string }) {
   );
 }
 
-export function StatusBadge({ c }: { c: any }) {
-  if (c.status === 'BLOCKED') return <Badge status="BLOCKED" />;
-  if (c.status === 'CHANGES_REQUESTED') return <Badge status="CHANGES_REQUESTED" />;
-  if (c.status === 'COMPLETED') return <Badge status="COMPLETED">Published</Badge>;
-  if (isOverdue(c.deadline)) return <Badge status="OVERDUE" />;
-  return <Badge status="IN_PROGRESS" />;
+export function StatusBadge({ c, status }: { c?: any; status?: string }) {
+  let effectiveCode = status;
+  if (!effectiveCode && c) {
+    if (c.status === 'BLOCKED') effectiveCode = 'BLOCKED';
+    else if (c.status === 'CHANGES_REQUESTED') effectiveCode = 'CHANGES_REQUIRED';
+    else if (c.stage === 'PUBLISHED' || c.status === 'COMPLETED' || c.productionStatus === 'POSTED') effectiveCode = 'POSTED';
+    else if (c.productionStatus === 'CANCELLED') effectiveCode = 'CANCELLED';
+    else if (c.productionStatus === 'SHOOT_CANCELLED') effectiveCode = 'SHOOT_CANCELLED';
+    else if (c.productionStatus === 'TRAIL') effectiveCode = 'TRAIL';
+    else if (c.stage === 'SCHEDULE' && (c.plannedPublicationDate || c.productionStatus === 'SCHEDULED')) effectiveCode = 'SCHEDULED';
+    else if (c.stage === 'SCHEDULE') effectiveCode = 'SCHEDULING';
+    else if (c.stage === 'FINAL_UPLOAD') effectiveCode = 'UPLOAD_DONE';
+    else if (c.stage === 'CLIENT_REVIEW' || c.stage === 'CLIENT_FINAL_APPROVAL' || c.approvalStatus === 'CLIENT_REVIEW') effectiveCode = 'CLIENT_REVIEW';
+    else if (c.stage === 'EDITING') effectiveCode = 'EDIT_DONE';
+    else if (c.stage === 'SHOOTING') effectiveCode = 'SHOOT';
+    else if (c.stage === 'VOICE_OVER') effectiveCode = 'VOICE_OVER';
+    else if (c.stage === 'SCRIPT' || c.stage === 'INTERNAL_REVIEW') effectiveCode = 'SCRIPT_DONE';
+    else if (isOverdue(c.deadline)) effectiveCode = 'OVERDUE';
+    else effectiveCode = c.productionStatus || c.status || 'IN_PROGRESS';
+  }
+  const meta = getStatusMeta(effectiveCode);
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-bold shadow-xs border transition-all"
+      style={{
+        backgroundColor: `${meta.color}18`,
+        borderColor: `${meta.color}70`,
+      }}
+    >
+      <span
+        className="h-2 w-2 rounded-full shrink-0 shadow-xs"
+        style={{ backgroundColor: meta.color }}
+      />
+      <span className="font-bold text-ink dark:text-slate-100">
+        {meta.label}
+      </span>
+    </span>
+  );
 }
 
 export function WorkflowBar({ stage, blocked, onSelectStage }: { stage: string; blocked?: boolean; onSelectStage?: (stage: string) => void }) {

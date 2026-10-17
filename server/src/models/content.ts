@@ -1,48 +1,74 @@
 import { Schema, model } from 'mongoose';
 import { ObjectId, ts, softDelete } from './common';
-import { STAGES } from '../config/constants';
+import { STAGES, CONTENT_TYPES } from '../config/constants';
 
 const contentSchema = new Schema({
-  contentId: { type: String, unique: true, required: true }, // REEL-2026-001
+  contentId: { type: String, unique: true, required: true }, // SAG-001 or REEL-2026-001
   title: { type: String, required: true, trim: true },
   clientId: { type: ObjectId, ref: 'Client', required: true, index: true },
-  campaignId: { type: ObjectId, ref: 'Campaign' },
-  type: { type: String, enum: ['REEL', 'POST', 'CAROUSEL', 'STORY', 'VIDEO', 'SHORT', 'AD'], default: 'REEL' },
+  campaignId: { type: ObjectId, ref: 'Campaign', index: true },
+  type: { type: String, enum: CONTENT_TYPES, default: 'REEL', index: true },
   platform: { type: String, enum: ['INSTAGRAM', 'FACEBOOK', 'YOUTUBE', 'LINKEDIN', 'X', 'MULTI'], default: 'INSTAGRAM' },
   stage: { type: String, enum: STAGES, default: 'IDEA', index: true },
-  status: { type: String, enum: ['ACTIVE', 'BLOCKED', 'CHANGES_REQUESTED', 'COMPLETED', 'CANCELLED'], default: 'ACTIVE', index: true },
+  status: { type: String, enum: ['ACTIVE', 'BLOCKED', 'CHANGES_REQUESTED', 'COMPLETED', 'CANCELLED', 'NOT_STARTED', 'IN_PROGRESS', 'NEEDS_REVIEW', 'APPROVED', 'PENDING_CLIENT_APPROVAL', 'SCHEDULED', 'POSTED', 'OVERDUE'], default: 'ACTIVE', index: true },
+  productionStatus: { type: String, default: 'NOT_STARTED', index: true },
+  approvalStatus: { type: String, enum: ['NONE', 'PENDING_INTERNAL', 'APPROVED_INTERNAL', 'PENDING_CLIENT', 'APPROVED_CLIENT', 'CHANGES_REQUESTED'], default: 'NONE', index: true },
   progress: { type: Number, default: 0 },
   priority: { type: String, enum: ['LOW', 'MEDIUM', 'HIGH', 'URGENT'], default: 'MEDIUM' },
-  deadline: Date,
+  startDate: Date,
+  deadline: Date, // general production deadline
+  productionDeadline: Date,
+  stageDeadlines: {
+    scriptDeadline: Date,
+    shootDeadline: Date,
+    editingDeadline: Date,
+    designDeadline: Date,
+    approvalDeadline: Date,
+  },
+  plannedPublicationDate: { type: Date, index: true },
+  plannedPublicationTime: String,
   description: String,
-  caption: String, hashtags: String,
-  currentOwner: { type: ObjectId, ref: 'User' },
+  contentBrief: String,
+  caption: String,
+  hashtags: String,
+  notes: String,
+  currentOwner: { type: ObjectId, ref: 'User', index: true },
   nextOwner: { type: ObjectId, ref: 'User' },
-  assignedWriter: { type: ObjectId, ref: 'User' },
-  assignedShooter: { type: ObjectId, ref: 'User' },
-  assignedEditor: { type: ObjectId, ref: 'User' },
-  assignedSMM: { type: ObjectId, ref: 'User' },
-  assignedReviewer: { type: ObjectId, ref: 'User' },
+  assignedWriter: { type: ObjectId, ref: 'User', index: true },
+  assignedShooter: { type: ObjectId, ref: 'User', index: true },
+  assignedEditor: { type: ObjectId, ref: 'User', index: true },
+  assignedDesigner: { type: ObjectId, ref: 'User', index: true },
+  assignedSMM: { type: ObjectId, ref: 'User', index: true },
+  assignedReviewer: { type: ObjectId, ref: 'User', index: true },
   scriptId: { type: ObjectId, ref: 'Script' },
   currentScriptVersion: { type: Number, default: 0 },
   currentVideoVersion: String,
   latestMediaId: { type: ObjectId, ref: 'Media' },
   driveFolderId: String,
   driveSubfolders: { type: Map, of: String },
+  rawFileLinks: [{ type: String }],
+  editedFileLinks: [{ type: String }],
+  finalFileLinks: [{ type: String }],
+  thumbnailLink: String,
+  slideContent: [{ type: String }],
+  aiPrompt: String,
+  aiOutputs: [{ type: String }],
   lastAction: { text: String, at: Date, by: { type: ObjectId, ref: 'User' } },
   nextAction: String,
   blocked: { reason: String, since: Date, by: { type: ObjectId, ref: 'User' }, nextAction: String },
-  scheduledAt: Date,
-  publishedAt: Date,
+  scheduledAt: { type: Date, index: true },
+  publishedAt: { type: Date, index: true },
   publishedUrl: String,
   stageHistory: [{ stage: String, enteredAt: Date, by: { type: ObjectId, ref: 'User' } }],
   deadlineAlerts: { h24: Date, h2: Date, overdue: Date },
   createdBy: { type: ObjectId, ref: 'User' },
 }, ts);
+
 contentSchema.index({ status: 1, deadline: 1 });
 contentSchema.index({ clientId: 1, status: 1 });
 contentSchema.index({ stage: 1, updatedAt: -1 });
 contentSchema.index({ currentOwner: 1, status: 1 });
+contentSchema.index({ plannedPublicationDate: 1, scheduledAt: 1 });
 softDelete(contentSchema);
 export const Content = model('Content', contentSchema);
 

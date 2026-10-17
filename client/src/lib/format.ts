@@ -1,11 +1,60 @@
-export const STAGES = ['IDEA', 'SCRIPT', 'INTERNAL_REVIEW', 'CLIENT_REVIEW', 'SHOOTING', 'RAW_FOOTAGE', 'EDITING', 'SMM_REVIEW', 'FINAL_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'];
+export const STAGES = [
+  'IDEA', 'SCRIPT', 'INTERNAL_REVIEW', 'CLIENT_REVIEW', 'VOICE_OVER',
+  'SHOOTING', 'RAW_FOOTAGE', 'AI_GENERATION', 'GRAPHIC_DESIGN', 'EDITING',
+  'SMM_REVIEW', 'FINAL_REVIEW', 'CLIENT_FINAL_APPROVAL', 'FINAL_UPLOAD', 'SCHEDULE', 'PUBLISHED'
+];
+
+export const STATUS_CONFIG: Record<string, { label: string; color: string; textColor: string; isLight?: boolean }> = {
+  // Google Sheets Reference Colors
+  SCRIPT_DONE: { label: 'Script Done', color: '#00D9E8', textColor: '#003a40', isLight: true },
+  VOICE_OVER: { label: 'Voice Over', color: '#9575CD', textColor: '#ffffff' },
+  SHOOT: { label: 'Shoot', color: '#FF9800', textColor: '#ffffff' },
+  EDIT_DONE: { label: 'Edit Done', color: '#FFEB00', textColor: '#3b2502', isLight: true },
+  SCHEDULING: { label: 'Scheduling', color: '#E600E6', textColor: '#ffffff' },
+  UPLOAD_DONE: { label: 'Upload Done', color: '#00E600', textColor: '#052e16', isLight: true },
+  SHOOT_CANCELLED: { label: 'Shoot Cancelled', color: '#FF0000', textColor: '#ffffff' },
+  CLIENT_REVIEW: { label: 'Client Review', color: '#C98555', textColor: '#ffffff' },
+  TRAIL: { label: 'Trail', color: '#B39DDB', textColor: '#1e1b4b', isLight: true },
+
+  // Operational Statuses
+  NOT_STARTED: { label: 'Not Started', color: '#94A3B8', textColor: '#0f172a', isLight: true },
+  IN_PROGRESS: { label: 'In Progress', color: '#38BDF8', textColor: '#082f49', isLight: true },
+  NEEDS_REVIEW: { label: 'Needs Review', color: '#FBBF24', textColor: '#451a03', isLight: true },
+  CHANGES_REQUIRED: { label: 'Changes Required', color: '#F87171', textColor: '#ffffff' },
+  APPROVED: { label: 'Approved', color: '#10B981', textColor: '#ffffff' },
+  PENDING_CLIENT_APPROVAL: { label: 'Pending Client Approval', color: '#F59E0B', textColor: '#ffffff' },
+  SCHEDULED: { label: 'Scheduled', color: '#C084FC', textColor: '#3b0764', isLight: true },
+  POSTED: { label: 'Posted', color: '#059669', textColor: '#ffffff' },
+  OVERDUE: { label: 'Overdue', color: '#EF4444', textColor: '#ffffff' },
+  CANCELLED: { label: 'Cancelled', color: '#64748B', textColor: '#ffffff' },
+  NOT_REQUIRED: { label: 'Not Required', color: '#CBD5E1', textColor: '#334155', isLight: true },
+  BLOCKED: { label: 'Blocked', color: '#DC2626', textColor: '#ffffff' },
+};
+
+export function getStatusMeta(statusCode?: string | null) {
+  if (!statusCode) return { label: 'Not Started', color: '#94A3B8', textColor: '#0f172a', isLight: true };
+  const key = statusCode.toUpperCase().replace(/\s+/g, '_');
+  if (STATUS_CONFIG[key]) return STATUS_CONFIG[key];
+  // Fallbacks for stage codes
+  if (key === 'SHOOTING') return STATUS_CONFIG.SHOOT;
+  if (key === 'EDITING') return STATUS_CONFIG.EDIT_DONE;
+  if (key === 'SCHEDULE') return STATUS_CONFIG.SCHEDULING;
+  if (key === 'FINAL_UPLOAD' || key === 'RAW_FOOTAGE') return STATUS_CONFIG.UPLOAD_DONE;
+  if (key.includes('REVIEW')) return STATUS_CONFIG.CLIENT_REVIEW;
+  return { label: label(statusCode), color: '#64748B', textColor: '#ffffff' };
+}
+
 const LABELS: Record<string, string> = {
-  IDEA: 'Idea', SCRIPT: 'Script', INTERNAL_REVIEW: 'Internal Review', CLIENT_REVIEW: 'Client Review', SHOOTING: 'Shooting', RAW_FOOTAGE: 'Raw Footage', EDITING: 'Editing',
-  SMM_REVIEW: 'SMM Review', FINAL_REVIEW: 'Final Review', CLIENT_FINAL_APPROVAL: 'Client Final Approval', SCHEDULE: 'Schedule', PUBLISHED: 'Published',
+  IDEA: 'Idea', SCRIPT: 'Script', INTERNAL_REVIEW: 'Internal Review', CLIENT_REVIEW: 'Client Review',
+  VOICE_OVER: 'Voice Over', SHOOTING: 'Shooting', RAW_FOOTAGE: 'Raw Footage', AI_GENERATION: 'AI Generation',
+  GRAPHIC_DESIGN: 'Graphic Design', EDITING: 'Editing', SMM_REVIEW: 'SMM Review', FINAL_REVIEW: 'Final Review',
+  CLIENT_FINAL_APPROVAL: 'Client Final Approval', FINAL_UPLOAD: 'Final Upload', SCHEDULE: 'Schedule', PUBLISHED: 'Published',
   WAITING_FOR_CLIENT: 'Waiting for Client', CHANGES_REQUESTED: 'Changes Requested', TODO: 'To Do', IN_PROGRESS: 'In Progress', DND: 'Do Not Disturb',
   INTERNAL_SCRIPT: 'Script Review', CLIENT_SCRIPT: 'Client Script Review', SMM: 'SMM Review', FINAL: 'Final Review', CLIENT_FINAL: 'Client Final Approval',
-  SUPER_ADMIN: 'Super Admin', TEAM_LEAD: 'Team Lead', SCRIPT_WRITER: 'Script Writer', INSTAGRAM_DM: 'Instagram DM', WHATSAPP: 'WhatsApp', CLIENT_FOLLOWUP: 'Client Follow-up',
+  SUPER_ADMIN: 'Super Admin', TEAM_LEAD: 'Team Lead', SCRIPT_WRITER: 'Script Writer', GRAPHIC_DESIGNER: 'Graphic Designer',
+  INSTAGRAM_DM: 'Instagram DM', WHATSAPP: 'WhatsApp', CLIENT_FOLLOWUP: 'Client Follow-up',
   REVIEW_REQUIRED: 'Review Required', RAW_UPLOADED: 'Raw Uploaded', MESSAGE_READ: 'Message read', SUBMITTED: 'Submitted', AISENSY: 'AiSensy', LINK: 'Link', SMM_ROLE: 'SMM',
+  REEL: 'Reel', POST: 'Post', CAROUSEL: 'Carousel', AI_REEL: 'AI Reel', AI_IMAGE: 'AI Image', STORY: 'Story', AD: 'Ad Creative', OTHER: 'Other',
 };
 export const label = (s?: string | null) => (s ? LABELS[s] || s.replace(/_/g, ' ').toLowerCase().replace(/(^|\s)\S/g, (m) => m.toUpperCase()) : '—');
 export const roleLabel = (s?: string) => (s === 'SMM' ? 'SMM' : label(s));
@@ -13,10 +62,10 @@ export const roleLabel = (s?: string) => (s === 'SMM' ? 'SMM' : label(s));
 type Tone = 'neutral' | 'blue' | 'green' | 'amber' | 'red';
 export function tone(status?: string): Tone {
   switch (status) {
-    case 'APPROVED': case 'COMPLETED': case 'PUBLISHED': case 'SUCCESS': case 'ONLINE': case 'CONNECTED': case 'READY': return 'green';
-    case 'CHANGES_REQUESTED': case 'OVERDUE': case 'BLOCKED': case 'FAILED': case 'EXPIRED': case 'URGENT': case 'ERROR': return 'red';
-    case 'WAITING_FOR_CLIENT': case 'PENDING': case 'REVIEW': case 'REVIEW_REQUIRED': case 'AWAY': case 'HIGH': case 'OPENED': case 'IN_REVIEW': case 'ONBOARDING': case 'PAUSED': return 'amber';
-    case 'IN_PROGRESS': case 'ACTIVE': case 'SENT': case 'DELIVERED': case 'SCHEDULED': case 'SUBMITTED': return 'blue';
+    case 'APPROVED': case 'COMPLETED': case 'PUBLISHED': case 'SUCCESS': case 'ONLINE': case 'CONNECTED': case 'READY': case 'POSTED': case 'UPLOAD_DONE': return 'green';
+    case 'CHANGES_REQUESTED': case 'OVERDUE': case 'BLOCKED': case 'FAILED': case 'EXPIRED': case 'URGENT': case 'ERROR': case 'SHOOT_CANCELLED': return 'red';
+    case 'WAITING_FOR_CLIENT': case 'PENDING': case 'REVIEW': case 'REVIEW_REQUIRED': case 'AWAY': case 'HIGH': case 'OPENED': case 'IN_REVIEW': case 'ONBOARDING': case 'PAUSED': case 'NEEDS_REVIEW': case 'CLIENT_REVIEW': return 'amber';
+    case 'IN_PROGRESS': case 'ACTIVE': case 'SENT': case 'DELIVERED': case 'SCHEDULED': case 'SUBMITTED': case 'SCHEDULING': return 'blue';
     default: return 'neutral';
   }
 }

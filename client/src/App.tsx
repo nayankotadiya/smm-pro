@@ -15,10 +15,13 @@ const Calendar = lazy(() => import('@/pages/Calendar'));
 const Approvals = lazy(() => import('@/pages/Approvals'));
 const MediaLibrary = lazy(() => import('@/pages/Media'));
 const Settings = lazy(() => import('@/pages/Settings'));
+const SchedulingPublishing = lazy(() => import('@/pages/SchedulingPublishing'));
 const L = <T extends Record<string, any>>(load: () => Promise<T>, name: keyof T) => lazy(() => load().then((m) => ({ default: m[name] })));
 const work = () => import('@/pages/Work'); const list = () => import('@/pages/ContentList'); const clients = () => import('@/pages/Clients'); const misc = () => import('@/pages/Misc');
+const contentTypes = () => import('@/pages/ContentTypeViews');
 const MyWork = L(work, 'MyWork'), Tasks = L(work, 'Tasks'), TaskDetail = L(work, 'TaskDetail'), Blocked = L(work, 'Blocked'), ChangesRequested = L(work, 'ChangesRequested');
 const ContentList = L(list, 'ContentList'), Scripts = L(list, 'Scripts'), Shooting = L(list, 'Shooting'), Editing = L(list, 'Editing');
+const ReelsView = L(contentTypes, 'ReelsView'), PostsView = L(contentTypes, 'PostsView'), CarouselsView = L(contentTypes, 'CarouselsView'), AiReelsView = L(contentTypes, 'AiReelsView');
 const Clients = L(clients, 'Clients'), ClientDetail = L(clients, 'ClientDetail');
 const Reminders = L(misc, 'Reminders'), Automation = L(misc, 'Automation'), Team = L(misc, 'Team'), TeamMember = L(misc, 'TeamMember'), Reports = L(misc, 'Reports'), Notifications = L(misc, 'Notifications'), Activity = L(misc, 'Activity');
 
@@ -52,8 +55,13 @@ export default function App() {
             <Route path="my-work" element={<MyWork />} />
             <Route path="clients" element={<Need perm="clients.read"><Clients /></Need>} /><Route path="clients/:id" element={<Need perm="clients.read"><ClientDetail /></Need>} />
             <Route path="content" element={<ContentList />} /><Route path="content/:id" element={<ContentDetail />} />
+            <Route path="reels" element={<ReelsView />} />
+            <Route path="posts" element={<PostsView />} />
+            <Route path="carousels" element={<CarouselsView />} />
+            <Route path="ai-reels" element={<AiReelsView />} />
             <Route path="scripts" element={<Scripts />} /><Route path="shooting" element={<Shooting />} /><Route path="editing" element={<Editing />} />
             <Route path="approvals" element={<Approvals />} />
+            <Route path="scheduling" element={<SchedulingPublishing />} />
             <Route path="tasks" element={<Tasks />} /><Route path="tasks/:id" element={<TaskDetail />} />
             <Route path="blocked" element={<Blocked />} /><Route path="changes-requested" element={<ChangesRequested />} />
             <Route path="calendar" element={<Calendar />} /><Route path="media" element={<MediaLibrary />} />

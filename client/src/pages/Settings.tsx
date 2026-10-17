@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import clsx from 'clsx';
 import { Plus, Bell, BellOff, Download, Smartphone, RefreshCw, Send, Shield, Laptop, Trash2, Copy, LogOut, ExternalLink, Sparkles, Camera } from 'lucide-react';
 import { get, post, patch, errMsg } from '@/lib/api';
 import { useAuth, useCan } from '@/store/auth';
@@ -907,6 +908,7 @@ function Integrations() {
         <Card title={<span className="flex items-center gap-2">Web Push<S ok={d.push.configured} /></span>}><p className="text-[13px] text-ink-2">{d.push.configured ? 'VAPID keys are set. Each person enables push per device under Notifications.' : 'Generate keys with "npx web-push generate-vapid-keys" and set VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY.'}</p></Card>
         <Card title={<span className="flex items-center gap-2">Email<S ok={d.email.configured} /></span>}><p className="text-[13px] text-ink-2">{d.email.configured ? 'SMTP is configured for password resets and email notifications.' : 'Set EMAIL_HOST, EMAIL_USER and EMAIL_PASSWORD. Without email, admins reset passwords from the Users tab.'}</p></Card>
         <Card title={<span className="flex items-center gap-2">Background jobs<S ok text={d.redis.scheduler} /></span>}><p className="text-[13px] text-ink-2">{d.redis.configured ? 'Reminders, deadline checks and approval follow-ups run on BullMQ with Redis.' : 'Running on the in-process scheduler. This is reliable for a single API instance; set REDIS_URL before running more than one.'}</p></Card>
+        <GoogleSheetsConfigCard />
         <ClientPortalConfigCard />
         <AiContentStudioCard />
         <PurgeDemoDataCard />
@@ -914,6 +916,177 @@ function Integrations() {
         <p className="text-meta text-ink-3 lg:col-span-2">Credentials are stored only as server environment variables and are never shown here.</p>
       </div>
     )}</Async>
+  );
+}
+
+function GoogleSheetsConfigCard() {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ['sheets-status'], queryFn: () => get<any>('/sheets/status') });
+  const [spreadsheetInput, setSpreadsheetInput] = useState('');
+
+  const configMut = useMutation({
+    mutationFn: (spreadsheetId: string) => post('/sheets/configure', { spreadsheetId }),
+    onSuccess: () => {
+      toast.success('Google Sheet linked successfully!');
+      setSpreadsheetInput('');
+      qc.invalidateQueries({ queryKey: ['sheets-status'] });
+    },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+
+  const createMut = useMutation({
+    mutationFn: () => post('/sheets/create', { title: 'SMM Pro Master Tracker' }),
+    onSuccess: () => {
+      toast.success('Created new SMM Pro Master Google Sheet with all 7 sheets!');
+      qc.invalidateQueries({ queryKey: ['sheets-status'] });
+    },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+
+  const syncMut = useMutation({
+    mutationFn: () => post('/sheets/sync'),
+    onSuccess: (r: any) => {
+      toast.success(`Google Sheets synced! ${r.contentsUpdated ?? 0} content rows updated.`);
+      qc.invalidateQueries({ queryKey: ['sheets-status'] });
+    },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+
+  const testMut = useMutation({
+    mutationFn: () => post('/sheets/test'),
+    onSuccess: (r: any) => {
+      toast.success(`Google Sheets test passed: ${r.title} (${r.sheetsCount} sheets)`);
+    },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+
+  const d = q.data || {};
+  const isConnected = d.configured && !!d.spreadsheetId;
+
+  return (
+    <Card
+      title={
+        <span className="flex items-center gap-2">
+          Google Sheets Master Tracker
+          <Badge t={isConnected ? 'green' : d.configured ? 'amber' : 'neutral'}>
+            {isConnected ? 'Connected & Active' : d.configured ? 'Needs Spreadsheet' : 'Not Configured'}
+          </Badge>
+        </span>
+      }
+      className="lg:col-span-2"
+    >
+      <div className="space-y-4 text-[13px]">
+        <p className="text-ink-2 leading-relaxed">
+          Bi-directional internal synchronization between SMM Pro's MongoDB database and the Google Sheets Master Tracker. SMM Pro is the primary source of truth. Contains all 7 configured sheets: <strong>Dashboard, Clients, Content Tracker (Cols A–AB), Schedule, Employees, Tasks, Setup Guide</strong> with automated formulas (Days Left, Overdue) and status conditional formatting.
+        </p>
+
+        {d.spreadsheetUrl && (
+          <div className="rounded-xl border border-line/70 bg-surface-2/60 p-3.5 space-y-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <span className="text-ink-2 font-medium">Configured Spreadsheet:</span>
+              <div className="flex items-center gap-2">
+                <a
+                  href={d.spreadsheetUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-bold text-emerald-500 hover:underline inline-flex items-center gap-1 text-xs"
+                >
+                  {d.title || 'Open Master Sheet'} <ExternalLink size={13} />
+                </a>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(d.spreadsheetId);
+                    toast.success('Spreadsheet ID copied!');
+                  }}
+                  className="p-1 text-ink-3 hover:text-ink transition-colors"
+                  title="Copy Spreadsheet ID"
+                >
+                  <Copy size={13} />
+                </button>
+              </div>
+            </div>
+
+            {d.syncStatus && (
+              <div className="flex items-center justify-between text-xs text-ink-3 pt-1 border-t border-line/50">
+                <span>Last Sync: {d.syncStatus.syncedAt ? ago(d.syncStatus.syncedAt) : 'Never'}</span>
+                <span>Rows Synced: {d.syncStatus.contentsUpdated ?? 0}</span>
+                <span className={clsx('font-semibold', d.syncStatus.status === 'SUCCESS' ? 'text-emerald-500' : 'text-rose-500')}>
+                  {d.syncStatus.status}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          {isConnected && (
+            <>
+              <Button
+                size="sm"
+                variant="primary"
+                loading={syncMut.isPending}
+                icon={<RefreshCw size={14} className={syncMut.isPending ? 'animate-spin' : ''} />}
+                onClick={() => syncMut.mutate()}
+              >
+                Sync Database to Sheets
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                loading={testMut.isPending}
+                onClick={() => testMut.mutate()}
+              >
+                Test Connection
+              </Button>
+            </>
+          )}
+
+          {d.configured && (
+            <Button
+              size="sm"
+              variant="secondary"
+              loading={createMut.isPending}
+              icon={<Plus size={14} />}
+              onClick={() => {
+                if (window.confirm('Create a new SMM Pro Master Google Sheet? This will automatically format all 7 sheets, formulas, and headers.')) {
+                  createMut.mutate();
+                }
+              }}
+            >
+              Create New Master Spreadsheet
+            </Button>
+          )}
+        </div>
+
+        {/* Manual Spreadsheet ID / URL config */}
+        <div className="pt-2 border-t border-line/60">
+          <label className="text-xs font-bold text-ink-2 block mb-1.5">
+            Link Existing Google Spreadsheet (Paste URL or ID)
+          </label>
+          <div className="flex gap-2">
+            <Input
+              placeholder="https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit"
+              value={spreadsheetInput}
+              onChange={(e) => setSpreadsheetInput(e.target.value)}
+              className="text-xs"
+            />
+            <Button
+              size="sm"
+              variant="secondary"
+              loading={configMut.isPending}
+              disabled={!spreadsheetInput.trim()}
+              onClick={() => configMut.mutate(spreadsheetInput.trim())}
+            >
+              Link Sheet
+            </Button>
+          </div>
+          <span className="text-[11px] text-ink-3 mt-1 block">
+            Make sure your Google Service Account email has been granted Editor access to the sheet if using a private spreadsheet.
+          </span>
+        </div>
+      </div>
+    </Card>
   );
 }
 

@@ -2,6 +2,7 @@ import { Schema, model } from 'mongoose';
 import { ObjectId, ts, softDelete } from './common';
 
 const taskSchema = new Schema({
+  taskId: { type: String, sparse: true, index: true },
   title: { type: String, required: true },
   description: String,
   clientId: { type: ObjectId, ref: 'Client', index: true },
@@ -9,12 +10,14 @@ const taskSchema = new Schema({
   assignedTo: { type: ObjectId, ref: 'User', index: true },
   createdBy: { type: ObjectId, ref: 'User' },
   source: { type: String, enum: ['MANUAL', 'AUTOMATIC', 'CHAT'], default: 'MANUAL' },
-  kind: { type: String, default: 'GENERAL' }, // SCRIPT_REVISION, SHOOT, EDIT, SMM_REVIEW, FINAL_REVIEW, SCHEDULE, REVISION ...
+  kind: { type: String, default: 'GENERAL' }, // SCRIPT, SCRIPT_REVISION, VOICE_OVER, SHOOT, RAW_UPLOAD, GRAPHIC_DESIGN, AI_GENERATION, EDIT, EDIT_REVISION, SMM_REVIEW, FINAL_REVIEW, CLIENT_REVIEW, FINAL_UPLOAD, SCHEDULE, REVISION ...
   priority: { type: String, enum: ['LOW', 'MEDIUM', 'HIGH', 'URGENT'], default: 'MEDIUM' },
   dueAt: Date,
-  status: { type: String, enum: ['TODO', 'IN_PROGRESS', 'REVIEW', 'COMPLETED', 'OVERDUE', 'BLOCKED'], default: 'TODO', index: true },
+  status: { type: String, enum: ['TODO', 'IN_PROGRESS', 'REVIEW', 'COMPLETED', 'OVERDUE', 'BLOCKED', 'CANCELLED'], default: 'TODO', index: true },
   blockedReason: String, blockedSince: Date,
   completedAt: Date,
+  revisionCount: { type: Number, default: 0 },
+  comments: [{ text: String, by: { type: ObjectId, ref: 'User' }, at: { type: Date, default: Date.now } }],
   sourceMessageId: { type: ObjectId, ref: 'Message' },
   automationId: { type: ObjectId, ref: 'Automation' },
   overdueNotifiedAt: Date,
@@ -22,6 +25,7 @@ const taskSchema = new Schema({
 taskSchema.index({ assignedTo: 1, status: 1, dueAt: 1 });
 taskSchema.index({ status: 1, dueAt: 1 });
 taskSchema.index({ clientId: 1, status: 1 });
+taskSchema.index({ contentId: 1, kind: 1, status: 1 });
 softDelete(taskSchema);
 export const Task = model('Task', taskSchema);
 

@@ -10,6 +10,7 @@ import { User, RoleModel, Client } from '../models';
 import { DEFAULT_ROLE_PERMISSIONS, ROLES } from '../config/constants';
 import { seedAutomations, startAutomationEngine } from '../services/automation';
 import { bus } from '../services/events';
+import { env } from '../config/env';
 
 let mongod: MongoMemoryServer | undefined;
 export const app = createApp();
@@ -17,6 +18,8 @@ export const users: Record<string, { id: string; token: string }> = {};
 let engine = false;
 
 export async function boot() {
+  env.google.serviceAccountB64 = '';
+  env.google.refreshToken = '';
   if (process.env.TEST_MONGO_URI) { await mongoose.connect(process.env.TEST_MONGO_URI); await mongoose.connection.dropDatabase(); }
   else { mongod = await MongoMemoryServer.create(); await mongoose.connect(mongod.getUri()); }
   for (const k of ROLES) await RoleModel.create({ key: k, permissions: DEFAULT_ROLE_PERMISSIONS[k] });

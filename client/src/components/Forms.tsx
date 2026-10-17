@@ -13,20 +13,50 @@ import { useAuth, useCan } from '@/store/auth';
 import { startUpload } from '@/lib/upload';
 import { Zap, Upload, Film, X } from 'lucide-react';
 
-const contentSchema = z.object({ title: z.string().min(2, 'Give the content a title'), clientId: z.string().min(1, 'Choose a client'), type: z.string(), platform: z.string(), priority: z.string(), deadline: z.string().optional(), description: z.string().optional() });
-export function ContentFormModal({ open, onClose, clientId }: { open: boolean; onClose: () => void; clientId?: string }) {
-  const clients = useClients(); const qc = useQueryClient(); const nav = useNavigate();
-  const f = useForm<z.infer<typeof contentSchema>>({ resolver: zodResolver(contentSchema), defaultValues: { title: '', clientId: clientId || '', type: 'REEL', platform: 'INSTAGRAM', priority: 'MEDIUM' } });
-  useEffect(() => { if (open) f.reset({ title: '', clientId: clientId || '', type: 'REEL', platform: 'INSTAGRAM', priority: 'MEDIUM', deadline: '', description: '' }); }, [open]); // eslint-disable-line
-  const m = useMutation({ mutationFn: (v: any) => post('/content', { ...v, deadline: v.deadline ? new Date(v.deadline).toISOString() : null }), onSuccess: (c) => { toast.success(`${c.contentId} created.`); qc.invalidateQueries({ queryKey: ['content'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); onClose(); nav(`/content/${c._id}`); }, onError: (e) => toast.error(errMsg(e)) });
+const contentSchema = z.object({
+  title: z.string().min(2, 'Give the content a title'),
+  clientId: z.string().min(1, 'Choose a client'),
+  type: z.string(),
+  platform: z.string(),
+  priority: z.string(),
+  assignedDesigner: z.string().optional(),
+  deadline: z.string().optional(),
+  description: z.string().optional(),
+});
+
+export function ContentFormModal({ open, onClose, clientId, defaultType }: { open: boolean; onClose: () => void; clientId?: string; defaultType?: string }) {
+  const clients = useClients(); const team = useTeam(); const qc = useQueryClient(); const nav = useNavigate();
+  const f = useForm<z.infer<typeof contentSchema>>({
+    resolver: zodResolver(contentSchema),
+    defaultValues: { title: '', clientId: clientId || '', type: defaultType || 'REEL', platform: 'INSTAGRAM', priority: 'MEDIUM', assignedDesigner: '' }
+  });
+  useEffect(() => {
+    if (open) f.reset({ title: '', clientId: clientId || '', type: defaultType || 'REEL', platform: 'INSTAGRAM', priority: 'MEDIUM', assignedDesigner: '', deadline: '', description: '' });
+  }, [open, defaultType]); // eslint-disable-line
+  const m = useMutation({
+    mutationFn: (v: any) => post('/content', { ...v, deadline: v.deadline ? new Date(v.deadline).toISOString() : null }),
+    onSuccess: (c) => { toast.success(`${c.contentId} created.`); qc.invalidateQueries({ queryKey: ['content'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); onClose(); nav(`/content/${c._id}`); },
+    onError: (e) => toast.error(errMsg(e))
+  });
   const e = f.formState.errors;
+  const currentType = f.watch('type');
+  const designers = (team.data || []).filter((u) => u.role === 'GRAPHIC_DESIGNER' || u.role === 'EDITOR' || u.role === 'SMM');
+
   return (
     <Modal open={open} onClose={onClose} title="New content" footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" loading={m.isPending} onClick={f.handleSubmit((v) => m.mutate(v))}>Create content</Button></>}>
       <form className="grid gap-3 sm:grid-cols-2" onSubmit={f.handleSubmit((v) => m.mutate(v))}>
         <div className="sm:col-span-2"><Field label="Title" error={e.title?.message}><Input {...f.register('title')} placeholder="Diwali Collection Reel" autoFocus /></Field></div>
         <div className="sm:col-span-2"><Field label="Client" error={e.clientId?.message} hint="The client's default team is assigned automatically."><Select {...f.register('clientId')}><option value="">Select client</option>{(clients.data || []).map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}</Select></Field></div>
-        <Field label="Type"><Select {...f.register('type')}>{['REEL', 'POST', 'CAROUSEL', 'STORY', 'VIDEO', 'SHORT', 'AD'].map((t) => <option key={t} value={t}>{roleLabel(t)}</option>)}</Select></Field>
+        <Field label="Type"><Select {...f.register('type')}>{['REEL', 'POST', 'CAROUSEL', 'AI_REEL', 'AI_IMAGE', 'STORY', 'VIDEO', 'SHORT', 'AD', 'OTHER'].map((t) => <option key={t} value={t}>{roleLabel(t)}</option>)}</Select></Field>
         <Field label="Platform"><Select {...f.register('platform')}>{['INSTAGRAM', 'FACEBOOK', 'YOUTUBE', 'LINKEDIN', 'X', 'MULTI'].map((t) => <option key={t} value={t}>{roleLabel(t)}</option>)}</Select></Field>
+        {(currentType === 'POST' || currentType === 'CAROUSEL') && (
+          <Field label="Graphic Designer">
+            <Select {...f.register('assignedDesigner')}>
+              <option value="">Client Default Designer</option>
+              {designers.map((u) => <option key={u._id} value={u._id}>{u.name} ({u.role})</option>)}
+            </Select>
+          </Field>
+        )}
         <Field label="Priority"><Select {...f.register('priority')}>{['LOW', 'MEDIUM', 'HIGH', 'URGENT'].map((t) => <option key={t} value={t}>{roleLabel(t)}</option>)}</Select></Field>
         <Field label="Deadline"><Input type="datetime-local" {...f.register('deadline')} /></Field>
         <div className="sm:col-span-2"><Field label="Idea / brief"><Textarea {...f.register('description')} placeholder="What is this content about?" /></Field></div>

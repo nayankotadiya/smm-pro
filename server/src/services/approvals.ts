@@ -7,10 +7,11 @@ import { moveToStage, setLastAction, broadcastContent } from './content';
 import { logActivity } from './activity';
 import { postSystemEvent } from './chat';
 import { emitDomain } from './events';
-import { closeTasks } from './tasks';
+import { closeTasks, createRevisionTask } from './tasks';
 import { emitOrg, emitToClient } from './realtime';
 import { aisensyConfigured, sendTemplate } from '../integrations/aisensy';
 import { notifyClientUsers } from './notify';
+import { syncSingleContentToSheet } from '../integrations/sheets';
 
 const OPEN = ['PENDING', 'SENT', 'DELIVERED', 'OPENED', 'WAITING_FOR_CLIENT'];
 const push = (a: any, status: string, extra: any = {}) => a.history.push({ status, at: new Date(), ...extra });
@@ -63,6 +64,7 @@ export async function reviewInternal(id: string, decision: 'APPROVE' | 'CHANGES'
       emitDomain('script.approved', p);
     } else {
       content.status = 'CHANGES_REQUESTED';
+      await createRevisionTask(content, reason, u._id, 'SCRIPT');
       await moveToStage(content, 'SCRIPT', u._id, `${u.name} requested changes on ${version}`);
       content.status = 'CHANGES_REQUESTED'; await content.save(); await broadcastContent(content);
       await postSystemEvent(content._id, 'script.changes', 'SCRIPT CHANGES REQUESTED', [version, reason]);
@@ -85,7 +87,10 @@ export async function reviewInternal(id: string, decision: 'APPROVE' | 'CHANGES'
       });
       emitDomain('smm.approved', p);
     } else {
-      await moveToStage(content, 'EDITING', u._id, `${u.name} requested changes on ${version}`);
+      const taskRole = (content.type === 'POST' || content.type === 'CAROUSEL') ? 'DESIGN' : 'EDIT';
+      await createRevisionTask(content, reason, u._id, taskRole);
+      const targetStage = (content.type === 'POST' || content.type === 'CAROUSEL') ? 'GRAPHIC_DESIGN' : 'EDITING';
+      await moveToStage(content, targetStage, u._id, `${u.name} requested changes on ${version}`);
       content.status = 'CHANGES_REQUESTED'; await content.save(); await broadcastContent(content);
       await postSystemEvent(content._id, 'smm.changes', 'SMM CHANGES REQUESTED', [version, reason]);
       emitDomain('smm.changes_requested', p);
@@ -105,12 +110,16 @@ export async function reviewInternal(id: string, decision: 'APPROVE' | 'CHANGES'
       });
       emitDomain('final.approved', p);
     } else {
-      await moveToStage(content, 'EDITING', u._id, `${u.name} requested final changes on ${version}`);
+      const taskRole = (content.type === 'POST' || content.type === 'CAROUSEL') ? 'DESIGN' : 'EDIT';
+      await createRevisionTask(content, reason, u._id, taskRole);
+      const targetStage = (content.type === 'POST' || content.type === 'CAROUSEL') ? 'GRAPHIC_DESIGN' : 'EDITING';
+      await moveToStage(content, targetStage, u._id, `${u.name} requested final changes on ${version}`);
       content.status = 'CHANGES_REQUESTED'; await content.save(); await broadcastContent(content);
       await postSystemEvent(content._id, 'final.changes', 'FINAL REVIEW CHANGES REQUESTED', [version, reason]);
       emitDomain('final.changes_requested', p);
     }
   }
+  syncSingleContentToSheet(String(content._id)).catch(() => {});
   broadcast(a);
   return a;
 }
@@ -305,20 +314,27 @@ export async function clientDecision(tokenOrApproval: string | any, decision: 'A
     if (decision === 'APPROVE') {
       await Script.updateOne({ contentId: content._id }, { status: 'FINAL' });
       if (a.scriptVersionId) await ScriptVersion.updateOne({ _id: a.scriptVersionId }, { approvalState: 'CLIENT_APPROVED' });
-      if (!(await Shoot.exists({ contentId: content._id }))) await Shoot.create({ contentId: content._id, clientId: content.clientId, shooterId: content.assignedShooter });
-      await moveToStage(content, 'SHOOTING', actorId, `Client approved ${a.version}`);
+      if (content.type === 'POST' || content.type === 'CAROUSEL') {
+        await moveToStage(content, 'GRAPHIC_DESIGN', actorId, `Client approved script ${a.version}`);
+      } else if (content.type === 'AI_REEL') {
+        await moveToStage(content, 'AI_GENERATION', actorId, `Client approved script ${a.version}`);
+      } else {
+        if (!(await Shoot.exists({ contentId: content._id }))) await Shoot.create({ contentId: content._id, clientId: content.clientId, shooterId: content.assignedShooter });
+        await moveToStage(content, 'SHOOTING', actorId, `Client approved ${a.version}`);
+      }
       await postSystemEvent(content._id, 'client.approved', 'CLIENT APPROVAL RECEIVED', [`Content: ${content.title}`, `Version: ${a.version}`, `Approved: ${fmtTime(new Date())}`], {
         action: {
-          actionType: 'ASSIGN_SHOOTER',
-          title: `Schedule Shoot for ${content.contentId}`,
-          description: `Client approved script. Manager or SMM: set shoot date, time, location & shooter.`,
-          allowedRoles: ['MANAGER', 'SUPER_ADMIN', 'ADMIN', 'TEAM_LEAD', 'SMM'],
+          actionType: content.type === 'POST' || content.type === 'CAROUSEL' ? 'CREATE_TASK' : 'ASSIGN_SHOOTER',
+          title: content.type === 'POST' || content.type === 'CAROUSEL' ? `Design Graphics for ${content.contentId}` : `Schedule Shoot for ${content.contentId}`,
+          description: `Client approved script. Next production phase activated.`,
+          allowedRoles: ['MANAGER', 'SUPER_ADMIN', 'ADMIN', 'TEAM_LEAD', 'SMM', 'GRAPHIC_DESIGNER'],
           payload: { contentId: content._id },
         },
       });
       emitDomain('client_script.approved', p);
     } else {
       await Script.updateOne({ contentId: content._id }, { status: 'CHANGES_REQUESTED' });
+      await createRevisionTask(content, reason, actorId, 'SCRIPT');
       await moveToStage(content, 'SCRIPT', actorId, `Client requested changes on ${a.version}`);
       content.status = 'CHANGES_REQUESTED'; await content.save(); await broadcastContent(content);
       await postSystemEvent(content._id, 'client.changes', 'CLIENT CHANGE REQUEST', [a.version, ...comments.map((c) => (c.timestampSec != null ? `${fmtTs(c.timestampSec)}  "${c.comment}"` : `"${c.comment}"`))], {
@@ -340,27 +356,31 @@ export async function clientDecision(tokenOrApproval: string | any, decision: 'A
         action: {
           actionType: 'CREATE_TASK',
           title: `Schedule Post: ${content.contentId}`,
-          description: `Client approved final video. Schedule across social platforms.`,
+          description: `Client approved final creative. Schedule across social platforms.`,
           allowedRoles: ['SMM', 'MANAGER', 'SUPER_ADMIN', 'ADMIN'],
           payload: { contentId: content._id, priority: 'HIGH' },
         },
       });
       emitDomain('client.approved', p);
     } else {
-      await moveToStage(content, 'EDITING', actorId, `Client requested changes on ${a.version}`);
+      const taskRole = (content.type === 'POST' || content.type === 'CAROUSEL') ? 'DESIGN' : 'EDIT';
+      await createRevisionTask(content, reason, actorId, taskRole);
+      const targetStage = (content.type === 'POST' || content.type === 'CAROUSEL') ? 'GRAPHIC_DESIGN' : 'EDITING';
+      await moveToStage(content, targetStage, actorId, `Client requested changes on ${a.version}`);
       content.status = 'CHANGES_REQUESTED'; await content.save(); await broadcastContent(content);
       await postSystemEvent(content._id, 'client.changes', 'CLIENT CHANGE REQUEST', [a.version, ...comments.map((c) => (c.timestampSec != null ? `${fmtTs(c.timestampSec)}  "${c.comment}"` : `"${c.comment}"`))], {
         action: {
           actionType: 'CREATE_TASK',
-          title: `Revise Edit: ${content.contentId} (${a.version})`,
+          title: `Revise Creative: ${content.contentId} (${a.version})`,
           description: `Client requested modifications: ${reason}`,
-          allowedRoles: ['EDITOR', 'MANAGER', 'SUPER_ADMIN', 'ADMIN'],
+          allowedRoles: ['EDITOR', 'GRAPHIC_DESIGNER', 'MANAGER', 'SUPER_ADMIN', 'ADMIN'],
           payload: { contentId: content._id, priority: 'URGENT' },
         },
       });
       emitDomain('client.changes_requested', p);
     }
   }
+  syncSingleContentToSheet(String(content._id)).catch(() => {});
   broadcast(a);
   return { status: a.status };
 }

@@ -9,21 +9,45 @@ import { logActivity } from '../services/activity';
 import { ensureContentRoom, postSystemEvent } from '../services/chat';
 import { notify, managerIds } from '../services/notify';
 import { emitDomain } from '../services/events';
-import { closeTasks, createTask } from '../services/tasks';
-import { STAGES } from '../config/constants';
+import { closeTasks, createTask, handleShootCancelled } from '../services/tasks';
+import { STAGES, CONTENT_TYPES } from '../config/constants';
 import { escapeRx } from './clients';
+import { syncSingleContentToSheet } from '../integrations/sheets';
 
 const r = Router();
 const oid = z.string().regex(/^[a-f0-9]{24}$/).optional().nullable();
 const body = z.object({
-  title: z.string().min(1).max(160), clientId: z.string(), campaignId: oid,
-  type: z.enum(['REEL', 'POST', 'CAROUSEL', 'STORY', 'VIDEO', 'SHORT', 'AD']).optional(),
+  title: z.string().min(1).max(160),
+  clientId: z.string(),
+  campaignId: oid,
+  type: z.enum(CONTENT_TYPES).optional(),
   platform: z.enum(['INSTAGRAM', 'FACEBOOK', 'YOUTUBE', 'LINKEDIN', 'X', 'MULTI']).optional(),
-  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(), deadline: z.coerce.date().optional().nullable(),
-  description: z.string().max(4000).optional().nullable(), caption: z.string().max(4000).optional().nullable(), hashtags: z.string().max(2000).optional().nullable(),
-  assignedWriter: oid, assignedShooter: oid, assignedEditor: oid, assignedSMM: oid, assignedReviewer: oid,
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
+  deadline: z.coerce.date().optional().nullable(),
+  productionDeadline: z.coerce.date().optional().nullable(),
+  plannedPublicationDate: z.coerce.date().optional().nullable(),
+  plannedPublicationTime: z.string().max(20).optional().nullable(),
+  startDate: z.coerce.date().optional().nullable(),
+  stageDeadlines: z.record(z.coerce.date()).optional().nullable(),
+  description: z.string().max(4000).optional().nullable(),
+  contentBrief: z.string().max(10000).optional().nullable(),
+  caption: z.string().max(4000).optional().nullable(),
+  hashtags: z.string().max(2000).optional().nullable(),
+  notes: z.string().max(5000).optional().nullable(),
+  rawFileLinks: z.array(z.string()).optional(),
+  editedFileLinks: z.array(z.string()).optional(),
+  finalFileLinks: z.array(z.string()).optional(),
+  thumbnailLink: z.string().optional().nullable(),
+  productionStatus: z.string().max(50).optional(),
+  approvalStatus: z.string().max(50).optional(),
+  assignedWriter: oid,
+  assignedShooter: oid,
+  assignedEditor: oid,
+  assignedDesigner: oid,
+  assignedSMM: oid,
+  assignedReviewer: oid,
 });
-const ASSIGN = ['assignedWriter', 'assignedShooter', 'assignedEditor', 'assignedSMM', 'assignedReviewer'] as const;
+const ASSIGN = ['assignedWriter', 'assignedShooter', 'assignedEditor', 'assignedDesigner', 'assignedSMM', 'assignedReviewer'] as const;
 
 r.get('/', ah(async (req, res) => {
   const f: any[] = [visibilityFilter(req.user!)];
@@ -34,19 +58,21 @@ r.get('/', ah(async (req, res) => {
   if (q.type) f.push({ type: q.type });
   if (q.status) f.push({ status: { $in: q.status.split(',') } });
   if (q.stage) f.push({ stage: { $in: q.stage.split(',') } });
+  if (q.productionStatus) f.push({ productionStatus: { $in: q.productionStatus.split(',') } });
+  if (q.approvalStatus) f.push({ approvalStatus: { $in: q.approvalStatus.split(',') } });
   if (q.priority) f.push({ priority: q.priority });
   if (q.member) f.push({ $or: [...ASSIGN.map((a) => ({ [a]: q.member })), { currentOwner: q.member }] });
   if (q.owner) f.push({ currentOwner: q.owner === 'me' ? req.user!._id : q.owner });
   if (q.from || q.to) f.push({ deadline: { ...(q.from ? { $gte: new Date(q.from) } : {}), ...(q.to ? { $lte: new Date(q.to) } : {}) } });
-  if (q.overdue === '1') f.push({ deadline: { $lt: new Date() }, status: { $nin: ['COMPLETED', 'CANCELLED'] } });
+  if (q.overdue === '1') f.push({ deadline: { $lt: new Date() }, status: { $nin: ['COMPLETED', 'CANCELLED', 'POSTED'] } });
   if (q.q) f.push({ $or: [{ title: new RegExp(escapeRx(q.q), 'i') }, { contentId: new RegExp(escapeRx(q.q), 'i') }] });
   const page = Math.max(1, Number(q.page) || 1); const limit = Math.min(100, Number(q.limit) || 50);
   const where = { $and: f };
   const [items, total] = await Promise.all([
     Content.find(where).sort({ updatedAt: -1 }).skip((page - 1) * limit).limit(limit)
-      .populate('clientId', 'name')
+      .populate('clientId', 'name businessName')
       .populate('campaignId', 'name')
-      .populate('currentOwner nextOwner', 'name role')
+      .populate('currentOwner nextOwner assignedWriter assignedShooter assignedEditor assignedDesigner assignedSMM assignedReviewer', 'name role')
       .populate('latestMediaId', 'fileName mimeType')
       .lean(),
     Content.countDocuments(where),
@@ -62,17 +88,85 @@ r.get('/', ah(async (req, res) => {
 
 r.post('/', requirePerm('content.write'), ah(async (req, res) => { res.status(201).json(await createContent(body.parse(req.body), req.user!)); }));
 
+// Dedicated Scheduling & Publishing Metrics Endpoint
+r.get('/scheduling/metrics', ah(async (req, res) => {
+  const vis = visibilityFilter(req.user!);
+  const now = new Date();
+  const startToday = new Date();
+  startToday.setHours(0, 0, 0, 0);
+  const endToday = new Date();
+  endToday.setHours(23, 59, 59, 999);
+
+  const c = (filter: any) => Content.countDocuments({ $and: [vis, filter] });
+
+  const [
+    totalContent,
+    awaitingApproval,
+    readyToSchedule,
+    scheduled,
+    dueToday,
+    overdue,
+    posted,
+    cancelled,
+    reels,
+    posts,
+    carousels,
+    aiReels,
+  ] = await Promise.all([
+    c({ status: { $ne: 'CANCELLED' } }),
+    c({ stage: { $in: ['SMM_REVIEW', 'FINAL_REVIEW', 'CLIENT_REVIEW', 'CLIENT_FINAL_APPROVAL'] } }),
+    c({ stage: 'FINAL_UPLOAD', status: { $nin: ['COMPLETED', 'CANCELLED'] } }),
+    c({ $or: [{ stage: 'SCHEDULE' }, { scheduledAt: { $ne: null }, status: 'SCHEDULED' }] }),
+    c({
+      status: { $nin: ['COMPLETED', 'CANCELLED'] },
+      $or: [
+        { deadline: { $gte: startToday, $lte: endToday } },
+        { productionDeadline: { $gte: startToday, $lte: endToday } },
+        { plannedPublicationDate: { $gte: startToday, $lte: endToday } },
+        { scheduledAt: { $gte: startToday, $lte: endToday } },
+      ],
+    }),
+    c({
+      deadline: { $lt: now },
+      status: { $nin: ['COMPLETED', 'CANCELLED', 'POSTED'] },
+      stage: { $ne: 'PUBLISHED' },
+    }),
+    c({ $or: [{ stage: 'PUBLISHED' }, { status: 'COMPLETED' }, { productionStatus: 'POSTED' }] }),
+    c({ $or: [{ status: 'CANCELLED' }, { productionStatus: 'SHOOT_CANCELLED' }] }),
+    c({ type: 'REEL' }),
+    c({ type: 'POST' }),
+    c({ type: 'CAROUSEL' }),
+    c({ type: { $in: ['AI_REEL', 'AI_IMAGE'] } }),
+  ]);
+
+  res.json({
+    totalContent,
+    awaitingApproval,
+    readyToSchedule,
+    scheduled,
+    dueToday,
+    overdue,
+    posted,
+    cancelled,
+    reels,
+    posts,
+    carousels,
+    aiReels,
+  });
+}));
+
 r.get('/blocked', ah(async (req, res) => {
   const isSuper = req.user?.role === 'SUPER_ADMIN';
   const blocked = await Content.find({ $and: [visibilityFilter(req.user!), { status: 'BLOCKED' }] }).sort({ 'blocked.since': 1 }).populate('clientId', 'name').populate('currentOwner', 'name role').lean();
   res.json(isSuper ? blocked : blocked.map((it: any) => sanitizeSuperAdminUsers(it, false)));
 }));
+
 r.get('/changes-requested', ah(async (req, res) => {
-  const fb = await Feedback.find({ resolved: false }).sort({ createdAt: -1 }).limit(200).populate({ path: 'contentId', select: 'contentId title clientId assignedEditor assignedWriter stage status', populate: [{ path: 'clientId', select: 'name' }, { path: 'assignedEditor assignedWriter', select: 'name' }] }).populate('approvalId', 'type status').lean();
+  const fb = await Feedback.find({ resolved: false }).sort({ createdAt: -1 }).limit(200).populate({ path: 'contentId', select: 'contentId title clientId assignedEditor assignedWriter assignedDesigner stage status', populate: [{ path: 'clientId', select: 'name' }, { path: 'assignedEditor assignedWriter assignedDesigner', select: 'name' }] }).populate('approvalId', 'type status').lean();
   const vis = await Content.find(visibilityFilter(req.user!)).select('_id').lean();
   const ok = new Set(vis.map((v) => String(v._id)));
   const rows = fb.filter((f: any) => f.contentId && ok.has(String(f.contentId._id)) && f.approvalId?.status === 'CHANGES_REQUESTED');
-  const tasks = await Task.find({ contentId: { $in: rows.map((x: any) => x.contentId._id) }, kind: { $in: ['EDIT_REVISION', 'SCRIPT_REVISION'] }, status: { $ne: 'COMPLETED' } }).populate('assignedTo', 'name').lean();
+  const tasks = await Task.find({ contentId: { $in: rows.map((x: any) => x.contentId._id) }, kind: { $in: ['EDIT_REVISION', 'SCRIPT_REVISION', 'DESIGN_REVISION'] }, status: { $ne: 'COMPLETED' } }).populate('assignedTo', 'name').lean();
   res.json(rows.map((f: any) => ({ ...f, task: tasks.find((t) => String(t.contentId) === String(f.contentId._id)) || null })));
 }));
 
@@ -80,7 +174,7 @@ r.get('/:id', ah(async (req, res) => {
   const c = await getVisibleContent(req.user!, req.params.id);
   const id = c._id;
   const [content, script, versions, shoot, media, approvals, tasks, feedback, activity, room, posts, reminders] = await Promise.all([
-    Content.findById(id).populate('clientId', 'name businessName phone contactPerson').populate('campaignId', 'name').populate('currentOwner nextOwner assignedWriter assignedShooter assignedEditor assignedSMM assignedReviewer createdBy', 'name role').populate('lastAction.by blocked.by', 'name').lean(),
+    Content.findById(id).populate('clientId', 'name businessName phone contactPerson').populate('campaignId', 'name').populate('currentOwner nextOwner assignedWriter assignedShooter assignedEditor assignedDesigner assignedSMM assignedReviewer createdBy', 'name role').populate('lastAction.by blocked.by', 'name').lean(),
     Script.findOne({ contentId: id }).lean(),
     ScriptVersion.find({ contentId: id }).sort({ version: -1 }).populate('createdBy reviewedBy', 'name').lean(),
     Shoot.findOne({ contentId: id }).populate('shooterId', 'name').lean(),
@@ -126,6 +220,7 @@ r.patch('/:id', ah(async (req, res) => {
       assignedWriter: 'Writer',
       assignedShooter: 'Shooter',
       assignedEditor: 'Editor',
+      assignedDesigner: 'Designer',
       assignedSMM: 'SMM',
       assignedReviewer: 'Reviewer',
     };
@@ -184,8 +279,20 @@ r.patch('/:id', ah(async (req, res) => {
       ip: req.ip,
     });
   }
+
+  // Idempotently sync row to Google Sheets if configured
+  syncSingleContentToSheet(String(c._id)).catch((e) => console.warn('[sheets] patch sync', e.message));
+
   await broadcastContent(c);
   res.json(c);
+}));
+
+r.post('/:id/shoot/cancel', ah(async (req, res) => {
+  const c: any = await getVisibleContent(req.user!, req.params.id);
+  const reason = req.body?.reason || 'Shoot cancelled';
+  await handleShootCancelled(c._id, reason, req.user!._id);
+  syncSingleContentToSheet(String(c._id)).catch((e) => console.warn('[sheets] cancel sync', e.message));
+  res.json({ ok: true, message: 'Shoot cancelled successfully' });
 }));
 
 r.post('/:id/block', ah(async (req, res) => {
@@ -356,18 +463,33 @@ r.post('/:id/start-editing', ah(async (req, res) => {
 r.post('/:id/schedule', ah(async (req, res) => {
   const c: any = await getVisibleContent(req.user!, req.params.id);
   if (!can(req.user, 'content.write')) throw forbidden();
-  const b = z.object({ scheduledAt: z.coerce.date(), caption: z.string().max(4000).optional(), hashtags: z.string().max(2000).optional(), platform: z.string().optional() }).parse(req.body);
+  const b = z.object({
+    scheduledAt: z.coerce.date().optional(),
+    when: z.coerce.date().optional(),
+    caption: z.string().max(4000).optional(),
+    hashtags: z.string().max(2000).optional(),
+    platform: z.string().optional()
+  }).parse(req.body);
+  const targetDate = b.scheduledAt || b.when;
+  if (!targetDate) throw badRequest('scheduledAt or when is required');
   if (!['SCHEDULE', 'PUBLISHED'].includes(c.stage)) throw badRequest('Client final approval is required before scheduling');
   await ScheduledPost.updateMany({ contentId: c._id, status: 'SCHEDULED' }, { status: 'CANCELLED' });
-  const post = await ScheduledPost.create({ contentId: c._id, clientId: c.clientId, platform: b.platform || c.platform, scheduledAt: b.scheduledAt, caption: b.caption ?? c.caption, hashtags: b.hashtags ?? c.hashtags, createdBy: req.user!._id });
-  c.scheduledAt = b.scheduledAt; if (b.caption !== undefined) c.caption = b.caption; if (b.hashtags !== undefined) c.hashtags = b.hashtags;
+  const post = await ScheduledPost.create({ contentId: c._id, clientId: c.clientId, platform: b.platform || c.platform, scheduledAt: targetDate, caption: b.caption ?? c.caption, hashtags: b.hashtags ?? c.hashtags, createdBy: req.user!._id });
+  c.scheduledAt = targetDate;
+  c.plannedPublicationDate = targetDate;
+  c.productionStatus = 'SCHEDULING';
+  if (b.caption !== undefined) c.caption = b.caption;
+  if (b.hashtags !== undefined) c.hashtags = b.hashtags;
   c.nextAction = 'Publish at scheduled time and confirm';
-  await setLastAction(c, `${req.user!.name} scheduled the post`, req.user!._id); await c.save();
+  await setLastAction(c, `${req.user!.name} scheduled the post`, req.user!._id);
+  await c.save();
   await closeTasks(c._id, ['SCHEDULE']);
-  await logActivity({ actorId: req.user!._id, action: 'content.scheduled', message: `${req.user!.name} scheduled ${c.contentId} for ${b.scheduledAt.toISOString()}`, entityType: 'content', entityId: c._id, contentId: c._id, clientId: c.clientId });
-  await postSystemEvent(c._id, 'content.scheduled', 'POST SCHEDULED', [b.scheduledAt.toLocaleString('en-US', { timeZone: process.env.APP_TIMEZONE || 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' }), `By ${req.user!.name}`]);
+  syncSingleContentToSheet(String(c._id)).catch((e) => console.warn('[sheets] schedule sync', e.message));
+  await logActivity({ actorId: req.user!._id, action: 'content.scheduled', message: `${req.user!.name} scheduled ${c.contentId} for ${targetDate.toISOString()}`, entityType: 'content', entityId: c._id, contentId: c._id, clientId: c.clientId });
+  await postSystemEvent(c._id, 'content.scheduled', 'POST SCHEDULED', [targetDate.toLocaleString('en-US', { timeZone: process.env.APP_TIMEZONE || 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' }), `By ${req.user!.name}`]);
   emitDomain('content.scheduled', { contentId: String(c._id), actorId: req.user!._id });
-  await broadcastContent(c); res.json(post);
+  await broadcastContent(c);
+  res.json(post);
 }));
 r.post('/:id/publish', ah(async (req, res) => {
   const c: any = await getVisibleContent(req.user!, req.params.id);

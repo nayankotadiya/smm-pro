@@ -22,11 +22,11 @@ const portalUserSchema = z.object({
 }).optional().nullable();
 
 const clientBody = z.object({
-  name: z.string().min(1).max(120), businessName: str, contactPerson: str, phone: str, email: str, website: str, instagram: str, instagramPassword: str, facebook: str, facebookPassword: str, youtube: str,
+  name: z.string().min(1).max(120), clientCode: str, businessName: str, contactPerson: str, phone: str, email: str, website: str, instagram: str, instagramPassword: str, facebook: str, facebookPassword: str, youtube: str,
   location: str, category: str, description: str, products: str, services: str, usp: str, targetAudience: str, goals: str, expectations: str, marketTrend: str,
   sellingPurpose: str, brandTone: str, brandColors: z.array(z.string().max(30)).max(12).optional(), fonts: z.array(z.string().max(60)).max(8).optional(), brandGuidelines: str,
   assignedTeam: z.array(z.string()).optional(), status: z.enum(['ACTIVE', 'PAUSED', 'ONBOARDING', 'ARCHIVED']).optional(),
-  defaultTeam: z.object({ writer: z.string().nullable().optional(), shooter: z.string().nullable().optional(), editor: z.string().nullable().optional(), smm: z.string().nullable().optional(), reviewer: z.string().nullable().optional() }).optional(),
+  defaultTeam: z.object({ writer: z.string().nullable().optional(), shooter: z.string().nullable().optional(), editor: z.string().nullable().optional(), designer: z.string().nullable().optional(), smm: z.string().nullable().optional(), reviewer: z.string().nullable().optional() }).optional(),
   portalUser: portalUserSchema,
 });
 
