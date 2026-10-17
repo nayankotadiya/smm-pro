@@ -282,8 +282,8 @@ export async function setupSheetHeadersAndFormulas(spreadsheetId: string) {
           values: [['Client Code', 'Client Name', 'Business Name', 'Contact Person', 'Phone', 'Status', 'Monthly Package Target', 'Reels Progress', 'Posts Progress', 'Carousels Progress', 'Remaining Deliverables (Alert)', 'Fulfillment %', 'Last Synced']],
         },
         {
-          range: "'Schedule'!A1:H1",
-          values: [['Content ID', 'Client', 'Content Title', 'Platform', 'Scheduled Date & Time', 'Status', 'Live URL', 'Drive Link']],
+          range: "'Schedule'!A1:K1",
+          values: [['Client Code', 'Client Name', 'Monthly Target', 'Bani Gay (Made)', 'Baki Chhe (Remaining)', 'Schedule Thay (Scheduled)', 'Ready to Schedule', 'Posted Live', 'Scheduling Alert', 'Fulfillment %', 'Last Synced']],
         },
         {
           range: "'Employees'!A1:F1",
@@ -313,7 +313,7 @@ export async function setupSheetHeadersAndFormulas(spreadsheetId: string) {
 export async function applyStatusConditionalFormatting(spreadsheetId: string) {
   const s = sheets();
   const meta = await s.spreadsheets.get({ spreadsheetId });
-  const targetSheets = meta.data.sheets?.filter((sh) => [...CONTENT_TYPE_SHEETS, 'Master Plan', 'Clients'].includes(sh.properties?.title || '')) || [];
+  const targetSheets = meta.data.sheets?.filter((sh) => [...CONTENT_TYPE_SHEETS, 'Master Plan', 'Clients', 'Schedule'].includes(sh.properties?.title || '')) || [];
   if (targetSheets.length === 0) return;
 
   const rules: sheets_v4.Schema$Request[] = [];
@@ -910,17 +910,137 @@ export async function syncAllToGoogleSheets(explicitSpreadsheetId?: string): Pro
     ];
   });
 
-  // 5. Build Schedule rows
-  const scheduleRows = scheduledPosts.map((p: any) => [
-    p.contentId?.contentId || '',
-    p.clientId?.name || '',
-    p.contentId?.title || '',
-    p.platform || 'INSTAGRAM',
-    p.scheduledAt ? new Date(p.scheduledAt).toISOString().replace('T', ' ').substring(0, 16) : '',
-    p.status || 'SCHEDULED',
-    p.publishedUrl || '',
-    '',
+  // 5. Build Comprehensive Schedule rows (Section 1: Client Packages & Progress, Section 2: Detailed Calendar)
+  const scheduleRows: any[][] = [];
+  scheduleRows.push(['SECTION 1: CLIENT MONTHLY PACKAGES & SCHEDULING STATUS (KETLI BANI GAY, KETLI BAKI, KETLI SCHEDULE THAY)']);
+  scheduleRows.push([
+    'Client Code',
+    'Client Name',
+    'Monthly Target',
+    'Bani Gay (Made/Produced)',
+    'Baki Chhe (Remaining to Make)',
+    'Schedule Thay (Scheduled)',
+    'Ready to Schedule',
+    'Posted Live',
+    'Scheduling & Quota Alert',
+    'Fulfillment %',
+    'Last Synced',
   ]);
+
+  clients.forEach((cl: any) => {
+    const pkg = cl.monthlyPackage || { reels: 10, posts: 5, carousels: 2 };
+    const targetReels = Number(pkg.reels ?? 10);
+    const targetPosts = Number(pkg.posts ?? 5);
+    const targetCarousels = Number(pkg.carousels ?? 2);
+    const targetTotal = targetReels + targetPosts + targetCarousels;
+
+    const clItems = contents.filter((c: any) => String(c.clientId?._id || c.clientId) === String(cl._id) && c.status !== 'CANCELLED');
+
+    // Made (Bani Gay)
+    const reelsMade = clItems.filter((c: any) => ['REEL', 'VIDEO', 'SHORT'].includes(c.type)).length;
+    const postsMade = clItems.filter((c: any) => ['POST', 'IMAGE', 'OTHER'].includes(c.type)).length;
+    const carouselsMade = clItems.filter((c: any) => c.type === 'CAROUSEL').length;
+    const totalMade = reelsMade + postsMade + carouselsMade;
+
+    // Remaining (Baki Chhe)
+    const reelsRem = Math.max(0, targetReels - reelsMade);
+    const postsRem = Math.max(0, targetPosts - postsMade);
+    const carouselsRem = Math.max(0, targetCarousels - carouselsMade);
+    const totalRem = reelsRem + postsRem + carouselsRem;
+
+    // Scheduled (Schedule Thay)
+    const clScheduled = clItems.filter((c: any) => c.stage === 'SCHEDULE' || c.status === 'SCHEDULED' || c.plannedPublicationDate != null);
+    const reelsSched = clScheduled.filter((c: any) => ['REEL', 'VIDEO', 'SHORT'].includes(c.type)).length;
+    const postsSched = clScheduled.filter((c: any) => ['POST', 'IMAGE', 'OTHER'].includes(c.type)).length;
+    const carouselsSched = clScheduled.filter((c: any) => c.type === 'CAROUSEL').length;
+    const totalSched = reelsSched + postsSched + carouselsSched;
+
+    // Ready to Schedule
+    const readyCount = clItems.filter((c: any) =>
+      (c.stage === 'FINAL_UPLOAD' || (c.stage === 'SCHEDULE' && !c.plannedPublicationDate)) &&
+      c.stage !== 'PUBLISHED' && c.status !== 'COMPLETED'
+    ).length;
+
+    // Posted
+    const postedCount = clItems.filter((c: any) =>
+      c.stage === 'PUBLISHED' || c.status === 'COMPLETED' || c.productionStatus === 'POSTED'
+    ).length;
+
+    const fulfillmentPct = targetTotal > 0 ? Math.min(100, Math.round((totalMade / targetTotal) * 100)) : 100;
+
+    const remList: string[] = [];
+    if (reelsRem > 0) remList.push(`${reelsRem} Reels`);
+    if (postsRem > 0) remList.push(`${postsRem} Posts`);
+    if (carouselsRem > 0) remList.push(`${carouselsRem} Carousels`);
+    const remSummary = remList.length > 0 ? `${totalRem} REMAINING (${remList.join(', ')})` : '0 (Done)';
+    const alertSummary = remList.length > 0 ? `ACTION: ${remList.join(', ')} REMAINING TO MAKE` : 'ALL QUOTA COMPLETED';
+
+    scheduleRows.push([
+      cl.clientCode || String(cl._id).substring(0, 8).toUpperCase(),
+      cl.name,
+      `${targetReels} Reels, ${targetPosts} Posts, ${targetCarousels} Carousels (${targetTotal} Total)`,
+      `${totalMade} Made (${reelsMade} Reels, ${postsMade} Posts, ${carouselsMade} Carousels)`,
+      remSummary,
+      `${totalSched} Scheduled (${reelsSched} Reels, ${postsSched} Posts, ${carouselsSched} Carousels)`,
+      readyCount,
+      postedCount,
+      alertSummary,
+      `${fulfillmentPct}%`,
+      new Date().toISOString().replace('T', ' ').substring(0, 19),
+    ]);
+  });
+
+  scheduleRows.push(['']);
+  scheduleRows.push(['']);
+  scheduleRows.push(['SECTION 2: CONTENT PUBLICATION TIMELINE & CALENDAR']);
+  scheduleRows.push([
+    'Content ID',
+    'Client',
+    'Content Type',
+    'Platform',
+    'Topic / Title',
+    'Production Status (Bani Gay?)',
+    'Scheduled Date',
+    'Scheduled Time',
+    'Schedule Status',
+    'Live URL',
+    'Google Drive Link',
+    'Publish Remarks',
+  ]);
+
+  contents.forEach((c: any) => {
+    const isPosted = c.stage === 'PUBLISHED' || c.status === 'COMPLETED' || c.productionStatus === 'POSTED';
+    const isScheduled = c.stage === 'SCHEDULE' || c.status === 'SCHEDULED' || c.plannedPublicationDate != null;
+    const isReady = c.stage === 'FINAL_UPLOAD' || c.approvalStatus === 'APPROVED';
+
+    let prodStatus = 'In Production';
+    if (isPosted) prodStatus = 'Posted Live';
+    else if (isScheduled) prodStatus = 'Made & Scheduled';
+    else if (isReady) prodStatus = 'Made (Ready to Schedule)';
+
+    let schedStatus = 'Pending';
+    if (isPosted) schedStatus = 'Posted';
+    else if (isScheduled) schedStatus = 'Scheduled';
+    else if (isReady) schedStatus = 'Ready to Schedule';
+
+    const pDate = c.plannedPublicationDate ? new Date(c.plannedPublicationDate).toISOString().split('T')[0] : '';
+    const pTime = c.plannedPublicationTime || '';
+
+    scheduleRows.push([
+      c.contentId || '',
+      c.clientId?.name || '',
+      c.type || 'REEL',
+      c.platform || 'INSTAGRAM',
+      c.title || '',
+      prodStatus,
+      pDate,
+      pTime,
+      schedStatus,
+      c.liveUrl || '',
+      c.finalDriveLink || '',
+      c.productionStatus === 'CANCELLED' ? 'Cancelled' : (isPosted ? 'Live' : (isScheduled ? 'Scheduled' : 'Draft / In Progress')),
+    ]);
+  });
 
   // 6. Build Employee rows
   const employeeRows = await Promise.all(
@@ -983,7 +1103,7 @@ export async function syncAllToGoogleSheets(explicitSpreadsheetId?: string): Pro
           "'Carousels'!A2:AE500",
           "'AI Reels'!A2:AE500",
           "'Clients'!A2:M500",
-          "'Schedule'!A2:H500",
+          "'Schedule'!A1:L500",
           "'Employees'!A2:F500",
           "'Tasks'!A2:H500",
         ],
@@ -998,7 +1118,7 @@ export async function syncAllToGoogleSheets(explicitSpreadsheetId?: string): Pro
     { range: "'Dashboard'!A1:C14", values: dashboardRows },
     { range: "'Master Plan'!A1:V" + masterPlanRows.length, values: masterPlanRows },
     { range: "'Clients'!A2:M" + (clientRows.length + 1), values: clientRows },
-    { range: "'Schedule'!A2:H" + (scheduleRows.length + 1), values: scheduleRows },
+    { range: "'Schedule'!A1:L" + scheduleRows.length, values: scheduleRows },
     { range: "'Employees'!A2:F" + (employeeRows.length + 1), values: employeeRows },
     { range: "'Tasks'!A2:H" + (taskRows.length + 1), values: taskRows },
   ];

@@ -5,10 +5,11 @@ import clsx from 'clsx';
 import {
   CalendarDays, Clock, CheckCircle2, AlertTriangle, Send, Share2,
   Filter, Search, SlidersHorizontal, X, ArrowRight, ExternalLink,
-  ChevronLeft, ChevronRight, Eye, RefreshCw, Sparkles, Check, Play
+  ChevronLeft, ChevronRight, Eye, RefreshCw, Sparkles, Check, Play,
+  Package, Film, Layers, Image as ImageIcon, Plus
 } from 'lucide-react';
 import { get, post, patch, errMsg } from '@/lib/api';
-import { Button, Card, Empty, Input, Modal, PageHeader, Select, Spinner } from '@/components/ui';
+import { Badge, Button, Card, Empty, Input, Modal, PageHeader, Select, Spinner } from '@/components/ui';
 import { ContentThumb, StatusBadge, TypeBadge, PlatformBadge } from '@/components/Lists';
 import { useClients, useTeam } from '@/hooks/useData';
 import { fmtDate, fmtDateTime, fmtTime, isOverdue, label, getStatusMeta } from '@/lib/format';
@@ -50,10 +51,10 @@ export default function SchedulingPublishing() {
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('');
 
-  // Fetch Scheduling KPIs
+  // Fetch Scheduling KPIs with Package Quota metrics
   const metricsQ = useQuery({
-    queryKey: ['content', 'scheduling', 'metrics'],
-    queryFn: () => get<any>('/content/scheduling/metrics'),
+    queryKey: ['content', 'scheduling', 'metrics', selectedClient],
+    queryFn: () => get<any>('/content/scheduling/metrics', { clientId: selectedClient || undefined }),
     refetchInterval: 30000,
   });
 
@@ -179,6 +180,20 @@ export default function SchedulingPublishing() {
     cancelled: 0,
   };
 
+  const pkg = metricsQ.data?.packageOverview || {
+    clientName: selectedClient ? ((clients.data || []).find((c) => c._id === selectedClient)?.name || 'Client') : 'All Clients',
+    target: { reels: 0, posts: 0, carousels: 0, total: 0 },
+    made: { reels: 0, posts: 0, carousels: 0, total: 0 },
+    remaining: { reels: 0, posts: 0, carousels: 0, total: 0 },
+    scheduled: { reels: 0, posts: 0, carousels: 0, total: 0 },
+    readyToSchedule: 0,
+    posted: 0,
+    fulfillmentPct: 0,
+    scheduledPct: 0,
+    isFullyMade: true,
+    pendingAlerts: [] as string[],
+  };
+
   const moveCal = (delta: number) => {
     if (calMode === 'month') {
       setCurDate(new Date(curDate.getFullYear(), curDate.getMonth() + delta, 1));
@@ -233,6 +248,297 @@ export default function SchedulingPublishing() {
           </div>
         }
       />
+
+      {/* Client Monthly Package Quota & Scheduling Progress Section */}
+      <div className="rounded-2xl border border-line/80 bg-surface/85 backdrop-blur-xl p-4 sm:p-5 shadow-card space-y-4">
+        {/* Header & Client Selector Pills */}
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between border-b border-line/60 pb-3.5">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 text-primary">
+              <Package size={18} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-black text-ink tracking-tight">
+                  Monthly Deliverables & Scheduling Status
+                </h3>
+                <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[10px] font-bold text-ink-3 uppercase tracking-wider">
+                  Live Quota Tracker
+                </span>
+              </div>
+              <p className="text-xs text-ink-3">
+                Tracking {pkg.clientName || 'All Clients'}: કેટલી બની ગઈ, કેટલી બાકી છે, અને કેટલી Schedule થઈ છે
+              </p>
+            </div>
+          </div>
+
+          {/* Quick Client Filter Switcher */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0 scrollbar-none max-w-full">
+            <button
+              onClick={() => setSelectedClient('')}
+              className={clsx(
+                'whitespace-nowrap rounded-lg px-2.5 py-1 text-xs font-bold transition-all',
+                !selectedClient
+                  ? 'bg-primary text-white shadow-xs'
+                  : 'bg-surface-2 text-ink-2 hover:bg-surface-3 hover:text-ink'
+              )}
+            >
+              All Clients
+            </button>
+            {(clients.data || []).map((c) => (
+              <button
+                key={c._id}
+                onClick={() => setSelectedClient(c._id)}
+                className={clsx(
+                  'whitespace-nowrap rounded-lg px-2.5 py-1 text-xs font-bold transition-all flex items-center gap-1.5',
+                  selectedClient === c._id
+                    ? 'bg-primary text-white shadow-xs'
+                    : 'bg-surface-2 text-ink-2 hover:bg-surface-3 hover:text-ink'
+                )}
+              >
+                <span>{c.name}</span>
+                {c.clientCode && (
+                  <span className={clsx(
+                    'text-[10px] rounded px-1',
+                    selectedClient === c._id ? 'bg-white/20 text-white' : 'bg-surface-3 text-ink-3'
+                  )}>
+                    {c.clientCode}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Highlighted Alert Banner if Deliverables are Remaining to be made */}
+        {pkg.remaining.total > 0 && (
+          <div className="rounded-xl border border-amber-500/40 bg-gradient-to-r from-amber-500/15 via-rose-500/10 to-amber-500/15 p-3.5 shadow-sm animate-rise">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <span className="relative flex h-3 w-3 flex-shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+                </span>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-black uppercase tracking-wider text-amber-500">
+                      Deliverables Pending Action (બનાવવાની બાકી છે)
+                    </span>
+                    <Badge t="amber">
+                      ⚠️ {pkg.remaining.total} REMAINING
+                    </Badge>
+                  </div>
+                  <p className="text-xs font-semibold text-ink mt-0.5">
+                    {pkg.pendingAlerts.length > 0
+                      ? pkg.pendingAlerts.join(' · ') + ' required to fulfill this client’s monthly quota!'
+                      : `${pkg.remaining.total} deliverable(s) remaining to reach monthly target.`}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                <Button
+                  size="sm"
+                  variant="primary"
+                  icon={<Plus size={14} />}
+                  onClick={() => nav('/content')}
+                >
+                  Create Deliverable
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 4 Core Hero Balance Cards */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {/* 1. Target Quota */}
+          <div className="rounded-xl border border-line bg-surface-2/60 p-3.5">
+            <div className="text-[11px] font-bold text-ink-3 uppercase tracking-wider flex items-center justify-between">
+              <span>Monthly Target (ટાર્ગેટ)</span>
+              <Package size={14} className="text-ink-3" />
+            </div>
+            <div className="mt-1.5 text-2xl font-black tabular tracking-tight text-ink">
+              {pkg.target.total} <span className="text-xs font-medium text-ink-3">items</span>
+            </div>
+            <div className="mt-1 text-[11px] font-semibold text-ink-2 truncate">
+              {pkg.target.reels} Reels · {pkg.target.posts} Posts · {pkg.target.carousels} Carousels
+            </div>
+          </div>
+
+          {/* 2. Made / Produced */}
+          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3.5">
+            <div className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider flex items-center justify-between">
+              <span>Bani Gay Chhe (બની ગઈ)</span>
+              <CheckCircle2 size={14} className="text-emerald-500" />
+            </div>
+            <div className="mt-1.5 text-2xl font-black tabular tracking-tight text-emerald-500">
+              {pkg.made.total} <span className="text-xs font-semibold text-ink-3">/ {pkg.target.total}</span>
+            </div>
+            <div className="mt-1 text-[11px] font-semibold text-ink-2 truncate">
+              {pkg.fulfillmentPct}% Produced ({pkg.made.reels}R · {pkg.made.posts}P · {pkg.made.carousels}C)
+            </div>
+          </div>
+
+          {/* 3. Remaining Deliverables to Make (Highlighted!) */}
+          <div className={clsx(
+            'rounded-xl border p-3.5 transition-all',
+            pkg.remaining.total > 0
+              ? 'border-amber-500/40 bg-amber-500/10 ring-2 ring-amber-500/20'
+              : 'border-emerald-500/30 bg-emerald-500/5'
+          )}>
+            <div className="text-[11px] font-bold uppercase tracking-wider flex items-center justify-between">
+              <span className={pkg.remaining.total > 0 ? 'text-amber-500' : 'text-emerald-500'}>
+                Baki Chhe (બનાવવાની બાકી)
+              </span>
+              {pkg.remaining.total > 0 ? (
+                <AlertTriangle size={14} className="text-amber-500 animate-bounce" />
+              ) : (
+                <Check size={14} className="text-emerald-500" />
+              )}
+            </div>
+            <div className={clsx(
+              'mt-1.5 text-2xl font-black tabular tracking-tight',
+              pkg.remaining.total > 0 ? 'text-amber-500' : 'text-emerald-500'
+            )}>
+              {pkg.remaining.total > 0 ? (
+                <span>⚠️ {pkg.remaining.total} <span className="text-xs font-medium text-amber-500/80">REMAINING</span></span>
+              ) : (
+                <span>0 <span className="text-xs font-medium text-emerald-500">Done 🎉</span></span>
+              )}
+            </div>
+            <div className="mt-1 text-[11px] font-semibold text-ink-2 truncate">
+              {pkg.remaining.total > 0
+                ? `${pkg.remaining.reels} Reels, ${pkg.remaining.posts} Posts, ${pkg.remaining.carousels} Carousels`
+                : 'All monthly deliverables produced!'}
+            </div>
+          </div>
+
+          {/* 4. Scheduled for Posting */}
+          <div className="rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/5 p-3.5">
+            <div className="text-[11px] font-bold text-fuchsia-500 uppercase tracking-wider flex items-center justify-between">
+              <span>Schedule Thay Chhe (Schedule થઈ)</span>
+              <CalendarDays size={14} className="text-fuchsia-500" />
+            </div>
+            <div className="mt-1.5 text-2xl font-black tabular tracking-tight text-fuchsia-500">
+              {pkg.scheduled.total} <span className="text-xs font-semibold text-ink-3">items</span>
+            </div>
+            <div className="mt-1 text-[11px] font-semibold text-ink-2 truncate">
+              {pkg.readyToSchedule} Ready to Schedule · {pkg.posted} Posted Live
+            </div>
+          </div>
+        </div>
+
+        {/* Deliverables Breakdown by Type (Reels, Posts, Carousels) with progress */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+          {/* Reels Breakdown */}
+          <div className="rounded-xl border border-line bg-surface-2/40 p-3 flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <Film size={14} />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-ink">Reels</span>
+                  <div className="text-[10px] text-ink-3">Target: {pkg.target.reels} Reels</div>
+                </div>
+              </div>
+              {pkg.remaining.reels > 0 ? (
+                <Badge t="amber">
+                  ⚠️ {pkg.remaining.reels} REMAINING
+                </Badge>
+              ) : (
+                <Badge t="green">
+                  ✓ {pkg.made.reels} / {pkg.target.reels} Made
+                </Badge>
+              )}
+            </div>
+            <div className="mt-2.5 space-y-1">
+              <div className="flex justify-between text-[11px] font-semibold text-ink-3">
+                <span>Made: {pkg.made.reels}</span>
+                <span>Scheduled: {pkg.scheduled.reels}</span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-surface-3">
+                <div
+                  className="h-full rounded-full bg-primary transition-all duration-500"
+                  style={{ width: `${pkg.target.reels > 0 ? Math.min(100, (pkg.made.reels / pkg.target.reels) * 100) : 100}%` }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Posts Breakdown */}
+          <div className="rounded-xl border border-line bg-surface-2/40 p-3 flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500">
+                  <ImageIcon size={14} />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-ink">Posts & Graphics</span>
+                  <div className="text-[10px] text-ink-3">Target: {pkg.target.posts} Posts</div>
+                </div>
+              </div>
+              {pkg.remaining.posts > 0 ? (
+                <Badge t="amber">
+                  ⚠️ {pkg.remaining.posts} REMAINING
+                </Badge>
+              ) : (
+                <Badge t="green">
+                  ✓ {pkg.made.posts} / {pkg.target.posts} Made
+                </Badge>
+              )}
+            </div>
+            <div className="mt-2.5 space-y-1">
+              <div className="flex justify-between text-[11px] font-semibold text-ink-3">
+                <span>Made: {pkg.made.posts}</span>
+                <span>Scheduled: {pkg.scheduled.posts}</span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-surface-3">
+                <div
+                  className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+                  style={{ width: `${pkg.target.posts > 0 ? Math.min(100, (pkg.made.posts / pkg.target.posts) * 100) : 100}%` }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Carousels Breakdown */}
+          <div className="rounded-xl border border-line bg-surface-2/40 p-3 flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-500/10 text-purple-500">
+                  <Layers size={14} />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-ink">Carousels</span>
+                  <div className="text-[10px] text-ink-3">Target: {pkg.target.carousels} Carousels</div>
+                </div>
+              </div>
+              {pkg.remaining.carousels > 0 ? (
+                <Badge t="amber">
+                  ⚠️ {pkg.remaining.carousels} REMAINING
+                </Badge>
+              ) : (
+                <Badge t="green">
+                  ✓ {pkg.made.carousels} / {pkg.target.carousels} Made
+                </Badge>
+              )}
+            </div>
+            <div className="mt-2.5 space-y-1">
+              <div className="flex justify-between text-[11px] font-semibold text-ink-3">
+                <span>Made: {pkg.made.carousels}</span>
+                <span>Scheduled: {pkg.scheduled.carousels}</span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-surface-3">
+                <div
+                  className="h-full rounded-full bg-purple-500 transition-all duration-500"
+                  style={{ width: `${pkg.target.carousels > 0 ? Math.min(100, (pkg.made.carousels / pkg.target.carousels) * 100) : 100}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* KPI Summary Cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-8">

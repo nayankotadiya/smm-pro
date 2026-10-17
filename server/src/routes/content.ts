@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { Content, Script, ScriptVersion, Shoot, Media, Approval, Task, Feedback, ActivityLog, ScheduledPost, Reminder, User, ChatRoom, Message, ChatActionMessage } from '../models';
+import { Content, Client, Script, ScriptVersion, Shoot, Media, Approval, Task, Feedback, ActivityLog, ScheduledPost, Reminder, User, ChatRoom, Message, ChatActionMessage } from '../models';
 import { ah } from '../utils/async';
 import { badRequest, forbidden, notFound } from '../utils/errors';
 import { requirePerm, can } from '../middleware/auth';
@@ -88,16 +88,19 @@ r.get('/', ah(async (req, res) => {
 
 r.post('/', requirePerm('content.write'), ah(async (req, res) => { res.status(201).json(await createContent(body.parse(req.body), req.user!)); }));
 
-// Dedicated Scheduling & Publishing Metrics Endpoint
+// Dedicated Scheduling & Publishing Metrics Endpoint with Quota & Package Balances
 r.get('/scheduling/metrics', ah(async (req, res) => {
   const vis = visibilityFilter(req.user!);
+  const clientId = req.query.clientId ? String(req.query.clientId) : undefined;
+  const clientFilter: any = clientId ? { clientId } : {};
+
   const now = new Date();
   const startToday = new Date();
   startToday.setHours(0, 0, 0, 0);
   const endToday = new Date();
   endToday.setHours(23, 59, 59, 999);
 
-  const c = (filter: any) => Content.countDocuments({ $and: [vis, filter] });
+  const c = (filter: any) => Content.countDocuments({ $and: [vis, clientFilter, filter] });
 
   const [
     totalContent,
@@ -116,7 +119,7 @@ r.get('/scheduling/metrics', ah(async (req, res) => {
     c({ status: { $ne: 'CANCELLED' } }),
     c({ stage: { $in: ['SMM_REVIEW', 'FINAL_REVIEW', 'CLIENT_REVIEW', 'CLIENT_FINAL_APPROVAL'] } }),
     c({ stage: 'FINAL_UPLOAD', status: { $nin: ['COMPLETED', 'CANCELLED'] } }),
-    c({ $or: [{ stage: 'SCHEDULE' }, { scheduledAt: { $ne: null }, status: 'SCHEDULED' }] }),
+    c({ $or: [{ stage: 'SCHEDULE' }, { scheduledAt: { $ne: null }, status: 'SCHEDULED' }, { plannedPublicationDate: { $ne: null } }] }),
     c({
       status: { $nin: ['COMPLETED', 'CANCELLED'] },
       $or: [
@@ -139,6 +142,138 @@ r.get('/scheduling/metrics', ah(async (req, res) => {
     c({ type: { $in: ['AI_REEL', 'AI_IMAGE'] } }),
   ]);
 
+  // Package Quota & Deliverables Progress Intelligence
+  const clientQuery: any = { deletedAt: null };
+  if (clientId) {
+    clientQuery._id = clientId;
+  }
+  const clientDocs = await Client.find(clientQuery).select('name businessName clientCode monthlyPackage').lean();
+
+  const contentFilter: any = { status: { $ne: 'CANCELLED' } };
+  if (clientId) {
+    contentFilter.clientId = clientId;
+  }
+  const allTrackedContent = await Content.find({ $and: [vis, contentFilter] })
+    .select('clientId type stage status productionStatus plannedPublicationDate scheduledAt')
+    .lean();
+
+  // Compute breakdown for each client
+  const clientBreakdown = clientDocs.map((cl: any) => {
+    const pkg = cl.monthlyPackage || { reels: 10, posts: 5, carousels: 2 };
+    const targetReels = Number(pkg.reels ?? 10);
+    const targetPosts = Number(pkg.posts ?? 5);
+    const targetCarousels = Number(pkg.carousels ?? 2);
+    const targetTotal = targetReels + targetPosts + targetCarousels;
+
+    const clItems = allTrackedContent.filter((it: any) => String(it.clientId) === String(cl._id));
+
+    // Ketli Bani Gay Chhe (Created / Produced / in Pipeline)
+    const madeReels = clItems.filter((it: any) => ['REEL', 'VIDEO', 'SHORT'].includes(it.type)).length;
+    const madePosts = clItems.filter((it: any) => ['POST', 'IMAGE', 'OTHER'].includes(it.type)).length;
+    const madeCarousels = clItems.filter((it: any) => it.type === 'CAROUSEL').length;
+    const madeTotal = madeReels + madePosts + madeCarousels;
+
+    // Ketli Baki Chhe (Remaining Deliverables to be made)
+    const remainingReels = Math.max(0, targetReels - madeReels);
+    const remainingPosts = Math.max(0, targetPosts - madePosts);
+    const remainingCarousels = Math.max(0, targetCarousels - madeCarousels);
+    const remainingTotal = remainingReels + remainingPosts + remainingCarousels;
+
+    // Ketli Schedule Thay Chhe (Scheduled for publication with date/status)
+    const scheduledItems = clItems.filter((it: any) =>
+      it.stage === 'SCHEDULE' || it.status === 'SCHEDULED' || it.plannedPublicationDate != null
+    );
+    const scheduledReels = scheduledItems.filter((it: any) => ['REEL', 'VIDEO', 'SHORT'].includes(it.type)).length;
+    const scheduledPosts = scheduledItems.filter((it: any) => ['POST', 'IMAGE', 'OTHER'].includes(it.type)).length;
+    const scheduledCarousels = scheduledItems.filter((it: any) => it.type === 'CAROUSEL').length;
+    const scheduledTotal = scheduledReels + scheduledPosts + scheduledCarousels;
+
+    // Ready to Schedule (Approved / in Upload, waiting to set date)
+    const readyItems = clItems.filter((it: any) =>
+      (it.stage === 'FINAL_UPLOAD' || (it.stage === 'SCHEDULE' && !it.plannedPublicationDate)) &&
+      it.stage !== 'PUBLISHED' && it.status !== 'COMPLETED'
+    );
+    const readyTotal = readyItems.length;
+
+    // Posted Live
+    const postedItems = clItems.filter((it: any) =>
+      it.stage === 'PUBLISHED' || it.status === 'COMPLETED' || it.productionStatus === 'POSTED'
+    );
+    const postedTotal = postedItems.length;
+
+    // Alert strings
+    const pendingAlerts: string[] = [];
+    if (remainingReels > 0) pendingAlerts.push(`${remainingReels} Reel(s) REMAINING`);
+    if (remainingPosts > 0) pendingAlerts.push(`${remainingPosts} Post(s) REMAINING`);
+    if (remainingCarousels > 0) pendingAlerts.push(`${remainingCarousels} Carousel(s) REMAINING`);
+
+    return {
+      clientId: String(cl._id),
+      clientName: cl.name,
+      clientCode: cl.clientCode,
+      target: { reels: targetReels, posts: targetPosts, carousels: targetCarousels, total: targetTotal },
+      made: { reels: madeReels, posts: madePosts, carousels: madeCarousels, total: madeTotal },
+      remaining: { reels: remainingReels, posts: remainingPosts, carousels: remainingCarousels, total: remainingTotal },
+      scheduled: { reels: scheduledReels, posts: scheduledPosts, carousels: scheduledCarousels, total: scheduledTotal },
+      readyToSchedule: readyTotal,
+      posted: postedTotal,
+      fulfillmentPct: targetTotal > 0 ? Math.min(100, Math.round((madeTotal / targetTotal) * 100)) : 100,
+      scheduledPct: madeTotal > 0 ? Math.min(100, Math.round((scheduledTotal / madeTotal) * 100)) : 0,
+      isFullyMade: remainingTotal === 0,
+      pendingAlerts,
+    };
+  });
+
+  // Aggregate totals across clients
+  const aggregate = clientBreakdown.reduce(
+    (acc: any, item: any) => {
+      acc.target.reels += item.target.reels;
+      acc.target.posts += item.target.posts;
+      acc.target.carousels += item.target.carousels;
+      acc.target.total += item.target.total;
+
+      acc.made.reels += item.made.reels;
+      acc.made.posts += item.made.posts;
+      acc.made.carousels += item.made.carousels;
+      acc.made.total += item.made.total;
+
+      acc.remaining.reels += item.remaining.reels;
+      acc.remaining.posts += item.remaining.posts;
+      acc.remaining.carousels += item.remaining.carousels;
+      acc.remaining.total += item.remaining.total;
+
+      acc.scheduled.reels += item.scheduled.reels;
+      acc.scheduled.posts += item.scheduled.posts;
+      acc.scheduled.carousels += item.scheduled.carousels;
+      acc.scheduled.total += item.scheduled.total;
+
+      acc.readyToSchedule += item.readyToSchedule;
+      acc.posted += item.posted;
+      return acc;
+    },
+    {
+      target: { reels: 0, posts: 0, carousels: 0, total: 0 },
+      made: { reels: 0, posts: 0, carousels: 0, total: 0 },
+      remaining: { reels: 0, posts: 0, carousels: 0, total: 0 },
+      scheduled: { reels: 0, posts: 0, carousels: 0, total: 0 },
+      readyToSchedule: 0,
+      posted: 0,
+    }
+  );
+
+  const activeOverview = clientId && clientBreakdown.length > 0 ? clientBreakdown[0] : {
+    ...aggregate,
+    clientName: 'All Clients',
+    fulfillmentPct: aggregate.target.total > 0 ? Math.min(100, Math.round((aggregate.made.total / aggregate.target.total) * 100)) : 100,
+    scheduledPct: aggregate.made.total > 0 ? Math.min(100, Math.round((aggregate.scheduled.total / aggregate.made.total) * 100)) : 0,
+    isFullyMade: aggregate.remaining.total === 0,
+    pendingAlerts: [
+      aggregate.remaining.reels > 0 ? `${aggregate.remaining.reels} Reel(s) REMAINING` : '',
+      aggregate.remaining.posts > 0 ? `${aggregate.remaining.posts} Post(s) REMAINING` : '',
+      aggregate.remaining.carousels > 0 ? `${aggregate.remaining.carousels} Carousel(s) REMAINING` : '',
+    ].filter(Boolean),
+  };
+
   res.json({
     totalContent,
     awaitingApproval,
@@ -152,6 +287,8 @@ r.get('/scheduling/metrics', ah(async (req, res) => {
     posts,
     carousels,
     aiReels,
+    packageOverview: activeOverview,
+    clientBreakdown,
   });
 }));
 
