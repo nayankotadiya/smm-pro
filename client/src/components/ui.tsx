@@ -134,8 +134,8 @@ export function PageHeader({
   };
 
   return (
-    <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-      <div className="min-w-0 flex-1">
+    <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
+      <div className="min-w-0 shrink-0 lg:max-w-xl">
         <div className="flex items-center gap-2.5">
           {back && (
             <button
@@ -149,11 +149,19 @@ export function PageHeader({
             </button>
           )}
           <span className="h-5 w-1 shrink-0 rounded-full bg-gradient-to-b from-indigo-500 via-violet-500 to-fuchsia-500 shadow-[0_0_8px_rgba(139,92,246,0.7)]" aria-hidden />
-          <h1 className="truncate text-[20px] sm:text-[24px] font-bold text-ink">{title}</h1>
+          <h1 className="text-[20px] sm:text-[24px] font-bold text-ink tracking-tight break-words">{title}</h1>
         </div>
-        {sub && <div className={clsx('mt-1.5 text-[13px] font-medium text-ink-2', back ? 'pl-0 sm:pl-3.5' : 'pl-3.5')}>{sub}</div>}
+        {sub && (
+          <div className={clsx('mt-1.5 text-[13px] font-medium text-ink-2 max-w-2xl leading-relaxed', back ? 'pl-0 sm:pl-3.5' : 'pl-3.5')}>
+            {sub}
+          </div>
+        )}
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2 pt-0.5 sm:justify-end no-print">{actions}</div>}
+      {actions && (
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 pt-0.5 sm:justify-start lg:justify-end no-print">
+          {actions}
+        </div>
+      )}
     </div>
   );
 }

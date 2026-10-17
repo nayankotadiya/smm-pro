@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
-import { Plus, CheckCircle2, Circle, Trash2, ArrowRight, MessageSquare, Repeat, Sparkles, Send, Printer, Film } from 'lucide-react';
+import { Plus, CheckCircle2, Circle, Trash2, ArrowRight, MessageSquare, Repeat, Sparkles, Send, Printer, Film, CalendarDays } from 'lucide-react';
 import { get, post, patch, del, errMsg } from '@/lib/api';
 import { useAuth, useCan } from '@/store/auth';
 import { useUI, toast } from '@/store/ui';
@@ -153,7 +153,7 @@ export function Reports() {
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="primary"
-              className="bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-600 hover:to-indigo-700 text-white shadow-sm"
+              className="bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-600 hover:to-indigo-700 text-white shadow-sm font-semibold"
               icon={<Film size={15} />}
               onClick={() => setShowShooterEditorReport(true)}
             >
@@ -173,17 +173,28 @@ export function Reports() {
             >
               Print / Save PDF
             </Button>
-            <Select aria-label="Period" value={period} onChange={(e) => setPeriod(e.target.value)} className="!w-auto">
-              {[7, 30, 90, 365].map((d) => <option key={d} value={String(d)}>Last {d} days</option>)}
-              <option value="custom">Custom Date Range...</option>
-            </Select>
-            {period === 'custom' && (
-              <div className="flex items-center gap-1.5">
-                <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="!w-32 !py-1 text-xs" />
-                <span className="text-xs text-ink-3">to</span>
-                <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="!w-32 !py-1 text-xs" />
+            <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-line/80 bg-surface/80 p-1 backdrop-blur-md shadow-xs">
+              <div className="flex items-center gap-1.5 px-2 text-xs font-semibold text-ink-2">
+                <CalendarDays size={14} className="text-primary shrink-0" />
+                <span className="hidden sm:inline text-meta">Period:</span>
               </div>
-            )}
+              <Select
+                aria-label="Period"
+                value={period}
+                onChange={(e) => setPeriod(e.target.value)}
+                className="!w-auto !py-1 !text-xs font-medium border-0 bg-surface-2/80"
+              >
+                {[7, 30, 90, 365].map((d) => <option key={d} value={String(d)}>Last {d} days</option>)}
+                <option value="custom">Custom Date Range...</option>
+              </Select>
+              {period === 'custom' && (
+                <div className="flex items-center gap-1 pl-1.5 border-l border-line/60">
+                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="!w-32 !py-1 text-xs" />
+                  <span className="text-xs text-ink-3">to</span>
+                  <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="!w-32 !py-1 text-xs" />
+                </div>
+              )}
+            </div>
           </div>
         }
       />
