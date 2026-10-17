@@ -214,6 +214,7 @@ export default function MediaLibrary() {
   return (
     <>
       <PageHeader
+        back="/"
         title="Media"
         sub="All files across content. Stored in Google Drive, with access controlled here."
         actions={

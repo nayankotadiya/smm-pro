@@ -31,7 +31,7 @@ export function ShooterEditorReportModal({ open, onClose, defaultRole = 'ALL', d
   const [selectedClient, setSelectedClient] = useState(defaultClientId);
   const [selectedType, setSelectedType] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('ALL');
-  const [timePreset, setTimePreset] = useState<'ALL' | 'THIS_MONTH' | 'LAST_MONTH' | 'THIS_YEAR' | 'CUSTOM'>('THIS_MONTH');
+  const [timePreset, setTimePreset] = useState<'ALL' | 'TODAY' | 'THIS_WEEK' | 'THIS_MONTH' | 'LAST_MONTH' | 'THIS_YEAR' | 'CUSTOM'>('THIS_MONTH');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [search, setSearch] = useState('');
@@ -45,9 +45,22 @@ export function ShooterEditorReportModal({ open, onClose, defaultRole = 'ALL', d
   } | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // Compute month/year from preset
+  // Compute month/year/dates from preset
   const queryDates = useMemo(() => {
     const now = new Date();
+    if (timePreset === 'TODAY') {
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      return { startDate: todayStr, endDate: todayStr };
+    }
+    if (timePreset === 'THIS_WEEK') {
+      const day = now.getDay();
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+      const s = new Date(now.getFullYear(), now.getMonth(), diff);
+      const e = new Date(s.getFullYear(), s.getMonth(), s.getDate() + 6);
+      const sStr = `${s.getFullYear()}-${String(s.getMonth() + 1).padStart(2, '0')}-${String(s.getDate()).padStart(2, '0')}`;
+      const eStr = `${e.getFullYear()}-${String(e.getMonth() + 1).padStart(2, '0')}-${String(e.getDate()).padStart(2, '0')}`;
+      return { startDate: sStr, endDate: eStr };
+    }
     if (timePreset === 'THIS_MONTH') {
       return { month: now.getMonth() + 1, year: now.getFullYear() };
     }
@@ -310,6 +323,8 @@ export function ShooterEditorReportModal({ open, onClose, defaultRole = 'ALL', d
               <Calendar size={12} /> Period:
             </span>
             {[
+              { id: 'TODAY', label: 'Today' },
+              { id: 'THIS_WEEK', label: 'This Week' },
               { id: 'THIS_MONTH', label: 'This Month' },
               { id: 'LAST_MONTH', label: 'Last Month' },
               { id: 'THIS_YEAR', label: 'Year 2026' },

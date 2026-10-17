@@ -65,6 +65,7 @@ export default function Approvals() {
   return (
     <>
       <PageHeader
+        back="/"
         title="Approval Center"
         sub="Enterprise review gates, client sign-offs, and WhatsApp delivery tracking."
         actions={

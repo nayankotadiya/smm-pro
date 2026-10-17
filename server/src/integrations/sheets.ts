@@ -1486,23 +1486,23 @@ export async function generateShooterEditorReportSheet(filter: ShooterEditorRepo
     throw new Error('Google Spreadsheet ID is not configured');
   }
 
-  const query: any = { status: { $ne: 'CANCELLED' } };
+  const andConditions: any[] = [{ status: { $ne: 'CANCELLED' } }];
 
   if (filter.clientId) {
-    query.clientId = filter.clientId;
+    andConditions.push({ clientId: filter.clientId });
   }
 
   if (filter.contentType) {
-    query.type = filter.contentType;
+    andConditions.push({ type: filter.contentType });
   }
 
   if (filter.userId) {
     if (filter.role === 'SHOOTER') {
-      query.assignedShooter = filter.userId;
+      andConditions.push({ assignedShooter: filter.userId });
     } else if (filter.role === 'EDITOR') {
-      query.assignedEditor = filter.userId;
+      andConditions.push({ assignedEditor: filter.userId });
     } else {
-      query.$or = [{ assignedShooter: filter.userId }, { assignedEditor: filter.userId }];
+      andConditions.push({ $or: [{ assignedShooter: filter.userId }, { assignedEditor: filter.userId }] });
     }
   }
 
@@ -1515,49 +1515,69 @@ export async function generateShooterEditorReportSheet(filter: ShooterEditorRepo
       ed.setHours(23, 59, 59, 999);
       dateMatch.$lte = ed;
     }
-    query.$or = [
-      { deadline: dateMatch },
-      { plannedPublicationDate: dateMatch },
-      { createdAt: dateMatch },
-    ];
+    andConditions.push({
+      $or: [
+        { deadline: dateMatch },
+        { plannedPublicationDate: dateMatch },
+        { 'stageDeadlines.shootDeadline': dateMatch },
+        { 'stageDeadlines.editingDeadline': dateMatch },
+        { createdAt: dateMatch },
+      ],
+    });
   } else if (filter.month && filter.year) {
     const sm = new Date(filter.year, filter.month - 1, 1);
     const em = new Date(filter.year, filter.month, 0, 23, 59, 59, 999);
     const dateMatch = { $gte: sm, $lte: em };
-    query.$or = [
-      { deadline: dateMatch },
-      { plannedPublicationDate: dateMatch },
-      { createdAt: dateMatch },
-    ];
+    andConditions.push({
+      $or: [
+        { deadline: dateMatch },
+        { plannedPublicationDate: dateMatch },
+        { 'stageDeadlines.shootDeadline': dateMatch },
+        { 'stageDeadlines.editingDeadline': dateMatch },
+        { createdAt: dateMatch },
+      ],
+    });
   } else if (filter.year) {
     const sy = new Date(filter.year, 0, 1);
     const ey = new Date(filter.year, 11, 31, 23, 59, 59, 999);
     const dateMatch = { $gte: sy, $lte: ey };
-    query.$or = [
-      { deadline: dateMatch },
-      { plannedPublicationDate: dateMatch },
-      { createdAt: dateMatch },
-    ];
+    andConditions.push({
+      $or: [
+        { deadline: dateMatch },
+        { plannedPublicationDate: dateMatch },
+        { 'stageDeadlines.shootDeadline': dateMatch },
+        { 'stageDeadlines.editingDeadline': dateMatch },
+        { createdAt: dateMatch },
+      ],
+    });
   }
 
   // Status Filter
   if (filter.status && filter.status !== 'ALL') {
     if (filter.status === 'PENDING_SHOOT') {
-      query.stage = { $in: ['IDEA', 'SCRIPT', 'CLIENT_REVIEW', 'SHOOTING'] };
-      query.productionStatus = { $nin: ['RAW_UPLOADED', 'EDITING', 'POSTED', 'COMPLETED'] };
+      andConditions.push({
+        stage: { $in: ['IDEA', 'SCRIPT', 'CLIENT_REVIEW', 'SHOOTING'] },
+        productionStatus: { $nin: ['RAW_UPLOADED', 'EDITING', 'POSTED', 'COMPLETED'] },
+      });
     } else if (filter.status === 'SHOT') {
-      query.$or = [
-        { stage: { $in: ['RAW_FOOTAGE', 'EDITING', 'SMM_REVIEW', 'FINAL_REVIEW', 'SCHEDULE', 'PUBLISHED'] } },
-        { productionStatus: { $in: ['RAW_UPLOADED', 'EDITING', 'COMPLETED'] } },
-      ];
+      andConditions.push({
+        $or: [
+          { stage: { $in: ['RAW_FOOTAGE', 'EDITING', 'SMM_REVIEW', 'FINAL_REVIEW', 'SCHEDULE', 'PUBLISHED'] } },
+          { productionStatus: { $in: ['RAW_UPLOADED', 'EDITING', 'COMPLETED'] } },
+        ],
+      });
     } else if (filter.status === 'EDITING') {
-      query.stage = { $in: ['RAW_FOOTAGE', 'EDITING'] };
+      andConditions.push({ stage: { $in: ['RAW_FOOTAGE', 'EDITING'] } });
     } else if (filter.status === 'EDIT_DONE') {
-      query.stage = { $in: ['SMM_REVIEW', 'FINAL_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'] };
+      andConditions.push({ stage: { $in: ['SMM_REVIEW', 'FINAL_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'] } });
     } else if (filter.status === 'COMPLETED') {
-      query.$or = [{ stage: 'PUBLISHED' }, { status: 'COMPLETED' }, { productionStatus: 'POSTED' }];
+      andConditions.push({
+        $or: [{ stage: 'PUBLISHED' }, { status: 'COMPLETED' }, { productionStatus: 'POSTED' }],
+      });
     }
   }
+
+  const query = andConditions.length === 1 ? andConditions[0] : { $and: andConditions };
 
   const items = await Content.find(query)
     .populate('clientId', 'name businessName clientCode')

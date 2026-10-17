@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
@@ -27,7 +27,7 @@ export function Reminders() {
   const rm = useMutation({ mutationFn: (id: string) => del(`/reminders/${id}`), onSuccess: inv, onError: (e) => toast.error(errMsg(e)) });
   return (
     <>
-      <PageHeader title="Reminders" sub="Follow-ups, meetings and deadlines. You are notified in the app and by push when one is due." actions={<Button variant="primary" icon={<Plus size={16} />} onClick={() => setOpen(true)}>New reminder</Button>} />
+      <PageHeader back="/" title="Reminders" sub="Follow-ups, meetings and deadlines. You are notified in the app and by push when one is due." actions={<Button variant="primary" icon={<Plus size={16} />} onClick={() => setOpen(true)}>New reminder</Button>} />
       <Tabs value={tab} onChange={setTab} tabs={[{ key: 'upcoming', label: 'Upcoming' }, { key: 'done', label: 'Completed' }]} />
       <Card pad={false}><Async q={q} empty={<Empty title={tab === 'done' ? 'No completed reminders' : 'No reminders'} hint={tab === 'upcoming' ? 'Create one here, from a chat message, or by setting a follow-up date on a client communication.' : undefined} />}>{(d: any[]) => (
         <ul className="divide-y divide-line">{d.map((r) => { const due = !r.completed && new Date(r.remindAt) < new Date(); return (
@@ -55,7 +55,7 @@ export function Automation() {
   const toggle = useMutation({ mutationFn: (a: any) => patch(`/automations/${a._id}`, { active: !a.active }), onSuccess: inv, onError: (e) => toast.error(errMsg(e)) });
   return (
     <>
-      <PageHeader title="Automation" sub="Simple WHEN / THEN rules that create tasks, notify people and set reminders as work moves." actions={manage && <Button variant="primary" icon={<Plus size={16} />} onClick={() => setOpen(true)}>New rule</Button>} />
+      <PageHeader back="/" title="Automation" sub="Simple WHEN / THEN rules that create tasks, notify people and set reminders as work moves." actions={manage && <Button variant="primary" icon={<Plus size={16} />} onClick={() => setOpen(true)}>New rule</Button>} />
       <Card title="Automation health" pad={false} className="mb-5"><Async q={q}>{(d: any) => (
         <Table head={['Automation', 'When', 'Then', 'Status', 'Last run', 'Last result', '']} minWidth={980}>
           {d.automations.map((a: any) => <tr key={a._id} className="align-top hover:bg-surface-2 transition-colors"><td className="td font-semibold text-ink">{a.name}</td><td className="td whitespace-nowrap font-medium text-ink-2">{label(a.trigger.replace(/\./g, '_'))}</td><td className="td text-[13px] font-medium text-ink-2">{a.actions.map((x: any, i: number) => <div key={i}>{describe(x)}</div>)}</td><td className="td"><Badge t={a.active ? 'green' : 'neutral'}>{a.active ? 'Active' : 'Paused'}</Badge></td><td className="td whitespace-nowrap text-meta font-medium text-ink-2">{a.lastRunAt ? ago(a.lastRunAt) : 'Never'}</td><td className="td">{a.lastResult ? <span className="flex items-center gap-2"><Badge status={a.lastResult} />{a.lastResult === 'FAILED' && <button className="link text-meta" onClick={() => setErrOf(a)}>View error</button>}</span> : <span className="text-ink-3">—</span>}</td><td className="td text-right">{manage && <Button size="sm" loading={toggle.isPending && toggle.variables?._id === a._id} onClick={() => toggle.mutate(a)}>{a.active ? 'Pause' : 'Enable'}</Button>}</td></tr>)}
@@ -92,7 +92,7 @@ export function Team() {
   const q = useTeam(); const nav = useNavigate(); const presence = useUI((s) => s.presence);
   return (
     <>
-      <PageHeader title="Team" sub="Who is working on what, and who is available." />
+      <PageHeader back="/" title="Team" sub="Who is working on what, and who is available." />
       <Card pad={false}><Async q={q}>{(d: any[]) => (
         <>
           <ul className="divide-y divide-line md:hidden">{d.map((u) => <li key={u._id}><Link to={`/team/${u._id}`} className="group flex items-center gap-3 px-4 py-3 hover:bg-surface-2 transition-colors"><span className="relative"><Avatar name={u.name} avatarUrl={u.avatarUrl} size={36} /><PresenceDot userId={u._id} className="absolute -bottom-0.5 -right-0.5" /></span><span className="min-w-0 flex-1"><span className="block font-semibold text-ink group-hover:text-primary-ink transition-colors">{u.name}</span><span className="block truncate text-meta font-medium text-ink-2">{roleLabel(u.role)} · {presence[u._id]?.currentActivity || label(presence[u._id]?.status || 'OFFLINE')}</span></span><span className="text-meta font-semibold tabular text-ink-2">{u.workload?.pending ?? 0} open</span></Link></li>)}</ul>
@@ -111,7 +111,7 @@ export function TeamMember() {
   return (
     <Async q={q}>{(d: any) => (
       <>
-        <PageHeader title={<span className="flex items-center gap-3"><Avatar name={d.user.name} avatarUrl={d.user.avatarUrl} size={40} />{d.user.name}</span>} sub={<span className="flex flex-wrap items-center gap-3">{roleLabel(d.user.role)}<PresenceLabel userId={id!} />{p?.status !== 'ONLINE' && p?.lastActive && <span>Last active {ago(p.lastActive)}</span>}</span>} actions={id !== me._id && <Button icon={<MessageSquare size={15} />} onClick={chat}>Message</Button>} />
+        <PageHeader title={<span className="flex items-center gap-3"><Avatar name={d.user.name} avatarUrl={d.user.avatarUrl} size={40} />{d.user.name}</span>} back="/team" sub={<span className="flex flex-wrap items-center gap-3">{roleLabel(d.user.role)}<PresenceLabel userId={id!} />{p?.status !== 'ONLINE' && p?.lastActive && <span>Last active {ago(p.lastActive)}</span>}</span>} actions={id !== me._id && <Button icon={<MessageSquare size={15} />} onClick={chat}>Message</Button>} />
         {d.restricted ? <Card><Empty title="Details are visible to managers" hint="You can still message this team member." /></Card> : <>
           <Tabs value={tab} onChange={setTab} tabs={[{ key: 'overview', label: 'Overview' }, { key: 'tasks', label: 'Tasks', count: d.tasks.filter((t: any) => t.status !== 'COMPLETED').length }, { key: 'content', label: 'Content', count: d.content.length }, { key: 'activity', label: 'Activity' }, { key: 'schedule', label: 'Schedule' }]} />
           {tab === 'overview' && <div className="space-y-5"><div className="grid grid-cols-2 gap-3 sm:grid-cols-4"><Stat label="Assigned" value={d.workload?.assigned ?? 0} /><Stat label="Completed" value={d.workload?.completed ?? 0} /><Stat label="Pending" value={d.workload?.pending ?? 0} /><Stat label="Overdue" value={d.workload?.overdue ?? 0} tone="red" /></div><Card title="Workload"><div className="flex items-center gap-3"><Progress value={d.workload?.workload || 0} className="!h-2" /><span className="tabular font-medium">{d.workload?.workload || 0}%</span></div><p className="mt-2 text-meta text-ink-2">Based on open tasks. {p?.currentActivity && p.status !== 'OFFLINE' ? `Currently: ${p.currentActivity}.` : ''}</p></Card><Card title="Open tasks" pad={false}><TaskList tasks={d.tasks.filter((t: any) => t.status !== 'COMPLETED').slice(0, 8)} showAssignee={false} /></Card></div>}
@@ -128,11 +128,21 @@ export function TeamMember() {
 // ------------------------------------------------------------ Reports
 const hrs = (h: number | null) => (h == null ? '—' : h < 1 ? '<1 h' : h >= 48 ? `${Math.round(h / 24)} d` : `${h} h`);
 export function Reports() {
-  const [days, setDays] = useState(30);
+  const [period, setPeriod] = useState<string>('30');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showShooterEditorReport, setShowShooterEditorReport] = useState(false);
   const nav = useNavigate();
-  const q = useQuery({ queryKey: ['reports', days], queryFn: () => get('/reports', { days }) });
+
+  const queryParams = useMemo(() => {
+    if (period === 'custom') {
+      return { startDate: startDate || undefined, endDate: endDate || undefined };
+    }
+    return { days: Number(period) || 30 };
+  }, [period, startDate, endDate]);
+
+  const q = useQuery({ queryKey: ['reports', queryParams], queryFn: () => get('/reports', queryParams) });
   return (
     <>
       <PageHeader
@@ -163,9 +173,17 @@ export function Reports() {
             >
               Print / Save PDF
             </Button>
-            <Select aria-label="Period" value={days} onChange={(e) => setDays(Number(e.target.value))} className="!w-auto">
-              {[7, 30, 90, 365].map((d) => <option key={d} value={d}>Last {d} days</option>)}
+            <Select aria-label="Period" value={period} onChange={(e) => setPeriod(e.target.value)} className="!w-auto">
+              {[7, 30, 90, 365].map((d) => <option key={d} value={String(d)}>Last {d} days</option>)}
+              <option value="custom">Custom Date Range...</option>
             </Select>
+            {period === 'custom' && (
+              <div className="flex items-center gap-1.5">
+                <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="!w-32 !py-1 text-xs" />
+                <span className="text-xs text-ink-3">to</span>
+                <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="!w-32 !py-1 text-xs" />
+              </div>
+            )}
           </div>
         }
       />
@@ -176,7 +194,7 @@ export function Reports() {
           <div className="grid gap-5 lg:grid-cols-2">
             <Card title="Content by stage"><BarList rows={r.byStage.map((x: any) => ({ key: x.stage, label: label(x.stage), value: x.count }))} onPick={(k) => nav(`/content?stage=${k}`)} /></Card>
             <Card title="Content by client">{r.byClient.length ? <BarList rows={r.byClient.map((x: any) => ({ key: String(x._id), label: x.name || 'Unknown', value: x.total }))} onPick={(k) => nav(`/clients/${k}`)} /> : <Empty title="No content yet" />}</Card>
-            <Card title={`Content created per day (last ${days} days)`}>{r.createdPerDay.length ? <DayBars rows={r.createdPerDay} /> : <Empty title="Nothing created in this period" />}</Card>
+            <Card title={`Content created per day (${r.days ? `last ${r.days} days` : 'selected period'})`}>{r.createdPerDay.length ? <DayBars rows={r.createdPerDay} /> : <Empty title="Nothing created in this period" />}</Card>
             <Card title="Revisions requested"><div className="mb-3 text-[24px] font-semibold tabular">{r.revisionCount.total}</div>{r.revisionCount.byType.length ? <BarList rows={r.revisionCount.byType.map((x: any) => ({ key: x._id, label: label(x._id), value: x.n }))} /> : <p className="text-ink-3">No change requests in this period.</p>}</Card>
           </div>
           <Card title="Team workload" pad={false}><Table head={['Member', 'Role', 'Assigned', 'Completed', 'Pending', 'Overdue', 'Workload']} minWidth={640}>{r.workload.map((w: any) => <tr key={w.userId} className="hover:bg-surface-2 transition-colors"><td className="td font-semibold text-ink">{w.name}</td><td className="td font-medium text-ink-2">{roleLabel(w.role)}</td><td className="td tabular font-semibold text-ink">{w.assigned}</td><td className="td tabular text-ink-2">{w.completed}</td><td className="td tabular text-ink-2">{w.pending}</td><td className={clsx('td tabular font-semibold', w.overdue > 0 ? 'text-danger' : 'text-ink-3')}>{w.overdue}</td><td className="td"><div className="flex w-28 items-center gap-2"><Progress value={w.workload} /><span className="text-meta font-semibold tabular text-ink-2">{w.workload}%</span></div></td></tr>)}</Table></Card>
@@ -212,6 +230,7 @@ export function Notifications() {
   return (
     <>
       <PageHeader
+        back="/"
         title="Notifications"
         sub={q.data ? `${q.data.unread} unread` : undefined}
         actions={
@@ -245,7 +264,7 @@ export function Activity() {
   const audit = can('audit.view');
   return (
     <>
-      <PageHeader title={audit ? 'Audit Log' : 'Activity'} sub="Who did what, and when." />
+      <PageHeader back="/" title={audit ? 'Audit Log' : 'Activity'} sub="Who did what, and when." />
       <div className="mb-3 grid grid-cols-2 gap-2 sm:flex"><Input className="col-span-2 sm:max-w-xs" placeholder="Search activity" value={term} onChange={(e) => setTerm(e.target.value)} /><Select aria-label="Person" className="sm:!w-auto" value={actor} onChange={(e) => setActor(e.target.value)}><option value="">Everyone</option>{(team.data || []).map((u) => <option key={u._id} value={u._id}>{u.name}</option>)}</Select><Select aria-label="Type" className="sm:!w-auto" value={kind} onChange={(e) => setKind(e.target.value)}><option value="">All activity</option>{[['assign', 'Assignments'], ['content', 'Content'], ['script', 'Scripts'], ['approval', 'Approvals'], ['media', 'Files'], ['task', 'Tasks'], ['aisensy', 'AiSensy'], ['automation', 'Automation'], ['auth', 'Sign-ins'], ['user', 'Users'], ['role', 'Roles']].map(([k, l]) => <option key={k} value={k}>{l}</option>)}</Select></div>
       <Card pad={false}><Async q={q} empty={<Empty title="No activity found" />}>{(d: any[]) => <Table head={['When', 'Who', 'What', 'Content', ...(audit ? ['IP'] : [])]} minWidth={720}>{d.map((x) => <tr key={x._id} className="hover:bg-surface-2 transition-colors"><td className="td whitespace-nowrap text-meta font-medium text-ink-2">{fmtDateTime(x.createdAt)}</td><td className="td whitespace-nowrap font-semibold text-ink">{x.actorName}{x.actorType !== 'USER' && <span className="ml-1.5"><Badge t="neutral">{label(x.actorType)}</Badge></span>}</td><td className="td font-medium text-ink"><div className="flex items-center gap-2"><span>{x.message}</span>{(x.action?.includes('assign') || x.meta?.type === 'ASSIGNMENT') && <span className="shrink-0 rounded bg-indigo-500/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-indigo-400">Assign</span>}</div></td><td className="td font-mono font-medium text-ink-3">{x.contentId ? <Link className="hover:text-primary-ink" to={`/content/${x.contentId._id}`}>{x.contentId.contentId}</Link> : '—'}</td>{audit && <td className="td tabular text-ink-3">{x.ip || '—'}</td>}</tr>)}</Table>}</Async></Card>
     </>

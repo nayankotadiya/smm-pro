@@ -56,6 +56,7 @@ export function ReelsView() {
   return (
     <div className="space-y-5 pb-16">
       <PageHeader
+        back="/"
         title="Reels Production"
         sub="Shoot planning, raw footage intake, video editing, reviews, and client sign-offs for Reels."
         actions={
@@ -241,6 +242,7 @@ export function PostsView() {
   return (
     <div className="space-y-5 pb-16">
       <PageHeader
+        back="/"
         title="Posts Production (Graphics)"
         sub="Copywriting, graphic design, layout approval, client sign-off, and scheduling for static social posts."
         actions={
@@ -348,6 +350,7 @@ export function CarouselsView() {
   return (
     <div className="space-y-5 pb-16">
       <PageHeader
+        back="/"
         title="Carousels Production"
         sub="Multi-slide content planning, graphic slide creation, slide reviews, and sequencing."
         actions={
@@ -445,6 +448,7 @@ export function AiReelsView() {
   return (
     <div className="space-y-5 pb-16">
       <PageHeader
+        back="/"
         title="AI Reels Production"
         sub="AI prompt generation, synthesis, automated animation, and video editing workflow."
         actions={

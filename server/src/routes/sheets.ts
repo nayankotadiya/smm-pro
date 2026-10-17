@@ -234,14 +234,14 @@ r.post('/reports/shooter-editor', requirePerm('content.write'), ah(async (req, r
 
 // Preview Shooter & Editor production metrics and deliverables before export
 r.get('/reports/shooter-editor/preview', requirePerm('clients.read'), ah(async (req, res) => {
-  const query: any = { status: { $ne: 'CANCELLED' } };
+  const andConditions: any[] = [{ status: { $ne: 'CANCELLED' } }];
 
   if (req.query.clientId) {
-    query.clientId = String(req.query.clientId);
+    andConditions.push({ clientId: String(req.query.clientId) });
   }
 
   if (req.query.contentType) {
-    query.type = String(req.query.contentType);
+    andConditions.push({ type: String(req.query.contentType) });
   }
 
   const role = req.query.role ? String(req.query.role) : 'ALL';
@@ -249,11 +249,11 @@ r.get('/reports/shooter-editor/preview', requirePerm('clients.read'), ah(async (
 
   if (userId) {
     if (role === 'SHOOTER') {
-      query.assignedShooter = userId;
+      andConditions.push({ assignedShooter: userId });
     } else if (role === 'EDITOR') {
-      query.assignedEditor = userId;
+      andConditions.push({ assignedEditor: userId });
     } else {
-      query.$or = [{ assignedShooter: userId }, { assignedEditor: userId }];
+      andConditions.push({ $or: [{ assignedShooter: userId }, { assignedEditor: userId }] });
     }
   }
 
@@ -265,52 +265,72 @@ r.get('/reports/shooter-editor/preview', requirePerm('clients.read'), ah(async (
       ed.setHours(23, 59, 59, 999);
       dateMatch.$lte = ed;
     }
-    query.$or = [
-      { deadline: dateMatch },
-      { plannedPublicationDate: dateMatch },
-      { createdAt: dateMatch },
-    ];
+    andConditions.push({
+      $or: [
+        { deadline: dateMatch },
+        { plannedPublicationDate: dateMatch },
+        { 'stageDeadlines.shootDeadline': dateMatch },
+        { 'stageDeadlines.editingDeadline': dateMatch },
+        { createdAt: dateMatch },
+      ],
+    });
   } else if (req.query.month && req.query.year) {
     const y = Number(req.query.year);
     const m = Number(req.query.month);
     const sm = new Date(y, m - 1, 1);
     const em = new Date(y, m, 0, 23, 59, 59, 999);
     const dateMatch = { $gte: sm, $lte: em };
-    query.$or = [
-      { deadline: dateMatch },
-      { plannedPublicationDate: dateMatch },
-      { createdAt: dateMatch },
-    ];
+    andConditions.push({
+      $or: [
+        { deadline: dateMatch },
+        { plannedPublicationDate: dateMatch },
+        { 'stageDeadlines.shootDeadline': dateMatch },
+        { 'stageDeadlines.editingDeadline': dateMatch },
+        { createdAt: dateMatch },
+      ],
+    });
   } else if (req.query.year) {
     const y = Number(req.query.year);
     const sy = new Date(y, 0, 1);
     const ey = new Date(y, 11, 31, 23, 59, 59, 999);
     const dateMatch = { $gte: sy, $lte: ey };
-    query.$or = [
-      { deadline: dateMatch },
-      { plannedPublicationDate: dateMatch },
-      { createdAt: dateMatch },
-    ];
+    andConditions.push({
+      $or: [
+        { deadline: dateMatch },
+        { plannedPublicationDate: dateMatch },
+        { 'stageDeadlines.shootDeadline': dateMatch },
+        { 'stageDeadlines.editingDeadline': dateMatch },
+        { createdAt: dateMatch },
+      ],
+    });
   }
 
   const status = req.query.status ? String(req.query.status) : 'ALL';
   if (status !== 'ALL') {
     if (status === 'PENDING_SHOOT') {
-      query.stage = { $in: ['IDEA', 'SCRIPT', 'CLIENT_REVIEW', 'SHOOTING'] };
-      query.productionStatus = { $nin: ['RAW_UPLOADED', 'EDITING', 'POSTED', 'COMPLETED'] };
+      andConditions.push({
+        stage: { $in: ['IDEA', 'SCRIPT', 'CLIENT_REVIEW', 'SHOOTING'] },
+        productionStatus: { $nin: ['RAW_UPLOADED', 'EDITING', 'POSTED', 'COMPLETED'] },
+      });
     } else if (status === 'SHOT') {
-      query.$or = [
-        { stage: { $in: ['RAW_FOOTAGE', 'EDITING', 'SMM_REVIEW', 'FINAL_REVIEW', 'SCHEDULE', 'PUBLISHED'] } },
-        { productionStatus: { $in: ['RAW_UPLOADED', 'EDITING', 'COMPLETED'] } },
-      ];
+      andConditions.push({
+        $or: [
+          { stage: { $in: ['RAW_FOOTAGE', 'EDITING', 'SMM_REVIEW', 'FINAL_REVIEW', 'SCHEDULE', 'PUBLISHED'] } },
+          { productionStatus: { $in: ['RAW_UPLOADED', 'EDITING', 'COMPLETED'] } },
+        ],
+      });
     } else if (status === 'EDITING') {
-      query.stage = { $in: ['RAW_FOOTAGE', 'EDITING'] };
+      andConditions.push({ stage: { $in: ['RAW_FOOTAGE', 'EDITING'] } });
     } else if (status === 'EDIT_DONE') {
-      query.stage = { $in: ['SMM_REVIEW', 'FINAL_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'] };
+      andConditions.push({ stage: { $in: ['SMM_REVIEW', 'FINAL_REVIEW', 'CLIENT_FINAL_APPROVAL', 'SCHEDULE', 'PUBLISHED'] } });
     } else if (status === 'COMPLETED') {
-      query.$or = [{ stage: 'PUBLISHED' }, { status: 'COMPLETED' }, { productionStatus: 'POSTED' }];
+      andConditions.push({
+        $or: [{ stage: 'PUBLISHED' }, { status: 'COMPLETED' }, { productionStatus: 'POSTED' }],
+      });
     }
   }
+
+  const query = andConditions.length === 1 ? andConditions[0] : { $and: andConditions };
 
   const items = await Content.find(query)
     .populate('clientId', 'name businessName clientCode')

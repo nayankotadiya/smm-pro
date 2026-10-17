@@ -923,6 +923,7 @@ export default function SheetsHub() {
   return (
     <div className="space-y-5 pb-16">
       <PageHeader
+        back="/"
         title="Google Sheets Master Hub & Live Tracker"
         sub="Real-time bi-directional synchronization, automated status colors, movable workflow columns, and interactive navigation."
         actions={

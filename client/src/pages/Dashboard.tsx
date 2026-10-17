@@ -14,7 +14,8 @@ import { FileCard, useMediaActions } from '@/components/Media';
 
 import { DeadlineAlertsBanner } from '@/components/DeadlineAlerts';
 import { ClientReportModal } from '@/components/ClientReportModal';
-import { Sparkles } from 'lucide-react';
+import { ShooterEditorReportModal } from '@/components/ShooterEditorReportModal';
+import { Sparkles, Film } from 'lucide-react';
 
 const dq = (key: string, params?: any) => ({ queryKey: ['dashboard', key, params], queryFn: () => get(`/dashboard/${key}`, params) });
 const More = ({ to, children = 'View all' }: { to: string; children?: string }) => <Link to={to} className="group flex items-center gap-1 text-[13px] font-medium text-primary-ink">{children}<ArrowRight size={14} className="transition-transform duration-200 group-hover:translate-x-0.5" /></Link>;
@@ -23,6 +24,7 @@ export default function Dashboard() {
   const user = useAuth((s) => s.user)!; const can = useCan(); const org = can('dashboard.org');
   const [modal, setModal] = useState<'content' | 'task' | 'reminder' | 'fast-track' | null>(null);
   const [showReport, setShowReport] = useState(false);
+  const [showShooterReport, setShowShooterReport] = useState(false);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const h = new Date().getHours();
@@ -30,6 +32,7 @@ export default function Dashboard() {
     <>
       <PageHeader title={`Good ${h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening'}, ${user.name.split(' ')[0]}`} sub={new Date().toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })}
         actions={<>
+          <Button icon={<Film size={15} className="text-amber-400" />} onClick={() => setShowShooterReport(true)}>Shooter &amp; Editor Report</Button>
           <Button icon={<Sparkles size={15} className="text-emerald-400" />} onClick={() => setShowReport(true)}>Daily / Weekly Report</Button>
           {can('content.write') && (
             <Button
@@ -61,6 +64,7 @@ export default function Dashboard() {
       <TaskFormModal open={modal === 'task'} onClose={() => setModal(null)} />
       <ReminderFormModal open={modal === 'reminder'} onClose={() => setModal(null)} />
       <ClientReportModal open={showReport} onClose={() => setShowReport(false)} />
+      <ShooterEditorReportModal open={showShooterReport} onClose={() => setShowShooterReport(false)} />
     </>
   );
 }

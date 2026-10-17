@@ -34,7 +34,7 @@ export function MyWork() {
   }, [tasks.data, me._id]);
   return (
     <>
-      <PageHeader title="My Work" sub="Everything assigned to you, in the order it needs attention." actions={<Button variant="primary" icon={<Plus size={16} />} onClick={() => setOpen(true)}>New task</Button>} />
+      <PageHeader back="/" title="My Work" sub="Everything assigned to you, in the order it needs attention." actions={<Button variant="primary" icon={<Plus size={16} />} onClick={() => setOpen(true)}>New task</Button>} />
       <Async q={tasks}>{() => (
         <div className="space-y-5">
           <Sec title="Overdue" items={g.overdue} tone="red" />
@@ -59,7 +59,7 @@ export function Tasks() {
   const set = (k: string, v: string) => { const n = new URLSearchParams(sp); v ? n.set(k, v) : n.delete(k); setSp(n, { replace: true }); };
   return (
     <>
-      <PageHeader title="Tasks" actions={<Button variant="primary" icon={<Plus size={16} />} onClick={() => setOpen(true)}>New task</Button>} />
+      <PageHeader back="/" title="Tasks" actions={<Button variant="primary" icon={<Plus size={16} />} onClick={() => setOpen(true)}>New task</Button>} />
       <Tabs value={filter} onChange={(k) => set('filter', k)} tabs={[{ key: 'open', label: 'Open' }, { key: 'overdue', label: 'Overdue' }, { key: 'blocked', label: 'Blocked' }, ...(can('tasks.read.all') ? [{ key: 'unassigned', label: 'Unassigned' }] : []), { key: 'auto', label: 'Automatic' }, { key: 'completed', label: 'Completed' }]} />
       {can('tasks.read.all') && <div className="mb-3 max-w-xs"><Select value={member} onChange={(e) => set('member', e.target.value)} aria-label="Team member"><option value="">All team members</option>{(team.data || []).map((u) => <option key={u._id} value={u._id}>{u.name}</option>)}</Select></div>}
       <Card pad={false}><Async q={q}>{(d: any[]) => <TaskList tasks={d} />}</Async></Card>
@@ -80,7 +80,7 @@ export function TaskDetail() {
       const complete = t.status === 'COMPLETED'; const mine = t.assignedTo?._id === me._id || t.createdBy?._id === me._id;
       return (
         <>
-          <PageHeader title={t.title} sub={<span className="flex flex-wrap items-center gap-2"><Badge status={isOverdue(t.dueAt, complete) ? 'OVERDUE' : t.status} /><Priority p={t.priority} />{t.source !== 'MANUAL' && <span className="text-meta text-ink-3">{t.source === 'CHAT' ? 'Created from chat' : 'Created automatically'}</span>}</span>}
+          <PageHeader title={t.title} back="/tasks" sub={<span className="flex flex-wrap items-center gap-2"><Badge status={isOverdue(t.dueAt, complete) ? 'OVERDUE' : t.status} /><Priority p={t.priority} />{t.source !== 'MANUAL' && <span className="text-meta text-ink-3">{t.source === 'CHAT' ? 'Created from chat' : 'Created automatically'}</span>}</span>}
             actions={(mine || can('tasks.manage')) && <><Button icon={<Pencil size={15} />} onClick={() => setEdit(true)}>Edit</Button>{!complete && t.status !== 'BLOCKED' && <Button icon={<Ban size={15} />} onClick={() => setBlock(true)}>Mark blocked</Button>}</>} />
           <div className="grid gap-5 lg:grid-cols-3">
             <div className="space-y-5 lg:col-span-2">
@@ -122,7 +122,7 @@ export function Blocked() {
   const nav = useNavigate();
   return (
     <>
-      <PageHeader title="Blocked" sub="Work that cannot move forward until something is resolved." />
+      <PageHeader back="/" title="Blocked" sub="Work that cannot move forward until something is resolved." />
       <Card title="Content" pad={false} className="mb-5"><Async q={q} empty={<Empty title="No blocked content" />}>{(d: any[]) => <Table head={['Content', 'Client', 'Reason', 'Owner', 'Days blocked', 'Next action']}>{d.map((c) => <tr key={c._id} onClick={() => nav(`/content/${c._id}`)} className="group cursor-pointer hover:bg-surface-2 transition-colors"><td className="td"><div className="font-semibold text-ink group-hover:text-primary-ink transition-colors">{c.title}</div><div className="font-mono text-meta font-medium text-ink-3">{c.contentId}</div></td><td className="td font-medium text-ink-2">{c.clientId?.name}</td><td className="td max-w-xs font-medium text-ink">{c.blocked?.reason}</td><td className="td font-medium text-ink">{c.currentOwner?.name || <span className="text-ink-3">Unassigned</span>}</td><td className="td tabular font-semibold text-ink">{Math.max(0, Math.floor((Date.now() - +new Date(c.blocked?.since)) / 864e5))}</td><td className="td font-medium text-ink-2">{c.blocked?.nextAction || c.nextAction}</td></tr>)}</Table>}</Async></Card>
       <Card title="Tasks" pad={false}><Async q={tasks} empty={<Empty title="No blocked tasks" />}>{(d: any[]) => <ul className="divide-y divide-line">{d.map((t) => <li key={t._id}><Link to={`/tasks/${t._id}`} className="group block px-4 py-2.5 hover:bg-surface-2 transition-colors"><div className="font-semibold text-ink group-hover:text-primary-ink transition-colors">{t.title}</div><div className="text-meta font-medium text-ink-2">{t.blockedReason} · {t.assignedTo?.name || 'Unassigned'} · blocked {ago(t.blockedSince)}</div></Link></li>)}</ul>}</Async></Card>
     </>
@@ -133,7 +133,7 @@ export function ChangesRequested() {
   const q = useQuery({ queryKey: ['content', 'changes'], queryFn: () => get<any[]>('/content/changes-requested') }); const nav = useNavigate();
   return (
     <>
-      <PageHeader title="Changes Requested" sub="Open feedback from reviewers and clients." />
+      <PageHeader back="/" title="Changes Requested" sub="Open feedback from reviewers and clients." />
       <Card pad={false}><Async q={q} empty={<Empty title="No open change requests" />}>{(d: any[]) => (
         <Table head={['Content', 'Version', 'Requested by', 'Comment', 'Timestamp', 'Assigned to', 'Due']} minWidth={900}>
           {d.map((f) => <tr key={f._id} onClick={() => nav(`/content/${f.contentId._id}?tab=reviews`)} className="group cursor-pointer hover:bg-surface-2 transition-colors"><td className="td"><div className="font-semibold text-ink group-hover:text-primary-ink transition-colors">{f.contentId.title}</div><div className="font-mono text-meta font-medium text-ink-3">{f.contentId.contentId} · {f.contentId.clientId?.name}</div></td><td className="td font-semibold text-ink whitespace-nowrap">{f.version}</td><td className="td font-medium text-ink whitespace-nowrap">{f.authorName}{f.authorType === 'CLIENT' && <span className="ml-1.5"><Badge t="amber">Client</Badge></span>}</td><td className="td max-w-sm font-medium text-ink">{f.comment}</td><td className="td tabular font-medium text-ink-2">{f.timestampSec != null ? fmtTs(f.timestampSec) : '—'}</td><td className="td font-medium text-ink">{f.task?.assignedTo?.name || f.contentId.assignedEditor?.name || '—'}</td><td className="td whitespace-nowrap text-meta font-medium text-ink-2">{f.task?.dueAt ? fmtDateTime(f.task.dueAt) : '—'}</td></tr>)}

@@ -39,7 +39,7 @@ export function Clients() {
 
   return (
     <>
-      <PageHeader title="Clients" sub="Internal records. Clients never sign in to this workspace." actions={can('clients.write') && <Button variant="primary" icon={<Plus size={16} />} onClick={() => setOpen(true)}>New client</Button>} />
+      <PageHeader back="/" title="Clients" sub="Internal records. Clients never sign in to this workspace." actions={can('clients.write') && <Button variant="primary" icon={<Plus size={16} />} onClick={() => setOpen(true)}>New client</Button>} />
       <div className="mb-4 max-w-xs"><Input placeholder="Search clients" value={term} onChange={(e) => setTerm(e.target.value)} /></div>
       <Card pad={false}><Async q={q} empty={<Empty title="No clients yet" action={can('clients.write') && <Button variant="primary" onClick={() => setOpen(true)}>Add first client</Button>} />}>{(d: any[]) => (
         <>
@@ -581,7 +581,7 @@ export function ClientDetail() {
   return (
     <Async q={q}>{(c: any) => (
       <>
-        <PageHeader title={c.name} sub={<span className="flex flex-wrap items-center gap-2"><Badge status={c.status} />{c.category && <span>{c.category}</span>}{c.location && <span className="flex items-center gap-1"><MapPin size={13} />{c.location}</span>}</span>}
+        <PageHeader title={c.name} back="/clients" sub={<span className="flex flex-wrap items-center gap-2"><Badge status={c.status} />{c.category && <span>{c.category}</span>}{c.location && <span className="flex items-center gap-1"><MapPin size={13} />{c.location}</span>}</span>}
           actions={<>
             {can('content.write') && <Button variant="primary" icon={<Plus size={16} />} onClick={() => setNewContent(true)}>New content</Button>}
             {can('clients.write') && <Button icon={<Pencil size={15} />} onClick={() => setEdit(true)}>Edit</Button>}

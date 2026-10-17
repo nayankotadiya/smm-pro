@@ -64,6 +64,7 @@ export function ContentList() {
   return (
     <>
       <PageHeader
+        back="/"
         title="Content"
         sub={stage ? `Filtered: ${stage.split(',').map(label).join(', ')}` : q.data ? `${q.data.total} items` : undefined}
         actions={
@@ -100,7 +101,7 @@ export function Scripts() {
   const q = useQuery({ queryKey: ['scripts', status, from, to], queryFn: () => get<any[]>('/scripts', { ...(status ? { status } : {}), ...(from ? { from } : {}), ...(to ? { to } : {}) }) });
   return (
     <>
-      <PageHeader title="Scripts" sub="Every script with its current version and review state." />
+      <PageHeader title="Scripts" back="/content" sub="Every script with its current version and review state." />
       <div className="mb-4 flex flex-wrap gap-3">
         <div className="max-w-xs"><Select aria-label="Status" value={status} onChange={(e) => set('status', e.target.value)}><option value="">All statuses</option>{['DRAFT', 'IN_REVIEW', 'CHANGES_REQUESTED', 'APPROVED', 'FINAL'].map((s) => <option key={s} value={s}>{label(s)}</option>)}</Select></div>
         <div className="flex items-center gap-1.5 rounded-xl border border-line/70 bg-surface/80 px-2.5 py-1.5 backdrop-blur-md shadow-xs">
@@ -123,7 +124,7 @@ export function Shooting() {
   const q = useContentQuery({ stage: 'SHOOTING,RAW_FOOTAGE' });
   return (
     <>
-      <PageHeader title="Shooting" sub="Content waiting to be shot or with raw footage just uploaded." />
+      <PageHeader title="Shooting" back="/content" sub="Content waiting to be shot or with raw footage just uploaded." />
       <ContentFilters fixedStage />
       <Card pad={false}><Async q={q}>{(d: any) => <ContentTable items={d.items} compact />}</Async></Card>
     </>
@@ -133,7 +134,7 @@ export function Editing() {
   const q = useContentQuery({ stage: 'RAW_FOOTAGE,EDITING,SMM_REVIEW,FINAL_REVIEW' });
   return (
     <>
-      <PageHeader title="Editing" sub="From raw footage to final review." />
+      <PageHeader title="Editing" back="/content" sub="From raw footage to final review." />
       <ContentFilters fixedStage />
       <Card pad={false}><Async q={q}>{(d: any) => <ContentTable items={d.items} compact />}</Async></Card>
     </>

@@ -137,21 +137,37 @@ function withTime(d: Date, t?: string) { if (!t) return d; const m = /^(\d{1,2})
 
 // ---------------- Reports ----------------
 r.get('/reports', requirePerm('reports.view'), ah(async (req, res) => {
-  const days = Math.min(365, Number(req.query.days) || 30); const since = new Date(Date.now() - days * 864e5);
+  let since: Date;
+  let until: Date = new Date();
+  let days = 30;
+
+  if (req.query.startDate) {
+    since = new Date(String(req.query.startDate));
+    if (req.query.endDate) {
+      until = new Date(String(req.query.endDate));
+      until.setHours(23, 59, 59, 999);
+    }
+    days = Math.max(1, Math.round((until.getTime() - since.getTime()) / 864e5));
+  } else {
+    days = Math.min(365, Number(req.query.days) || 30);
+    since = new Date(Date.now() - days * 864e5);
+  }
+
+  const dateFilter = { $gte: since, $lte: until };
   const match: any = { deletedAt: null }; if (req.query.clientId) match.clientId = new (require('mongoose').Types.ObjectId)(String(req.query.clientId));
   const cq: any = req.query.clientId ? { clientId: req.query.clientId } : {};
   const [created, completed, published, byStage, blocked, overdue, approvals, revisions, uploaded, downloads, createdDocs, allContent] = await Promise.all([
-    Content.countDocuments({ ...cq, createdAt: { $gte: since } }),
-    Content.countDocuments({ ...cq, status: 'COMPLETED', updatedAt: { $gte: since } }),
-    Content.countDocuments({ ...cq, stage: 'PUBLISHED', publishedAt: { $gte: since } }),
+    Content.countDocuments({ ...cq, createdAt: dateFilter }),
+    Content.countDocuments({ ...cq, status: 'COMPLETED', updatedAt: dateFilter }),
+    Content.countDocuments({ ...cq, stage: 'PUBLISHED', publishedAt: dateFilter }),
     Content.aggregate([{ $match: { ...match, status: { $nin: ['CANCELLED'] } } }, { $group: { _id: '$stage', n: { $sum: 1 } } }]),
     Content.countDocuments({ ...cq, status: 'BLOCKED' }),
     Task.countDocuments({ ...cq, status: { $ne: 'COMPLETED' }, dueAt: { $lt: new Date() } }),
-    Approval.find({ ...cq, decidedAt: { $gte: since }, sentAt: { $ne: null } }).select('type sentAt decidedAt status').lean(),
-    Approval.aggregate([{ $match: { status: 'CHANGES_REQUESTED', decidedAt: { $gte: since }, ...(match.clientId ? { clientId: match.clientId } : {}) } }, { $group: { _id: '$type', n: { $sum: 1 } } }]),
-    Media.countDocuments({ ...cq, createdAt: { $gte: since }, status: { $nin: ['UPLOADING', 'FAILED'] } }),
-    ActivityLog.countDocuments({ ...cq, action: 'media.downloaded', createdAt: { $gte: since } }),
-    Content.find({ ...cq, createdAt: { $gte: since } }).select('createdAt').lean(),
+    Approval.find({ ...cq, decidedAt: dateFilter, sentAt: { $ne: null } }).select('type sentAt decidedAt status').lean(),
+    Approval.aggregate([{ $match: { status: 'CHANGES_REQUESTED', decidedAt: dateFilter, ...(match.clientId ? { clientId: match.clientId } : {}) } }, { $group: { _id: '$type', n: { $sum: 1 } } }]),
+    Media.countDocuments({ ...cq, createdAt: dateFilter, status: { $nin: ['UPLOADING', 'FAILED'] } }),
+    ActivityLog.countDocuments({ ...cq, action: 'media.downloaded', createdAt: dateFilter }),
+    Content.find({ ...cq, createdAt: dateFilter }).select('createdAt').lean(),
     Content.find({}).select('clientId stage').populate('clientId', 'name').lean(),
   ]);
   const dayKey = (d: Date) => new Date(d.getTime() + 5.5 * 3600e3).toISOString().slice(0, 10); // IST calendar day

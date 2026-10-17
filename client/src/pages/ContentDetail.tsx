@@ -115,6 +115,7 @@ export default function ContentDetail() {
       return (
         <>
           <PageHeader title={c.title}
+            back="/content"
             sub={<span className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5"><span className="font-mono text-[11px] font-bold text-primary-ink bg-primary/10 border border-primary/25 rounded-md px-2 py-0.5">{c.contentId}</span><Link to={`/clients/${c.clientId._id}`} className="font-semibold text-ink hover:text-primary-ink transition-colors">{c.clientId.name}</Link><PlatformBadge p={c.platform} /><TypeBadge t={c.type} /><StatusBadge c={c} /><Priority p={c.priority} /></span>}
             actions={<>
               {blocked ? <Button onClick={() => unblock.mutate()} loading={unblock.isPending}>Remove block</Button> : !done && <Button icon={<Ban size={15} />} onClick={() => setModal('block')}>Mark blocked</Button>}

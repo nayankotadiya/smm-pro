@@ -541,6 +541,7 @@ export default function SchedulingPublishing() {
   return (
     <div className="space-y-5 pb-16">
       <PageHeader
+        back="/"
         title="Scheduling & Publishing"
         sub="Plan publication timelines, approve final exports, and publish across social channels."
         actions={

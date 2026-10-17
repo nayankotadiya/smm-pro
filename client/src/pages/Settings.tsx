@@ -21,6 +21,7 @@ export default function Settings() {
   return (
     <>
       <PageHeader
+        back="/"
         title="Settings"
         actions={<TestNotificationButton />}
       />
